@@ -2,9 +2,17 @@
 using System.Windows;
 using System.Windows.Media;
 using GravityDefiedGame.Models;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace GravityDefiedGame.Utilities
 {
+
+    public enum BikeType
+    {
+        Standard,
+        Sport,
+        OffRoad
+    }
     public record BikeProperties(
         double mass,
         double power,
@@ -16,6 +24,13 @@ namespace GravityDefiedGame.Utilities
         double suspensionStrength,
         double suspensionDamping,
         double suspensionRestLength
+    );
+
+    public record WheelProperties(
+        double radius,
+        double friction,
+        double suspensionStrength,
+        double suspensionDamping
     );
 
     public static class GameConstants
@@ -46,6 +61,21 @@ namespace GravityDefiedGame.Utilities
                 GravityMultiplier = 0.1,
                 CriticalLeanAngle = Math.PI / 1.8;
 
+            // Новые константы для прямого управления
+            public const double
+                DirectControlFactor = 10.0,        // Фактор прямого управления наклоном
+                WheelieTransitionSpeed = 3.0,      // Скорость перехода в wheelie
+                AirFrictionMultiplier = 0.1,       // Множитель трения в воздухе
+                AirBrakeReductionFactor = 0.7,     // Фактор уменьшения тормозов в воздухе
+                GroundToAirTransitionSpeed = 3.0,    // Скорость перехода с земли в воздух
+                AirToGroundTransitionSpeed = 1.5,    // Скорость перехода с воздуха на землю
+                LandingTransitionTime = 0.3,         // Время плавного перехода при приземлении
+                AirTransitionThreshold = 0.5,        // Порог для переключения логики
+                AirLeanControlFactor = 3.5,          // Фактор управления наклоном в воздухе
+                LeanControlSpeed = 3.0,              // Скорость изменения управления наклоном
+                AirLeanControlReduction = 0.7,       // Уменьшение скорости управления в воздухе
+                MaxAirControlForce = 3.0;            // Максимальная сила управления в воздухе
+
             // Константы для торможения и движения назад
             public const double
                 MinBrakeInput = 0.1,                // Минимальное нажатие тормоза для эффекта
@@ -56,6 +86,23 @@ namespace GravityDefiedGame.Utilities
                 MaxReverseSpeed = 300.0,            // Максимальная скорость движения назад
                 ReverseControlMultiplier = 0.7,     // Множитель управляемости при движении назад
                 BrakeEfficiencyMultiplier = 1.2;    // Множитель эффективности тормоза
+
+            // Константы для проверки столкновений рамы
+            public const double
+                FrameCollisionMinVelocity = 50.0,    // Минимальная скорость для проверки столкновений рамы
+                FrameCollisionMinPenetration = 0.3,  // Минимальное проникновение для обнаружения столкновения (в радиусах колеса)
+                FrameCrashThreshold = 0.9,           // Порог проникновения для аварии (в радиусах колеса)
+                FrameCollisionReactionForce = 0.3,   // Множитель силы реакции при столкновении рамы
+                FrameStabilizingFactorBase = 1.5,    // Базовый фактор стабилизации при столкновении рамы
+                FrameStabilizingFactorStrong = 2.0,  // Усиленный фактор стабилизации при большом угле
+                FrameStabilizingAngleThreshold = Math.PI / 6, // Порог угла для усиленной стабилизации
+                FrameCollisionMaxDeltaVelocity = 100.0, // Максимальное изменение скорости при столкновении
+                FrameCollisionMaxDeltaAngular = 1.0,    // Максимальное изменение угловой скорости при столкновении
+                FrameCollisionLowSpeedThreshold = 30.0, // Порог низкой скорости для дополнительного импульса
+                FrameCollisionLowSpeedImpulse = 10.0,   // Импульс при низкой скорости
+                FrameCriticalBackwardTiltAngle = Math.PI / 2.5, // Критический угол наклона назад (около -72°)
+                WheelDistanceMinRatio = 0.8,         // Минимальное отношение расстояния между колесами к номинальному
+                WheelDistanceMaxRatio = 1.2;         // Максимальное отношение расстояния между колесами к номинальному
 
             // Константы подвески
             public const double
@@ -152,6 +199,12 @@ namespace GravityDefiedGame.Utilities
                 FrameHeightMultiplier = 1.5,    // Множитель для общей высоты рамы (был 1.5)
                 LowerFrameOffsetMultiplier = 0.1,  // Множитель для смещения нижних точек рамы
                 UpperFrameOffsetMultiplier = 0.5;  // Множитель для смещения верхних точек рамы
+
+            // Константы для точек рамы в проверке столкновений
+            public const double
+                FramePointFrontOffsetRatio = 0.7,    // Смещение передней точки рамы относительно половины колесной базы
+                FramePointRearOffsetRatio = 0.7,     // Смещение задней точки рамы относительно половины колесной базы
+                FramePointHeightRatio = 0.8;         // Множитель высоты для точек рамы при проверке столкновений
 
             // Настройки отображения
             public const double
@@ -271,6 +324,33 @@ namespace GravityDefiedGame.Utilities
                 suspensionStrength: 5000.0,
                 suspensionDamping: 500.0,
                 suspensionRestLength: 30.0
+            );
+        }
+
+        public static class Wheels
+        {
+            // Стандартные колеса
+            public static readonly WheelProperties Standard = new(
+                radius: 15.0,
+                friction: 1.0,
+                suspensionStrength: 1.0,
+                suspensionDamping: 1.0
+            );
+
+            // Спортивные колеса
+            public static readonly WheelProperties Sport = new(
+                radius: 14.0,
+                friction: 0.9,
+                suspensionStrength: 0.8,
+                suspensionDamping: 0.7
+            );
+
+            // Внедорожные колеса
+            public static readonly WheelProperties OffRoad = new(
+                radius: 18.0,
+                friction: 1.2,
+                suspensionStrength: 1.2,
+                suspensionDamping: 1.1
             );
         }
 
