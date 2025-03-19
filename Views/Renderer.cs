@@ -1,4 +1,7 @@
-﻿using System;
+﻿using GravityDefiedGame.Controllers;
+using GravityDefiedGame.Models;
+using GravityDefiedGame.Utilities;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,14 +9,33 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using GravityDefiedGame.Controllers;
-using GravityDefiedGame.Models;
-using GravityDefiedGame.Utilities;
 
 namespace GravityDefiedGame.Views;
 
 public class Renderer
 {
+    // Локальные константы рендеринга
+    private static class RenderConstants
+    {
+        // Толщина линий
+        public const double
+            TerrainStrokeThickness = 3.0,
+            BikeStrokeThickness = 3.0,
+            SpokeStrokeThickness = 1.0,
+            SuspensionStrokeThickness = 2.5,
+            SuspensionSpringStrokeThickness = 1.5;
+
+        // Настройки отображения
+        public const double
+            MovementSpeedThreshold = 15.0,
+            MovementBlurOpacity = 0.8,
+            NormalOpacity = 1.0;
+
+        public const int
+            InitialSkeletonLinesCount = 30,
+            SpokeCount = 6;
+    }
+
     private readonly Canvas _canvas;
     private readonly Camera _camera;
     private readonly GameController _gameController;
@@ -23,12 +45,12 @@ public class Renderer
     private readonly BrushSet Brushes = new(
         LineTypeBrushes: new()
         {
-            [Motorcycle.BikeGeometry.SkeletonLineType.MainFrame] = new(Color.FromRgb(150, 150, 150)),
-            [Motorcycle.BikeGeometry.SkeletonLineType.Suspension] = new(Colors.Black),
-            [Motorcycle.BikeGeometry.SkeletonLineType.Wheel] = new(Colors.Black),
-            [Motorcycle.BikeGeometry.SkeletonLineType.Seat] = new(Color.FromRgb(200, 200, 200)),
-            [Motorcycle.BikeGeometry.SkeletonLineType.Handlebar] = new(Color.FromRgb(150, 150, 150)),
-            [Motorcycle.BikeGeometry.SkeletonLineType.Exhaust] = new(Color.FromRgb(100, 100, 100))
+            [BikeGeom.SkeletonLineType.MainFrame] = new(Color.FromRgb(150, 150, 150)),
+            [BikeGeom.SkeletonLineType.Suspension] = new(Colors.Black),
+            [BikeGeom.SkeletonLineType.Wheel] = new(Colors.Black),
+            [BikeGeom.SkeletonLineType.Seat] = new(Color.FromRgb(200, 200, 200)),
+            [BikeGeom.SkeletonLineType.Handlebar] = new(Color.FromRgb(150, 150, 150)),
+            [BikeGeom.SkeletonLineType.Exhaust] = new(Color.FromRgb(100, 100, 100))
         },
         WheelFill: new(Color.FromRgb(200, 200, 200)),
         WheelStroke: new(Colors.Black),
@@ -40,7 +62,7 @@ public class Renderer
     );
 
     private record struct BrushSet(
-        Dictionary<Motorcycle.BikeGeometry.SkeletonLineType, SolidColorBrush> LineTypeBrushes,
+        Dictionary<BikeGeom.SkeletonLineType, SolidColorBrush> LineTypeBrushes,
         SolidColorBrush WheelFill,
         SolidColorBrush WheelStroke,
         SolidColorBrush SpokeStroke,
@@ -70,7 +92,7 @@ public class Renderer
         _terrainPath = new()
         {
             Stroke = Brushes.TerrainStroke,
-            StrokeThickness = GameConstants.Rendering.TerrainStrokeThickness,
+            StrokeThickness = RenderConstants.TerrainStrokeThickness,
             Fill = Brushes.TerrainFill
         };
         _canvas.Children.Add(_terrainPath);
@@ -133,8 +155,8 @@ public class Renderer
     {
         private readonly Canvas _canvas;
         private readonly Camera _camera;
-        private readonly Dictionary<Motorcycle.BikeGeometry.SkeletonLineType, List<Line>> _skeletonLines = new();
-        private readonly Dictionary<Motorcycle.BikeGeometry.SkeletonLineType, SolidColorBrush> _lineTypeBrushes;
+        private readonly Dictionary<BikeGeom.SkeletonLineType, List<Line>> _skeletonLines = new();
+        private readonly Dictionary<BikeGeom.SkeletonLineType, SolidColorBrush> _lineTypeBrushes;
 
         // Неиспользуемые переменные, закомментированы
         // private Ellipse _frontWheel = null!, _rearWheel = null!;
@@ -143,7 +165,7 @@ public class Renderer
         // private Path _frontSuspensionSpring = null!, _rearSuspensionSpring = null!;
 
         public SkeletonRenderer(Canvas canvas, Camera camera,
-            Dictionary<Motorcycle.BikeGeometry.SkeletonLineType, SolidColorBrush> lineTypeBrushes)
+            Dictionary<BikeGeom.SkeletonLineType, SolidColorBrush> lineTypeBrushes)
         {
             _canvas = canvas;
             _camera = camera;
@@ -152,23 +174,23 @@ public class Renderer
 
         public void InitializeSkeletonLines()
         {
-            foreach (Motorcycle.BikeGeometry.SkeletonLineType lineType in Enum.GetValues(typeof(Motorcycle.BikeGeometry.SkeletonLineType)))
+            foreach (BikeGeom.SkeletonLineType lineType in Enum.GetValues(typeof(BikeGeom.SkeletonLineType)))
             {
                 _skeletonLines[lineType] = new List<Line>();
                 CreateLinesForType(lineType);
             }
         }
 
-        private void CreateLinesForType(Motorcycle.BikeGeometry.SkeletonLineType lineType)
+        private void CreateLinesForType(BikeGeom.SkeletonLineType lineType)
         {
             var brush = GetBrushForLineType(lineType);
 
-            for (int i = 0; i < GameConstants.Rendering.InitialSkeletonLinesCount; i++)
+            for (int i = 0; i < RenderConstants.InitialSkeletonLinesCount; i++)
             {
                 var line = new Line
                 {
                     Stroke = brush,
-                    StrokeThickness = GameConstants.Rendering.BikeStrokeThickness,
+                    StrokeThickness = RenderConstants.BikeStrokeThickness,
                     Visibility = Visibility.Collapsed
                 };
 
@@ -183,10 +205,10 @@ public class Renderer
         {
             var front = CreateWheel();
             var rear = CreateWheel();
-        
+
             _canvas.Children.Add(front);
             _canvas.Children.Add(rear);
-        
+
             return (front, rear);
         }
 
@@ -198,18 +220,18 @@ public class Renderer
             var front = new Line
             {
                 Stroke = Brushes.SuspensionStroke,
-                StrokeThickness = GameConstants.Rendering.SuspensionStrokeThickness
+                StrokeThickness = RenderConstants.SuspensionStrokeThickness
             };
-        
+
             var rear = new Line
             {
                 Stroke = Brushes.SuspensionStroke,
-                StrokeThickness = GameConstants.Rendering.SuspensionStrokeThickness
+                StrokeThickness = RenderConstants.SuspensionStrokeThickness
             };
-        
+
             _canvas.Children.Add(front);
             _canvas.Children.Add(rear);
-        
+
             return (front, rear);
         }
 
@@ -218,20 +240,20 @@ public class Renderer
             var front = new Path
             {
                 Stroke = Brushes.SuspensionStroke,
-                StrokeThickness = GameConstants.Rendering.SuspensionSpringStrokeThickness,
+                StrokeThickness = RenderConstants.SuspensionSpringStrokeThickness,
                 Fill = Brushes.SuspensionFill
             };
-        
+
             var rear = new Path
             {
                 Stroke = Brushes.SuspensionStroke,
-                StrokeThickness = GameConstants.Rendering.SuspensionSpringStrokeThickness,
+                StrokeThickness = RenderConstants.SuspensionSpringStrokeThickness,
                 Fill = Brushes.SuspensionFill
             };
-        
+
             _canvas.Children.Add(front);
             _canvas.Children.Add(rear);
-        
+
             return (front, rear);
         }
 
@@ -241,100 +263,27 @@ public class Renderer
             Height = _gameController.Motorcycle.GetWheelRadius() * 2,
             Fill = Brushes.WheelFill,
             Stroke = Brushes.WheelStroke,
-            StrokeThickness = GameConstants.Rendering.BikeStrokeThickness
+            StrokeThickness = RenderConstants.BikeStrokeThickness
         };
 
         private Line[] CreateWheelSpokes()
         {
-            var spokes = new Line[GameConstants.Motorcycle.SpokeCount];
-        
+            var spokes = new Line[RenderConstants.SpokeCount];
+
             for (int i = 0; i < spokes.Length; i++)
             {
                 spokes[i] = new()
                 {
                     Stroke = Brushes.SpokeStroke,
-                    StrokeThickness = GameConstants.Rendering.SpokeStrokeThickness
+                    StrokeThickness = RenderConstants.SpokeStrokeThickness
                 };
-        
+
                 _canvas.Children.Add(spokes[i]);
             }
-        
+
             return spokes;
         }
-        */
 
-        public void UpdateSkeletonVisuals(
-            List<Motorcycle.BikeGeometry.SkeletonPoint> skeletonPoints,
-            List<Motorcycle.BikeGeometry.SkeletonLine> skeletonLines)
-        {
-            HideAllSkeletonLines();
-            UpdateSkeletonLines(skeletonPoints, skeletonLines);
-
-            // Закомментированные методы обновления неиспользуемых элементов
-            // UpdateWheels(motorcycle);
-            // UpdateSuspensions(motorcycle);
-            // ApplyMovementEffects(motorcycle);
-        }
-
-        private void HideAllSkeletonLines() =>
-            _skeletonLines.Values
-                .SelectMany(lines => lines)
-                .ToList()
-                .ForEach(line => line.Visibility = Visibility.Collapsed);
-
-        private void UpdateSkeletonLines(
-            List<Motorcycle.BikeGeometry.SkeletonPoint> points,
-            List<Motorcycle.BikeGeometry.SkeletonLine> lines)
-        {
-            foreach (var lineType in _skeletonLines.Keys)
-            {
-                int lineIndex = 0;
-
-                foreach (var skeletonLine in lines.Where(l => l.Type == lineType))
-                {
-                    EnsureLineExists(lineType, lineIndex);
-                    UpdateSkeletonLine(lineType, lineIndex, skeletonLine, points);
-                    lineIndex++;
-                }
-            }
-        }
-
-        private void EnsureLineExists(Motorcycle.BikeGeometry.SkeletonLineType lineType, int index)
-        {
-            if (index < _skeletonLines[lineType].Count)
-                return;
-
-            var line = new Line
-            {
-                Stroke = GetBrushForLineType(lineType),
-                StrokeThickness = GameConstants.Rendering.BikeStrokeThickness
-            };
-
-            _canvas.Children.Add(line);
-            _skeletonLines[lineType].Add(line);
-        }
-
-        private void UpdateSkeletonLine(
-            Motorcycle.BikeGeometry.SkeletonLineType lineType,
-            int lineIndex,
-            Motorcycle.BikeGeometry.SkeletonLine skeletonLine,
-            List<Motorcycle.BikeGeometry.SkeletonPoint> points)
-        {
-            var line = _skeletonLines[lineType][lineIndex];
-            var startPoint = _camera.WorldToScreen(points[skeletonLine.StartPointIndex].Position);
-            var endPoint = _camera.WorldToScreen(points[skeletonLine.EndPointIndex].Position);
-
-            (line.X1, line.Y1) = (startPoint.X, startPoint.Y);
-            (line.X2, line.Y2) = (endPoint.X, endPoint.Y);
-            line.Visibility = Visibility.Visible;
-        }
-
-        private SolidColorBrush GetBrushForLineType(Motorcycle.BikeGeometry.SkeletonLineType lineType) =>
-            _lineTypeBrushes.TryGetValue(lineType, out var brush)
-                ? brush
-                : _lineTypeBrushes[Motorcycle.BikeGeometry.SkeletonLineType.MainFrame];
-
-        /*
         private void UpdateWheels(Motorcycle motorcycle)
         {
             var frontWheelPos = _camera.WorldToScreen(motorcycle.FrontWheelPosition);
@@ -386,9 +335,9 @@ public class Renderer
 
         private void ApplyMovementEffects(Motorcycle motorcycle)
         {
-            double opacity = motorcycle.Velocity.Length > GameConstants.Rendering.MovementSpeedThreshold
-                ? GameConstants.Rendering.MovementBlurOpacity
-                : GameConstants.Rendering.NormalOpacity;
+            double opacity = motorcycle.Velocity.Length > RenderConstants.MovementSpeedThreshold
+                ? RenderConstants.MovementBlurOpacity
+                : RenderConstants.NormalOpacity;
         
             _frontWheel.Opacity = opacity;
             _rearWheel.Opacity = opacity;
@@ -398,7 +347,7 @@ public class Renderer
         {
             for (int i = 0; i < spokes.Length; i++)
             {
-                double angle = wheelRotation + i * (GameConstants.Motorcycle.FullRotation / spokes.Length);
+                double angle = wheelRotation + i * (2 * Math.PI / spokes.Length);
                 double cosAngle = Math.Cos(angle);
                 double sinAngle = Math.Sin(angle);
         
@@ -410,5 +359,76 @@ public class Renderer
             }
         }
         */
+
+        public void UpdateSkeletonVisuals(
+            List<BikeGeom.SkeletonPoint> skeletonPoints,
+            List<BikeGeom.SkeletonLine> skeletonLines)
+        {
+            HideAllSkeletonLines();
+            UpdateSkeletonLines(skeletonPoints, skeletonLines);
+
+            // Закомментированные методы обновления неиспользуемых элементов
+            // UpdateWheels(motorcycle);
+            // UpdateSuspensions(motorcycle);
+            // ApplyMovementEffects(motorcycle);
+        }
+
+        private void HideAllSkeletonLines() =>
+            _skeletonLines.Values
+                .SelectMany(lines => lines)
+                .ToList()
+                .ForEach(line => line.Visibility = Visibility.Collapsed);
+
+        private void UpdateSkeletonLines(
+                    List<BikeGeom.SkeletonPoint> points,
+                    List<BikeGeom.SkeletonLine> lines)
+        {
+            foreach (var lineType in _skeletonLines.Keys)
+            {
+                int lineIndex = 0;
+
+                foreach (var skeletonLine in lines.Where(l => l.Type == lineType))
+                {
+                    EnsureLineExists(lineType, lineIndex);
+                    UpdateSkeletonLine(lineType, lineIndex, skeletonLine, points);
+                    lineIndex++;
+                }
+            }
+        }
+
+        private void EnsureLineExists(BikeGeom.SkeletonLineType lineType, int index)
+        {
+            if (index < _skeletonLines[lineType].Count)
+                return;
+
+            var line = new Line
+            {
+                Stroke = GetBrushForLineType(lineType),
+                StrokeThickness = RenderConstants.BikeStrokeThickness
+            };
+
+            _canvas.Children.Add(line);
+            _skeletonLines[lineType].Add(line);
+        }
+
+        private void UpdateSkeletonLine(
+            BikeGeom.SkeletonLineType lineType,
+            int lineIndex,
+            BikeGeom.SkeletonLine skeletonLine,
+            List<BikeGeom.SkeletonPoint> points)
+        {
+            var line = _skeletonLines[lineType][lineIndex];
+            var startPoint = _camera.WorldToScreen(points[skeletonLine.StartPointIndex].Position);
+            var endPoint = _camera.WorldToScreen(points[skeletonLine.EndPointIndex].Position);
+
+            (line.X1, line.Y1) = (startPoint.X, startPoint.Y);
+            (line.X2, line.Y2) = (endPoint.X, endPoint.Y);
+            line.Visibility = Visibility.Visible;
+        }
+
+        private SolidColorBrush GetBrushForLineType(BikeGeom.SkeletonLineType lineType) =>
+            _lineTypeBrushes.TryGetValue(lineType, out var brush)
+                ? brush
+                : _lineTypeBrushes[BikeGeom.SkeletonLineType.MainFrame];
     }
 }

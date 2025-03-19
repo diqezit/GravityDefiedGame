@@ -1,9 +1,11 @@
 ﻿using GravityDefiedGame.Utilities;
+using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Windows;
 using System.Windows.Media;
 using static GravityDefiedGame.Utilities.GameConstants.Motorcycle;
 using static GravityDefiedGame.Utilities.GameConstants.Physics;
-using static GravityDefiedGame.Utilities.GameConstants.Rendering;
 using static GravityDefiedGame.Utilities.GameConstants.Validation;
 
 namespace GravityDefiedGame.Models;
@@ -16,7 +18,7 @@ public class Motorcycle : PhysicsComponent
     private readonly InputController _inputController;
     private readonly KinematicsController _kinematicsController;
     private readonly ValidationController _validationController;
-    private readonly BikeGeometry _geometry;
+    private readonly BikeGeom _geometry;
 
     public Point Position { get; internal set; }
     public Vector Velocity { get; internal set; }
@@ -59,7 +61,7 @@ public class Motorcycle : PhysicsComponent
         _inputController = new InputController(this);
         _kinematicsController = new KinematicsController(this);
         _validationController = new ValidationController(this);
-        _geometry = new BikeGeometry(this);
+        _geometry = new BikeGeom(this);
 
         InitializeBikeProperties();
         Reset();
@@ -137,7 +139,7 @@ public class Motorcycle : PhysicsComponent
 
     public List<Point> GetFramePoints() => _geometry.GetFramePoints();
 
-    public (List<BikeGeometry.SkeletonPoint> Points, List<BikeGeometry.SkeletonLine> Lines) GetSkeleton() =>
+    public (List<BikeGeom.SkeletonPoint> Points, List<BikeGeom.SkeletonLine> Lines) GetSkeleton() =>
         _geometry.GetSkeleton();
 
     #region Controller Classes
@@ -557,256 +559,4 @@ public class Motorcycle : PhysicsComponent
         }
     }
     #endregion
-
-    public class BikeGeometry
-    {
-        private readonly Motorcycle _bike;
-
-        public record struct SkeletonPoint(Point Position, SkeletonPointType Type);
-
-        public enum SkeletonPointType
-        {
-            FrontWheel,
-            RearWheel,
-            FrontSuspension,
-            RearSuspension,
-            Frame,
-            Seat,
-            Handlebar,
-            Exhaust,
-            Wheel
-        }
-
-        public record struct SkeletonLine(int StartPointIndex, int EndPointIndex, SkeletonLineType Type);
-
-        public enum SkeletonLineType
-        {
-            MainFrame,
-            Suspension,
-            Wheel,
-            Seat,
-            Handlebar,
-            Exhaust
-        }
-
-        public BikeGeometry(Motorcycle bike) => _bike = bike;
-
-        public List<Point> GetFramePoints()
-        {
-            var points = new List<Point>();
-            double cosAngle = Math.Cos(_bike.Angle);
-            double sinAngle = Math.Sin(_bike.Angle);
-
-            double halfWheelBase = _bike.WheelBase / 2;
-            double frameHeight = _bike.FrameHeight * 0.8;
-
-            points.Add(new Point(
-                _bike.Position.X + halfWheelBase * 0.7 * cosAngle - frameHeight * sinAngle,
-                _bike.Position.Y + halfWheelBase * 0.7 * sinAngle + frameHeight * cosAngle
-            ));
-
-            points.Add(new Point(
-                _bike.Position.X - halfWheelBase * 0.7 * cosAngle - frameHeight * sinAngle,
-                _bike.Position.Y - halfWheelBase * 0.7 * sinAngle + frameHeight * cosAngle
-            ));
-
-            return points;
-        }
-
-        public List<Point> GetChassisPoints()
-        {
-            double frameTopOffset = _bike.GetWheelRadius() * FrameHeightMultiplier;
-            double cosAngle = Math.Cos(_bike.Angle), sinAngle = Math.Sin(_bike.Angle);
-
-            Point frontLower = new(
-                _bike.FrontAttachmentPoint.X + sinAngle * frameTopOffset * LowerFrameOffsetMultiplier,
-                _bike.FrontAttachmentPoint.Y - cosAngle * frameTopOffset * LowerFrameOffsetMultiplier
-            );
-
-            Point rearLower = new(
-                _bike.RearAttachmentPoint.X + sinAngle * frameTopOffset * LowerFrameOffsetMultiplier,
-                _bike.RearAttachmentPoint.Y - cosAngle * frameTopOffset * LowerFrameOffsetMultiplier
-            );
-
-            Point frontUpper = new(
-                frontLower.X + sinAngle * frameTopOffset * UpperFrameOffsetMultiplier,
-                frontLower.Y - cosAngle * frameTopOffset * UpperFrameOffsetMultiplier
-            );
-
-            Point rearUpper = new(
-                rearLower.X + sinAngle * frameTopOffset * UpperFrameOffsetMultiplier,
-                rearLower.Y - cosAngle * frameTopOffset * UpperFrameOffsetMultiplier
-            );
-
-            return new List<Point> { frontLower, rearLower, rearUpper, frontUpper };
-        }
-
-        public (List<SkeletonPoint> Points, List<SkeletonLine> Lines) GetSkeleton()
-        {
-            var points = new List<SkeletonPoint>();
-            var lines = new List<SkeletonLine>();
-
-            AddBasicSkeletonElements(points, lines);
-            AddDetailSkeletonElements(points, lines);
-
-            return (points, lines);
-        }
-
-        private void AddBasicSkeletonElements(List<SkeletonPoint> points, List<SkeletonLine> lines)
-        {
-            points.Add(new SkeletonPoint(_bike.FrontWheelPosition, SkeletonPointType.FrontWheel));
-            points.Add(new SkeletonPoint(_bike.RearWheelPosition, SkeletonPointType.RearWheel));
-            points.Add(new SkeletonPoint(_bike.FrontAttachmentPoint, SkeletonPointType.FrontSuspension));
-            points.Add(new SkeletonPoint(_bike.RearAttachmentPoint, SkeletonPointType.RearSuspension));
-
-            var chassisPoints = GetChassisPoints();
-            int frameStartIndex = points.Count;
-
-            points.AddRange(chassisPoints.Select(point => new SkeletonPoint(point, SkeletonPointType.Frame)));
-
-            int frontLowerFrameIndex = frameStartIndex;
-            int rearLowerFrameIndex = frameStartIndex + 1;
-
-            lines.Add(new SkeletonLine(0, 2, SkeletonLineType.Suspension));
-            lines.Add(new SkeletonLine(1, 3, SkeletonLineType.Suspension));
-            lines.Add(new SkeletonLine(2, frontLowerFrameIndex, SkeletonLineType.Suspension));
-            lines.Add(new SkeletonLine(3, rearLowerFrameIndex, SkeletonLineType.Suspension));
-
-            int frameCount = chassisPoints.Count;
-            for (int i = frameStartIndex; i < frameStartIndex + frameCount - 1; i++)
-                lines.Add(new SkeletonLine(i, i + 1, SkeletonLineType.MainFrame));
-
-            lines.Add(new SkeletonLine(frameStartIndex + frameCount - 1, frameStartIndex, SkeletonLineType.MainFrame));
-
-            AddWheelSpokes(points, lines, 0, _bike.FrontWheelPosition, _bike.FrontWheelRotation);
-            AddWheelSpokes(points, lines, 1, _bike.RearWheelPosition, _bike.RearWheelRotation);
-        }
-
-        private void AddWheelSpokes(List<SkeletonPoint> points, List<SkeletonLine> lines, int wheelIndex,
-                                   Point wheelCenter, double wheelRotation)
-        {
-            const int spokeCount = 16;
-            double wheelRadius = _bike.GetWheelRadius();
-            int centerPointIndex = wheelIndex;
-            var spokeEndIndices = new List<int>(spokeCount);
-
-            for (int i = 0; i < spokeCount; i++)
-            {
-                double angle = wheelRotation + i * (2 * Math.PI / spokeCount);
-                Point spokeEnd = new(
-                    wheelCenter.X + wheelRadius * Math.Cos(angle),
-                    wheelCenter.Y + wheelRadius * Math.Sin(angle)
-                );
-                points.Add(new SkeletonPoint(spokeEnd, SkeletonPointType.Wheel));
-                int spokeEndIndex = points.Count - 1;
-                spokeEndIndices.Add(spokeEndIndex);
-                lines.Add(new SkeletonLine(centerPointIndex, spokeEndIndex, SkeletonLineType.Wheel));
-            }
-
-            for (int i = 0; i < spokeCount; i++)
-                lines.Add(new SkeletonLine(spokeEndIndices[i], spokeEndIndices[(i + 1) % spokeCount], SkeletonLineType.Wheel));
-        }
-
-        private void AddDetailSkeletonElements(List<SkeletonPoint> points, List<SkeletonLine> lines)
-        {
-            int basePointsCount = points.Count;
-
-            AddDetailPoints(points, CreateSeatPoints(), SkeletonPointType.Seat);
-            AddDetailPoints(points, CreateHandlebarPoints(), SkeletonPointType.Handlebar);
-            AddDetailPoints(points, CreateExhaustPoints(), SkeletonPointType.Exhaust);
-
-            AddClosedPolygonLines(lines, basePointsCount, 4, SkeletonLineType.Seat);
-            AddClosedPolygonLines(lines, basePointsCount + 4, 4, SkeletonLineType.Handlebar);
-            AddClosedPolygonLines(lines, basePointsCount + 8, 4, SkeletonLineType.Exhaust);
-        }
-
-        private void AddDetailPoints(List<SkeletonPoint> points, List<Point> detailPoints, SkeletonPointType type) =>
-            points.AddRange(detailPoints.Select(p => new SkeletonPoint(p, type)));
-
-        private List<Point> CreateSeatPoints()
-        {
-            double cosAngle = Math.Cos(_bike.Angle), sinAngle = Math.Sin(_bike.Angle);
-            var chassisPoints = GetChassisPoints();
-            Point rearUpper = chassisPoints[2], frontUpper = chassisPoints[3];
-
-            Point seatBase = new(
-                (frontUpper.X + rearUpper.X) / 2 - 5 * cosAngle - 8 * sinAngle,
-                (frontUpper.Y + rearUpper.Y) / 2 - 5 * sinAngle + 8 * cosAngle
-            );
-
-            return new List<Point>
-            {
-                new(seatBase.X + SeatOffsetX1 * 0.8 * cosAngle - SeatOffsetY1 * 0.7 * sinAngle,
-                    seatBase.Y + SeatOffsetX1 * 0.8 * sinAngle + SeatOffsetY1 * 0.7 * cosAngle),
-
-                new(seatBase.X + SeatOffsetX2 * 0.9 * cosAngle - SeatOffsetY1 * 0.7 * sinAngle,
-                    seatBase.Y + SeatOffsetX2 * 0.9 * sinAngle + SeatOffsetY1 * 0.7 * cosAngle),
-
-                new(seatBase.X + SeatOffsetX3 * 1.2 * cosAngle - SeatOffsetY2 * 0.8 * sinAngle,
-                    seatBase.Y + SeatOffsetX3 * 1.2 * sinAngle + SeatOffsetY2 * 0.8 * cosAngle),
-
-                new(seatBase.X + SeatOffsetX4 * 0.8 * cosAngle - SeatOffsetY2 * 0.8 * sinAngle,
-                    seatBase.Y + SeatOffsetX4 * 0.8 * sinAngle + SeatOffsetY2 * 0.8 * cosAngle)
-            };
-        }
-
-        private List<Point> CreateHandlebarPoints()
-        {
-            double cosAngle = Math.Cos(_bike.Angle), sinAngle = Math.Sin(_bike.Angle);
-            var chassisPoints = GetChassisPoints();
-            Point frontUpper = chassisPoints[3];
-
-            double baseWidth = HandlebarOffsetX3 * 1.8;
-            double baseHeight = HandlebarOffsetY1 * 0.5;
-            double handleHeight = HandlebarOffsetY1 * 1.5;
-
-            return new List<Point>
-            {
-                new(frontUpper.X - baseWidth * cosAngle - handleHeight * sinAngle,
-                    frontUpper.Y - baseWidth * sinAngle + handleHeight * cosAngle),
-
-                new(frontUpper.X - baseWidth * 0.4 * cosAngle - baseHeight * sinAngle,
-                    frontUpper.Y - baseWidth * 0.4 * sinAngle + baseHeight * cosAngle),
-
-                new(frontUpper.X + baseWidth * 0.4 * cosAngle - baseHeight * sinAngle,
-                    frontUpper.Y + baseWidth * 0.4 * sinAngle + baseHeight * cosAngle),
-
-                new(frontUpper.X + baseWidth * cosAngle - handleHeight * sinAngle,
-                    frontUpper.Y + baseWidth * sinAngle + handleHeight * cosAngle)
-            };
-        }
-
-        private List<Point> CreateExhaustPoints()
-        {
-            double cosAngle = Math.Cos(_bike.Angle), sinAngle = Math.Sin(_bike.Angle);
-            var chassisPoints = GetChassisPoints();
-            Point exhaustBase = chassisPoints[1];
-
-            double pipeLength = 15, pipeHeight = 1, downOffset = 1, rightOffset = 1;
-
-            return new List<Point>
-            {
-                new(exhaustBase.X, exhaustBase.Y),
-
-                new(exhaustBase.X - rightOffset * sinAngle,
-                    exhaustBase.Y + rightOffset * cosAngle + downOffset),
-
-                new(exhaustBase.X - pipeLength * cosAngle - (rightOffset + pipeHeight) * sinAngle,
-                    exhaustBase.Y - pipeLength * sinAngle + (rightOffset + pipeHeight) * cosAngle + downOffset),
-
-                new(exhaustBase.X - pipeLength * cosAngle - rightOffset * sinAngle,
-                    exhaustBase.Y - pipeLength * sinAngle + rightOffset * cosAngle)
-            };
-        }
-
-        private void AddClosedPolygonLines(
-            List<SkeletonLine> lines,
-            int startIndex,
-            int pointCount,
-            SkeletonLineType lineType)
-        {
-            for (int i = 0; i < pointCount; i++)
-                lines.Add(new SkeletonLine(startIndex + i, startIndex + (i + 1) % pointCount, lineType));
-        }
-    }
 }

@@ -6,13 +6,13 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace GravityDefiedGame.Utilities
 {
-
     public enum BikeType
     {
         Standard,
         Sport,
         OffRoad
     }
+
     public record BikeProperties(
         double mass,
         double power,
@@ -184,74 +184,6 @@ namespace GravityDefiedGame.Utilities
                 MomentOfInertiaMultiplier = 0.6;
         }
 
-        public static class Rendering
-        {
-            // Толщина линий
-            public const double
-                TerrainStrokeThickness = 3.0,
-                BikeStrokeThickness = 3.0,
-                SpokeStrokeThickness = 1.0,
-                SuspensionStrokeThickness = 2.5,
-                SuspensionSpringStrokeThickness = 1.5;
-
-            // Новые константы для рамы мотоцикла
-            public const double
-                FrameHeightMultiplier = 1.5,    // Множитель для общей высоты рамы (был 1.5)
-                LowerFrameOffsetMultiplier = 0.1,  // Множитель для смещения нижних точек рамы
-                UpperFrameOffsetMultiplier = 0.5;  // Множитель для смещения верхних точек рамы
-
-            // Константы для точек рамы в проверке столкновений
-            public const double
-                FramePointFrontOffsetRatio = 0.7,    // Смещение передней точки рамы относительно половины колесной базы
-                FramePointRearOffsetRatio = 0.7,     // Смещение задней точки рамы относительно половины колесной базы
-                FramePointHeightRatio = 0.8;         // Множитель высоты для точек рамы при проверке столкновений
-
-            // Настройки отображения
-            public const double
-                MovementSpeedThreshold = 15.0,
-                MovementBlurOpacity = 0.8,
-                NormalOpacity = 1.0;
-
-            public const int InitialSkeletonLinesCount = 30;
-
-            // Смещения для сиденья
-            public const double
-                SeatOffsetX1 = -15.0,
-                SeatOffsetX2 = 25.0,
-                SeatOffsetX3 = 30.0,
-                SeatOffsetX4 = -10.0,
-                SeatOffsetY1 = -15.0,
-                SeatOffsetY2 = -5.0;
-
-            // Смещения для руля
-            public const double
-                HandlebarOffsetX1 = -7.5,
-                HandlebarOffsetX2 = 7.5,
-                HandlebarOffsetX3 = 15.0,
-                HandlebarOffsetX4 = 0.0,
-                HandlebarOffsetY1 = -7.5,
-                HandlebarOffsetY2 = 7.5;
-
-            // Смещения для выхлопной трубы
-            public const double
-                ExhaustOffsetX1 = -15.0,
-                ExhaustOffsetX2 = -25.0,
-                ExhaustOffsetX3 = -30.0,
-                ExhaustOffsetX4 = -20.0,
-                ExhaustOffsetY1 = -15.0,
-                ExhaustOffsetY2 = -20.0,
-                ExhaustOffsetY3 = -7.5,
-                ExhaustOffsetY4 = 0.0;
-
-            // Множители для шасси
-            public const double
-                ChassisMultiplier1 = 1.2,
-                ChassisMultiplier2 = 2.5,
-                ChassisMultiplier3 = 3.5,
-                ChassisMultiplier4 = 3.0,
-                ChassisMultiplier5 = 4.5;
-        }
-
         public static class Motorcycle
         {
             // Основные параметры мотоцикла
@@ -267,15 +199,6 @@ namespace GravityDefiedGame.Utilities
                 GroundRotationFactor = 12.0,
                 ThrottleRotationFactor = 6.0,
                 SlipThrottleFactor = 1.8;
-
-            public const int SpokeCount = 6;
-
-            // Параметры визуализации подвески
-            public const double
-                SuspensionSpringWidth = 6.0,
-                SuspensionSpringDensity = 0.2;
-
-            public const int MinZigzagCount = 3;
 
             // Начальные значения
             public static readonly Point DefaultStartPosition = new(100, 100);
