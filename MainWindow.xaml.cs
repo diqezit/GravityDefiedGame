@@ -129,11 +129,20 @@ namespace GravityDefiedGame
 
         private void CreateLevelButtons()
         {
+            LevelsPanel.Children.Clear();
             foreach (var level in _gameController.Levels)
             {
                 var levelButton = CreateLevelButton(level);
                 LevelsPanel.Children.Add(levelButton);
             }
+        }
+
+        private void ShowLevelSelect()
+        {
+            MenuOverlay.Visibility = Visibility.Collapsed;
+            LevelSelectOverlay.Visibility = Visibility.Visible;
+            _gameController.LoadLevels();
+            CreateLevelButtons();
         }
 
         private Button CreateLevelButton(Level level)
@@ -502,11 +511,6 @@ namespace GravityDefiedGame
             ShowLevelSelect();
         }
 
-        private void ShowLevelSelect()
-        {
-            MenuOverlay.Visibility = Visibility.Collapsed;
-            LevelSelectOverlay.Visibility = Visibility.Visible;
-        }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {

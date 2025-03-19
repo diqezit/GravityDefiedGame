@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Collections.Generic;
 using GravityDefiedGame.Models;
 using GravityDefiedGame.Utilities;
+using System.Linq;
 
 namespace GravityDefiedGame.Controllers
 {
@@ -20,34 +21,46 @@ namespace GravityDefiedGame.Controllers
             public const double NoInput = 0.0;
         }
 
-        private readonly LevelManager _levelManager;
         private readonly InputState _input = new();
-
         public Motorcycle Motorcycle { get; }
         public bool IsGameOver => Motorcycle.IsCrashed;
-        public bool IsLevelComplete => _levelManager.IsLevelComplete;
+        public bool IsLevelComplete { get; private set; }
         public bool IsPaused { get; private set; }
-        public Level? CurrentLevel => _levelManager.CurrentLevel;
-        public List<Level> Levels => _levelManager.Levels;
+        public Level? CurrentLevel { get; private set; }
+        public List<Level> Levels { get; private set; } = new List<Level>();
         public TimeSpan GameTime { get; private set; }
         public event EventHandler<GameEventArgs>? GameEvent;
 
         public GameController()
         {
-            _levelManager = new LevelManager();
             Motorcycle = new Motorcycle();
-            _levelManager.LevelEvent += LevelManager_LevelEvent;
             LoadLevels();
             Logger.Info("GameController", "Game controller initialized");
         }
 
-        public void LoadLevels() => _levelManager.LoadLevels();
+        public void LoadLevels()
+        {
+            Levels.Clear();
+            Random random = new Random(); // Create Random instance for seed generation
+            for (int i = 1; i <= 5; i++) // Generate 5 levels as an example
+            {
+                int seed = random.Next(); // Random seed for each level
+                Levels.Add(new Level(i, $"Уровень {i}", seed));
+            }
+            Logger.Info("GameController", $"Loaded {Levels.Count} levels");
+        }
 
         public void StartLevel(int levelId)
         {
-            if (!_levelManager.StartLevel(levelId))
+            var level = Levels.FirstOrDefault(l => l.Id == levelId);
+            if (level == null)
+            {
+                Logger.Error("GameController", $"Failed to start level {levelId}: level not found");
                 return;
+            }
 
+            CurrentLevel = level;
+            IsLevelComplete = false;
             InitializeGameState(levelId);
             ResetInputState();
             InitializeMotorcycle();
@@ -63,7 +76,7 @@ namespace GravityDefiedGame.Controllers
 
         private void InitializeMotorcycle()
         {
-            if (CurrentLevel is null)
+            if (CurrentLevel == null)
                 return;
 
             Motorcycle.Reset();
@@ -95,7 +108,7 @@ namespace GravityDefiedGame.Controllers
 
         private void CheckFinishReached()
         {
-            if (_levelManager.CheckFinish(Motorcycle.Position))
+            if (CurrentLevel?.IsFinishReached(Motorcycle.Position) == true)
                 OnLevelComplete();
         }
 
@@ -113,9 +126,9 @@ namespace GravityDefiedGame.Controllers
 
         private void OnLevelComplete()
         {
+            IsLevelComplete = true;
             string formattedTime = FormatGameTime();
             string message = $"Уровень пройден!\nВремя: {formattedTime}";
-
             OnGameEvent(GameEventType.LevelComplete, message);
             Logger.Info("GameController", $"Level {CurrentLevel?.Id} completed: Time={formattedTime}");
         }
@@ -128,9 +141,6 @@ namespace GravityDefiedGame.Controllers
             OnGameEvent(GameEventType.GameOver, $"Игра окончена: {reason}");
             Logger.Info("GameController", $"Game over: {reason}");
         }
-
-        private void LevelManager_LevelEvent(object? sender, GameEventArgs e) =>
-            OnGameEvent(e.Type, e.Message);
 
         private void OnGameEvent(GameEventType type, string message)
         {
@@ -154,7 +164,7 @@ namespace GravityDefiedGame.Controllers
 
         public void RestartLevel()
         {
-            if (CurrentLevel is null)
+            if (CurrentLevel == null)
                 return;
 
             StartLevel(CurrentLevel.Id);
@@ -247,19 +257,14 @@ namespace GravityDefiedGame.Controllers
         {
             if (_input.IsLeaningLeft && !_input.IsLeaningRight)
                 return Constants.LeftLean;
-
             if (!_input.IsLeaningLeft && _input.IsLeaningRight)
                 return Constants.RightLean;
-
             return Constants.NoInput;
         }
 
         #endregion
     }
 
-    /// <summary>
-    /// Класс для хранения состояния ввода
-    /// </summary>
     internal class InputState
     {
         public bool IsThrottlePressed { get; set; }

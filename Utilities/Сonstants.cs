@@ -1,8 +1,7 @@
-﻿using System;
+﻿using GravityDefiedGame.Models;
+using System;
 using System.Windows;
 using System.Windows.Media;
-using GravityDefiedGame.Models;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace GravityDefiedGame.Utilities
 {
@@ -37,7 +36,6 @@ namespace GravityDefiedGame.Utilities
     {
         public static class Validation
         {
-            // Значения безопасности и проверки
             public const double
                 MaxSafeVelocity = 3000.0,
                 MaxSafeAngularVelocity = Math.PI * 4,
@@ -54,88 +52,72 @@ namespace GravityDefiedGame.Utilities
 
         public static class Physics
         {
-            // Базовые физические константы
             public const double
                 DefaultGravity = 1000.0,
                 DefaultWheelRadius = 15.0,
                 GravityMultiplier = 0.1,
                 CriticalLeanAngle = Math.PI / 1.8;
 
-            // Новые константы для прямого управления
             public const double
-                DirectControlFactor = 10.0,        // Фактор прямого управления наклоном
-                WheelieTransitionSpeed = 3.0,      // Скорость перехода в wheelie
-                AirFrictionMultiplier = 0.1,       // Множитель трения в воздухе
-                AirBrakeReductionFactor = 0.7,     // Фактор уменьшения тормозов в воздухе
-                GroundToAirTransitionSpeed = 3.0,    // Скорость перехода с земли в воздух
-                AirToGroundTransitionSpeed = 1.5,    // Скорость перехода с воздуха на землю
-                LandingTransitionTime = 0.3,         // Время плавного перехода при приземлении
-                AirTransitionThreshold = 0.5,        // Порог для переключения логики
-                AirLeanControlFactor = 3.5,          // Фактор управления наклоном в воздухе
-                LeanControlSpeed = 3.0,              // Скорость изменения управления наклоном
-                AirLeanControlReduction = 0.7,       // Уменьшение скорости управления в воздухе
-                MaxAirControlForce = 3.0;            // Максимальная сила управления в воздухе
+                DirectControlFactor = 10.0,
+                WheelieTransitionSpeed = 5.0,
+                AirFrictionMultiplier = 0.05,
+                GroundToAirTransitionSpeed = 10.0,
+                AirToGroundTransitionSpeed = 10.0,
+                LeanControlSpeed = 4.0,
+                MaxAirControlForce = 5.0,
+                SuspensionDampingFactor = 23.0,
+                FrictionMultiplier = 2.5;
 
-            // Константы для торможения и движения назад
             public const double
-                MinBrakeInput = 0.1,                // Минимальное нажатие тормоза для эффекта
-                NearStopThreshold = 30.0,           // Скорость, при которой считаем, что мотоцикл почти остановился
-                ReverseStartThreshold = 20.0,       // Порог скорости для включения заднего хода
-                ReverseForceBase = 1500.0,          // Ускорение при движении назад
-                FrameTimeApproximation = 0.016,     // Приблизительное время кадра
-                MaxReverseSpeed = 300.0,            // Максимальная скорость движения назад
-                ReverseControlMultiplier = 0.7,     // Множитель управляемости при движении назад
-                BrakeEfficiencyMultiplier = 1.2;    // Множитель эффективности тормоза
+                MinBrakeInput = 0.1,
+                NearStopThreshold = 30.0,
+                ReverseStartThreshold = 20.0,
+                ReverseForceBase = 1500.0,
+                FrameTimeApproximation = 0.016,
+                MaxReverseSpeed = 300.0,
+                ReverseControlMultiplier = 0.7,
+                BrakeEfficiencyMultiplier = 1.2;
 
-            // Константы для проверки столкновений рамы
             public const double
-                FrameCollisionMinVelocity = 50.0,    // Минимальная скорость для проверки столкновений рамы
-                FrameCollisionMinPenetration = 0.3,  // Минимальное проникновение для обнаружения столкновения (в радиусах колеса)
-                FrameCrashThreshold = 0.9,           // Порог проникновения для аварии (в радиусах колеса)
-                FrameCollisionReactionForce = 0.3,   // Множитель силы реакции при столкновении рамы
-                FrameStabilizingFactorBase = 1.5,    // Базовый фактор стабилизации при столкновении рамы
-                FrameStabilizingFactorStrong = 2.0,  // Усиленный фактор стабилизации при большом угле
-                FrameStabilizingAngleThreshold = Math.PI / 6, // Порог угла для усиленной стабилизации
-                FrameCollisionMaxDeltaVelocity = 100.0, // Максимальное изменение скорости при столкновении
-                FrameCollisionMaxDeltaAngular = 1.0,    // Максимальное изменение угловой скорости при столкновении
-                FrameCollisionLowSpeedThreshold = 30.0, // Порог низкой скорости для дополнительного импульса
-                FrameCollisionLowSpeedImpulse = 10.0,   // Импульс при низкой скорости
-                FrameCriticalBackwardTiltAngle = Math.PI / 2.5, // Критический угол наклона назад (около -72°)
-                WheelDistanceMinRatio = 0.8,         // Минимальное отношение расстояния между колесами к номинальному
-                WheelDistanceMaxRatio = 1.2;         // Максимальное отношение расстояния между колесами к номинальному
+                FrameCollisionMinVelocity = 50.0,
+                FrameCollisionMinPenetration = 0.3,
+                FrameCrashThreshold = 0.9,
+                FrameCollisionReactionForce = 0.3,
+                FrameStabilizingFactorBase = 1.5,
+                FrameStabilizingFactorStrong = 2.0,
+                FrameStabilizingAngleThreshold = Math.PI / 6,
+                FrameCollisionMaxDeltaVelocity = 100.0,
+                FrameCollisionMaxDeltaAngular = 1.0,
+                FrameCollisionLowSpeedThreshold = 30.0,
+                FrameCollisionLowSpeedImpulse = 10.0,
+                FrameCriticalBackwardTiltAngle = Math.PI / 2.5,
+                WheelDistanceMinRatio = 0.8,
+                WheelDistanceMaxRatio = 1.2;
 
-            // Константы подвески
             public const double
                 SuspensionProgressiveFactor = 2.0,
                 MaxSuspensionCompression = 0.9,
                 MinSuspensionCompression = 0.2,
-                SuspensionDampingFactor = 12.0,
                 MaxWheelPenetration = 0.8,
                 PenetrationBaseMultiplier = 1.2,
                 PenetrationProgressiveFactor = 0.5,
                 WheelRadiusHalfFactor = 0.5;
 
-            // Константы вращения и наклона
             public const double
-                MaxAngularVelocity = Math.PI * 2.5,
-                LeanProportionalCoefficient = 4.0,
-                LeanDifferentialCoefficient = 2.5,
-                StabilizationFactor = 1.2,
-                LeanSmoothingFactor = 0.15,
-                AngularAccelerationWarningFactor = 2.0,
-                GroundAngularVelocityFactor = 0.9;
+                MaxAngularVelocity = Math.PI * 3.0,
+                LeanProportionalCoefficient = 5.0,
+                LeanDifferentialCoefficient = 3.0,
+                GroundAngularVelocityFactor = 0.95;
 
-            // Константы сцепления и трения
             public const double
                 SurfaceReactionMultiplier = 0.85,
                 NormalForceGravityFactor = 4.9,
-                FrictionMultiplier = 2.0,
-                LeanFrictionMultiplier = 0.4,
+                LeanFrictionMultiplier = 0.5,
                 SpeedFrictionThreshold = 1000.0,
                 SpeedFrictionReductionFactor = 0.15,
                 MaxForceSafetyMultiplier = 2000.0;
 
-            // Константы двигателя и ускорения
             public const double
                 LowSpeedBoostBase = 2.5,
                 LowSpeedBoostMax = 2.0,
@@ -143,28 +125,22 @@ namespace GravityDefiedGame.Utilities
                 StabilityAngleFactor = 0.4,
                 EnginePowerLimitMultiplier = 1.8;
 
-            // Константы для wheelie
             public const double
                 WheelieMinAngle = 0.25,
                 WheelieHeightFactor = 0.5,
-                WheelieBoostFactor = 1.8,
-                WheelieForceMultiplier = 0.4,
-                WheelieAngleBoost = 1.8,
-                WheelieVerticalMultiplier = 1.8,
+                WheelieForceMultiplier = 0.2,
+                WheelieAngleBoost = 1.0,
                 WheelieThrottleThreshold = 0.5;
 
-            // Константы для полета
             public const double
-                AirRotationMultiplier = 0.35,
-                AirTorqueMultiplier = 6.0,
+                AirRotationMultiplier = 0.5,
+                AirTorqueMultiplier = 8.0,
                 RotationDirectControl = 6.0,
                 AirDragReductor = 0.6,
                 LiftSpeedThreshold = 250.0,
                 LiftForceMultiplier = 0.2,
-                MaxLiftForce = 400.0,
-                AirAngularVelocityWarningThreshold = 0.9;
+                MaxLiftForce = 400.0;
 
-            // Константы для скольжения и управления
             public const double
                 MinThrottleForFriction = 0.1,
                 StrongThrottleThreshold = 0.6,
@@ -178,21 +154,18 @@ namespace GravityDefiedGame.Utilities
                 HighWheelSlipThreshold = 0.4,
                 HighThrottleThreshold = 0.7;
 
-            // Прочие константы
             public const double
-                AirDetectionMultiplier = 1.2,
+                AirDetectionMultiplier = 1.8,
                 MomentOfInertiaMultiplier = 0.6;
         }
 
         public static class Motorcycle
         {
-            // Основные параметры мотоцикла
             public const double
                 DefaultWheelBase = 75.0,
                 FullRotation = 2 * Math.PI,
                 AirDetectionThreshold = 7.5;
 
-            // Множители для вращения и движения
             public const double
                 WheelCircumferenceFactor = 2 * Math.PI,
                 AirRotationFactor = 12.0,
@@ -200,80 +173,73 @@ namespace GravityDefiedGame.Utilities
                 ThrottleRotationFactor = 6.0,
                 SlipThrottleFactor = 1.8;
 
-            // Начальные значения
             public static readonly Point DefaultStartPosition = new(100, 100);
             public static readonly Color DefaultBikeColor = Colors.Red;
         }
 
         public static class Bike
         {
-            // Стандартный мотоцикл
             public static readonly BikeProperties Standard = new(
                 mass: 180.0,
-                power: 4500.0,
+                power: 10000.0,
                 brakeForce: 2000.0,
-                drag: 0.4,
+                drag: 0.35,
                 maxLeanAngle: Math.PI / 2.5,
-                leanSpeed: 5.0,
+                leanSpeed: 6.0,
                 friction: 1.0,
-                suspensionStrength: 6000.0,
-                suspensionDamping: 600.0,
+                suspensionStrength: 8000.0,
+                suspensionDamping: 800.0,
                 suspensionRestLength: 25.0
             );
 
-            // Спортивный мотоцикл
             public static readonly BikeProperties Sport = new(
                 mass: 150.0,
-                power: 5500.0,
+                power: 14000.0,
                 brakeForce: 2400.0,
-                drag: 0.3,
+                drag: 0.25,
                 maxLeanAngle: Math.PI / 2,
-                leanSpeed: 6.0,
-                friction: 0.9,
-                suspensionStrength: 4000.0,
-                suspensionDamping: 400.0,
+                leanSpeed: 7.0,
+                friction: 1.0,
+                suspensionStrength: 4500.0,
+                suspensionDamping: 450.0,
                 suspensionRestLength: 20.0
             );
 
-            // Внедорожный мотоцикл
             public static readonly BikeProperties OffRoad = new(
                 mass: 200.0,
-                power: 4000.0,
+                power: 12000.0,
                 brakeForce: 1800.0,
-                drag: 0.5,
+                drag: 0.45,
                 maxLeanAngle: Math.PI / 3,
-                leanSpeed: 4.5,
-                friction: 1.2,
-                suspensionStrength: 5000.0,
-                suspensionDamping: 500.0,
+                leanSpeed: 5.5,
+                friction: 1.0,
+                suspensionStrength: 5500.0,
+                suspensionDamping: 550.0,
                 suspensionRestLength: 30.0
             );
         }
 
         public static class Wheels
         {
-            // Стандартные колеса
             public static readonly WheelProperties Standard = new(
                 radius: 15.0,
                 friction: 1.0,
-                suspensionStrength: 1.0,
-                suspensionDamping: 1.0
+                suspensionStrength: 1.2,
+                suspensionDamping: 1.2
             );
 
-            // Спортивные колеса
             public static readonly WheelProperties Sport = new(
                 radius: 14.0,
-                friction: 0.9,
-                suspensionStrength: 0.8,
-                suspensionDamping: 0.7
+                friction: 1.0,
+                suspensionStrength: 0.9,
+                suspensionDamping: 0.8
             );
 
-            // Внедорожные колеса
             public static readonly WheelProperties OffRoad = new(
                 radius: 18.0,
-                friction: 1.2,
-                suspensionStrength: 1.2,
-                suspensionDamping: 1.1
+                friction: 1.0,
+                suspensionStrength: 1.3,
+                suspensionDamping: 1.2
             );
         }
 
