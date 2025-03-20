@@ -1,135 +1,144 @@
-﻿using System;
-using System.Windows;
+﻿// PhysicsComponent.cs
+using System;
 using System.Collections.Generic;
+using System.Windows;
 using GravityDefiedGame.Utilities;
 
 namespace GravityDefiedGame.Models
 {
     /// <summary>
-    /// Абстрактный класс, расширяющий Component, предоставляя базовые
-    /// методы для работы с физикой объектов: повороты, смещения, расчёт сил и энергии.
+    /// Класс компонента игры, предоставляющий базовые методы для работы с физикой объектов,
+    /// логирования, проверки параметров и диагностики.
     /// </summary>
-    public abstract class PhysicsComponent : Component
+    public abstract class PhysicsComponent
     {
         protected const double FullRotation = 2 * Math.PI;
+        protected readonly string _logTag;
+        protected internal double _logThrottleTime; // время блокировки логирования
 
-        protected PhysicsComponent(string tag) : base(tag) { }
+        public PhysicsComponent(string logTag) => _logTag = logTag;
 
-        #region Статические методы для геометрических преобразований
+        #region Логирование и вспомогательные методы
 
-        internal static Point RotatePoint(Point origin, Point point, double angle)
+        protected void UpdateLogTimer(double deltaTime)
         {
-            double cosAngle = Math.Cos(angle);
-            double sinAngle = Math.Sin(angle);
-            double dx = point.X - origin.X;
-            double dy = point.Y - origin.Y;
-
-            return new Point(
-                origin.X + dx * cosAngle - dy * sinAngle,
-                origin.Y + dx * sinAngle + dy * cosAngle
-            );
+            if (_logThrottleTime > 0)
+            {
+                _logThrottleTime -= deltaTime;
+            }
         }
 
-        internal static Point Offset(Point point, double dx, double dy, double angle)
+        protected void TryLog(LogLevel level, string message)
         {
-            double cosAngle = Math.Cos(angle);
-            double sinAngle = Math.Sin(angle);
-            return new Point(
-                point.X + dx * cosAngle - dy * sinAngle,
-                point.Y + dx * sinAngle + dy * cosAngle
-            );
+            if (_logThrottleTime <= 0)
+            {
+                LogMessage(level, message);
+                _logThrottleTime = GameConstants.Debug.LogThrottle;
+            }
         }
 
-        internal static double CalculateDistance(Point pointA, Point pointB)
+        private void LogMessage(LogLevel level, string message)
         {
-            double dx = pointA.X - pointB.X;
-            double dy = pointA.Y - pointB.Y;
-            return Math.Sqrt(dx * dx + dy * dy);
+            switch (level)
+            {
+                case LogLevel.D:
+                    Logger.Debug(_logTag, message);
+                    break;
+                case LogLevel.I:
+                    Logger.Info(_logTag, message);
+                    break;
+                case LogLevel.W:
+                    Logger.Warning(_logTag, message);
+                    break;
+                case LogLevel.E:
+                    Logger.Error(_logTag, message);
+                    break;
+                default:
+                    Logger.Info(_logTag, message);
+                    break;
+            }
         }
 
-        internal static (double cosAngle, double sinAngle) GetTrigsFromAngle(double angle) =>
-            (Math.Cos(angle), Math.Sin(angle));
+        protected double ClampValue(double value, double min, double max) => Math.Max(min, Math.Min(max, value));
+
+        protected double SafeDivide(double numerator, double denominator, double defaultValue = 0) =>
+            Math.Abs(denominator) < 1e-10 ? defaultValue : numerator / denominator;
+
+        protected double Lerp(double a, double b, double t) => a + (b - a) * ClampValue(t, 0, 1);
+
+        protected double Smoothstep(double edge0, double edge1, double x)
+        {
+            double t = ClampValue((x - edge0) / (edge1 - edge0), 0, 1);
+            return t * t * (3 - 2 * t);
+        }
+
+        protected double NormalizeAngle(double angle)
+        {
+            const double twoPi = 2 * Math.PI;
+            if (angle >= -Math.PI && angle <= Math.PI)
+            {
+                return angle;
+            }
+
+            angle %= twoPi;
+            if (angle < 0)
+            {
+                angle += twoPi;
+            }
+            if (angle > Math.PI)
+            {
+                angle -= twoPi;
+            }
+            return angle;
+        }
 
         #endregion
 
-        #region Методы обновления и вычисления позиций
+        #region Методы санитации
 
-        protected Point CalculatePointWithOffset(Point center, double angle, double distance) =>
-            Offset(center, distance, 0, angle);
-
-        protected Point UpdatePosition(Point currentPosition, Vector velocity, double deltaTime) =>
-            new Point(currentPosition.X + velocity.X * deltaTime, currentPosition.Y + velocity.Y * deltaTime);
-
-        protected Vector NormalizeVector(Vector v)
+        protected internal T SanitizeValue<T>(T value, T defaultValue, string errorMessage) where T : IConvertible
         {
-            double length = v.Length;
-            return length > 1e-10 ? v * (1.0 / length) : new Vector(0, 0);
+            if (double.IsNaN(Convert.ToDouble(value)) || double.IsInfinity(Convert.ToDouble(value)))
+            {
+                TryLog(LogLevel.E, $"{errorMessage}: {value}");
+                return defaultValue;
+            }
+            return value;
+        }
+
+        protected internal Vector SanitizeVector(Vector value, Vector defaultValue, string errorMessage)
+        {
+            if (double.IsNaN(value.X) || double.IsNaN(value.Y) || double.IsInfinity(value.X) || double.IsInfinity(value.Y))
+            {
+                TryLog(LogLevel.E, $"{errorMessage}: {value}");
+                return defaultValue;
+            }
+            return value;
+        }
+
+        protected internal Point SanitizePosition(Point value, Point defaultValue, string errorMessage)
+        {
+            if (double.IsNaN(value.X) || double.IsNaN(value.Y) || double.IsInfinity(value.X) || double.IsInfinity(value.Y))
+            {
+                TryLog(LogLevel.E, $"{errorMessage}: {value}");
+                return defaultValue;
+            }
+            return value;
         }
 
         #endregion
 
-        #region Методы для векторных операций
+        #region Валидация параметров
 
-        protected double CrossProduct(Vector a, Vector b) => a.X * b.Y - a.Y * b.X;
-        protected double DotProduct(Vector a, Vector b) => a.X * b.X + a.Y * b.Y;
-        protected Vector GetDirectionVector(double angle) => new Vector(Math.Cos(angle), Math.Sin(angle));
-        protected double GetAngleFromVector(Vector v) => Math.Atan2(v.Y, v.X);
-        protected Vector CalculateNormalForce(Vector normal, double magnitude) => normal * magnitude;
-
-        protected Vector CalculateFrictionForce(Vector tangent, double normalForceMagnitude, double frictionCoefficient) =>
-            tangent * (-normalForceMagnitude * frictionCoefficient);
-
-        #endregion
-
-        #region Методы расчёта импульсов и энергий
-
-        protected (Vector LinearImpulse, double AngularImpulse) CalculateImpulse(
-            Vector point, Vector force, Point centerOfMass, double deltaTime)
+        protected internal bool IsExceedingSafeValue<T>(T value, T threshold, string message) where T : IComparable<T>
         {
-            Vector relativePosition = new Vector(point.X - centerOfMass.X, point.Y - centerOfMass.Y);
-            Vector linearImpulse = force * deltaTime;
-            double angularImpulse = CrossProduct(relativePosition, force) * deltaTime;
-            return (linearImpulse, angularImpulse);
+            if (value.CompareTo(threshold) > 0)
+            {
+                TryLog(LogLevel.W, message);
+                return true;
+            }
+            return false;
         }
-
-        protected double CalculateMomentOfInertia(double mass, double radius) =>
-            mass * radius * radius;
-
-        protected double CalculateTorque(Point applicationPoint, Point pivot, Vector force)
-        {
-            Vector r = new Vector(applicationPoint.X - pivot.X, applicationPoint.Y - pivot.Y);
-            return CrossProduct(r, force);
-        }
-
-        protected double CalculateKineticEnergy(double mass, Vector velocity) =>
-            0.5 * mass * velocity.LengthSquared;
-
-        protected double CalculateRotationalEnergy(double momentOfInertia, double angularVelocity) =>
-            0.5 * momentOfInertia * angularVelocity * angularVelocity;
-
-        protected double CalculatePotentialEnergy(double mass, double height, double gravity) =>
-            mass * gravity * height;
-
-        #endregion
-
-        #region Прочие методы
-
-        protected Vector ProjectPointOntoLine(Point point, Point lineStart, Point lineEnd)
-        {
-            Vector line = new Vector(lineEnd.X - lineStart.X, lineEnd.Y - lineStart.Y);
-            Vector pointVector = new Vector(point.X - lineStart.X, point.Y - lineStart.Y);
-            double dotProduct = DotProduct(pointVector, line);
-            double lineLength = line.Length;
-
-            if (lineLength < 1e-10)
-                return new Vector(lineStart.X, lineStart.Y);
-
-            double t = ClampValue(dotProduct / (lineLength * lineLength), 0, 1);
-            return new Vector(lineStart.X + t * line.X, lineStart.Y + t * line.Y);
-        }
-
-        protected double CalculatePenetrationDepth(Point point, Vector normal, double distance) =>
-            DotProduct(new Vector(point.X, point.Y), normal) - distance;
 
         protected bool IsVectorExceedingSafeValue(Vector vector, double threshold, string message)
         {
@@ -141,22 +150,149 @@ namespace GravityDefiedGame.Models
             return false;
         }
 
-        /// <summary>
-        /// Добавляет линии, замыкающие многоугольник, соединяя последовательные точки.
-        /// </summary>
-        /// <typeparam name="T">Тип линии.</typeparam>
-        /// <typeparam name="U">Тип, характеризующий тип линии.</typeparam>
-        /// <param name="lines">Список, куда добавляются линии.</param>
-        /// <param name="startIndex">Индекс начала в списке точек.</param>
-        /// <param name="pointCount">Количество точек, образующих многоугольник.</param>
-        /// <param name="lineType">Тип линии.</param>
-        /// <param name="createLineFunc">Функция для создания линии по индексам и типу.</param>
-        internal void AddClosedPolygonLines<T, U>(List<T> lines, int startIndex, int pointCount, U lineType,
-            Func<int, int, U, T> createLineFunc)
+        protected bool CheckConditionWithLog(bool condition, LogLevel level, string message)
+        {
+            if (condition)
+            {
+                TryLog(level, message);
+                return true;
+            }
+            return condition;
+        }
+
+        protected internal bool ValidatePhysicalParameter(
+            string parameterName,
+            double value,
+            double minSafe,
+            double maxSafe,
+            string componentName = "Unknown")
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                TryLog(LogLevel.E, $"CRITICAL: {componentName} - {parameterName} has invalid value: {value}");
+                return false;
+            }
+
+            if (value < minSafe || value > maxSafe)
+            {
+                LogLevel level = (value < minSafe * 2 || value > maxSafe * 0.5) ? LogLevel.W : LogLevel.E;
+                TryLog(level, $"{componentName} - {parameterName} outside safe range: {value:F2} (safe range: {minSafe:F2} to {maxSafe:F2})");
+                return false;
+            }
+
+            return true;
+        }
+
+        protected internal bool ValidateVectorParameter(
+            string parameterName,
+            Vector vector,
+            double maxMagnitude,
+            string componentName = "Unknown")
+        {
+            if (double.IsNaN(vector.X) || double.IsNaN(vector.Y) || double.IsInfinity(vector.X) || double.IsInfinity(vector.Y))
+            {
+                TryLog(LogLevel.E, $"CRITICAL: {componentName} - {parameterName} has invalid values: {vector}");
+                return false;
+            }
+
+            double magnitude = vector.Length;
+            if (magnitude > maxMagnitude)
+            {
+                LogLevel level = magnitude > maxMagnitude * 1.5 ? LogLevel.E : LogLevel.W;
+                TryLog(level, $"{componentName} - {parameterName} magnitude too high: {magnitude:F2} (max safe: {maxMagnitude:F2})");
+                return false;
+            }
+
+            return true;
+        }
+
+        protected internal bool ValidateConnectionStrain(
+            string connectionName,
+            double currentLength,
+            double restLength,
+            double maxCompressionRatio,
+            double maxExtensionRatio,
+            string componentName = "Unknown")
+        {
+            double ratio = currentLength / restLength;
+            if (ratio < maxCompressionRatio)
+            {
+                ProcessConnectionStrain(connectionName, ratio, maxCompressionRatio, true, componentName);
+                return false;
+            }
+            else if (ratio > maxExtensionRatio)
+            {
+                ProcessConnectionStrain(connectionName, ratio, maxExtensionRatio, false, componentName);
+                return false;
+            }
+
+            return true;
+        }
+
+        private void ProcessConnectionStrain(
+            string connectionName,
+            double ratio,
+            double safeRatio,
+            bool isCompression,
+            string componentName)
+        {
+            double severity = isCompression ? safeRatio / Math.Max(ratio, 0.001) : ratio / safeRatio;
+            LogLevel level = severity > 1.5 ? LogLevel.E : LogLevel.W;
+            string strainType = isCompression ? "compressed" : "stretched";
+
+            TryLog(level, $"{componentName} - {connectionName} excessively {strainType}: {ratio:P2} (safe {(isCompression ? "min" : "max")}: {safeRatio:P2})");
+        }
+
+        protected internal bool ValidateComponents(IEnumerable<(string Name, double Value, double Min, double Max)> parameters, string componentName)
+        {
+            bool hasValidationErrors = false;
+            foreach (var (Name, Value, Min, Max) in parameters)
+            {
+                if (!ValidatePhysicalParameter(Name, Value, Min, Max, componentName))
+                {
+                    hasValidationErrors = true;
+                }
+            }
+            return !hasValidationErrors;
+        }
+
+        #endregion
+
+        #region Статические методы для геометрических преобразований
+
+        internal static Point Offset(Point point, double dx, double dy, double angle)
+        {
+            double cosAngle = Math.Cos(angle);
+            double sinAngle = Math.Sin(angle);
+            return new Point(point.X + dx * cosAngle - dy * sinAngle, point.Y + dx * sinAngle + dy * cosAngle);
+        }
+
+        internal static double CalculateDistance(Point pointA, Point pointB)
+        {
+            double dx = pointA.X - pointB.X;
+            double dy = pointA.Y - pointB.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        internal static (double cosAngle, double sinAngle) GetTrigsFromAngle(double angle) => (Math.Cos(angle), Math.Sin(angle));
+
+        #endregion
+
+        #region Методы обновления и вычисления позиций
+
+        protected Point UpdatePosition(Point currentPosition, Vector velocity, double deltaTime) =>
+            new Point(currentPosition.X + velocity.X * deltaTime, currentPosition.Y + velocity.Y * deltaTime);
+
+        #endregion
+
+        #region Прочие методы
+
+        internal void AddClosedPolygonLines<T, U>(List<T> lines, int startIndex, int pointCount, U lineType, Func<int, int, U, T> createLineFunc)
         {
             for (int i = 0; i < pointCount - 1; i++)
+            {
                 lines.Add(createLineFunc(startIndex + i, startIndex + i + 1, lineType));
-
+            }
             lines.Add(createLineFunc(startIndex + pointCount - 1, startIndex, lineType));
         }
 

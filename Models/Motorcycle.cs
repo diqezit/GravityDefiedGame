@@ -10,14 +10,6 @@ using static GravityDefiedGame.Utilities.GameConstants.Validation;
 
 namespace GravityDefiedGame.Models
 {
-    /// <summary>
-    /// Класс Motorcycle моделирует физику мотоцикла в игре.
-    /// Он содержит:
-    /// - базовые свойства (позиция, скорость, угол, состояние и т.д.);
-    /// - контроллеры для обработки физики, состояния, ввода, кинематики и валидации.
-    /// Основной метод Update обновляет состояние мотоцикла по заданному времени, учитывая коллизии, физику и управление.
-    /// При возникновении ошибок фиксируется аварийное состояние.
-    /// </summary>
     public class Motorcycle : PhysicsComponent
     {
         private readonly BikePhysics _physics;
@@ -77,11 +69,23 @@ namespace GravityDefiedGame.Models
             internal set => State = value ? State | BikeState.InWheelie : State & ~BikeState.InWheelie;
         }
 
+        public bool IsInStoppie
+        {
+            get => (State & BikeState.InStoppie) == BikeState.InStoppie;
+            internal set => State = value ? State | BikeState.InStoppie : State & ~BikeState.InStoppie;
+        }
+
         public bool IsMovingBackward
         {
             get => (State & BikeState.MovingBackward) == BikeState.MovingBackward;
             internal set => State = value ? State | BikeState.MovingBackward : State & ~BikeState.MovingBackward;
         }
+
+        public double WheelieTime { get; internal set; }
+        public double StoppieTime { get; internal set; }
+
+        public double WheelieIntensity => IsInWheelie ? Math.Min(1.0, WheelieTime / 1.0) : 0;
+        public double StoppieIntensity => IsInStoppie ? Math.Min(1.0, StoppieTime / 0.5) : 0;
 
         public Point FrontAttachmentPoint { get; set; }
         public Point RearAttachmentPoint { get; set; }
@@ -186,6 +190,7 @@ namespace GravityDefiedGame.Models
         {
             private readonly Motorcycle _bike;
             private bool _wasInWheelie;
+            private bool _wasInStoppie;
             private double _airTime, _brakeHoldTime;
 
             public StateController(Motorcycle bike)
@@ -205,12 +210,15 @@ namespace GravityDefiedGame.Models
                 _bike.State = BikeState.None;
                 _bike.WasInAir = false;
                 _wasInWheelie = false;
+                _wasInStoppie = false;
                 _bike.Angle = 0;
                 _bike.AngularVelocity = 0;
                 _bike.WheelRotations = (0, 0);
                 _bike.SuspensionOffsets = (_bike._physics.SuspensionRestLength, _bike._physics.SuspensionRestLength);
                 _brakeHoldTime = 0;
                 _airTime = 0;
+                _bike.WheelieTime = 0;
+                _bike.StoppieTime = 0;
             }
 
             public bool ShouldSkipUpdate(CancellationToken token) =>
@@ -220,6 +228,7 @@ namespace GravityDefiedGame.Models
             {
                 _bike.WasInAir = _bike.IsInAir;
                 _wasInWheelie = _bike.IsInWheelie;
+                _wasInStoppie = _bike.IsInStoppie;
             }
 
             public void HandleUpdateException(Exception ex)
@@ -232,6 +241,7 @@ namespace GravityDefiedGame.Models
             public void LogStateChanges()
             {
                 LogWheelieChanges();
+                LogStoppieChanges();
                 LogLandingState();
             }
 
@@ -240,6 +250,15 @@ namespace GravityDefiedGame.Models
                 if (_bike.IsInWheelie != _wasInWheelie)
                 {
                     string msg = _bike.IsInWheelie ? "Wheelie started" : "Wheelie ended";
+                    _bike.TryLog(LogLevel.D, msg);
+                }
+            }
+
+            private void LogStoppieChanges()
+            {
+                if (_bike.IsInStoppie != _wasInStoppie)
+                {
+                    string msg = _bike.IsInStoppie ? "Stoppie started" : "Stoppie ended";
                     _bike.TryLog(LogLevel.D, msg);
                 }
             }
@@ -415,6 +434,7 @@ namespace GravityDefiedGame.Models
                     new Point(_bike.AttachmentPoints.Rear.X, _bike.AttachmentPoints.Rear.Y + _bike.SuspensionOffsets.Rear)
                 );
                 UpdateWheelieState();
+                UpdateStoppieState();
             }
 
             private void UpdateWheelieState()
@@ -422,6 +442,13 @@ namespace GravityDefiedGame.Models
                 _bike.IsInWheelie = !_bike.IsInAir &&
                                       _bike.WheelPositions.Front.Y < _bike.WheelPositions.Rear.Y - _bike._physics.WheelRadius * WheelieHeightFactor &&
                                       _bike.Angle > WheelieMinAngle;
+            }
+
+            private void UpdateStoppieState()
+            {
+                _bike.IsInStoppie = !_bike.IsInAir &&
+                                      _bike.WheelPositions.Rear.Y < _bike.WheelPositions.Front.Y - _bike._physics.WheelRadius * StoppieHeightFactor &&
+                                      _bike.Angle < -StoppieMinAngle;
             }
 
             private void UpdateWheelRotations(double deltaTime)

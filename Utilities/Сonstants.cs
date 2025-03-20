@@ -157,6 +157,45 @@ namespace GravityDefiedGame.Utilities
             public const double
                 AirDetectionMultiplier = 1.8,
                 MomentOfInertiaMultiplier = 0.6;
+
+            public const double
+                WheelieThrottleMinimum = 0.5,
+                WheelieThrottleMultiplier = 1.2,
+                WheelieForceBase = 0.2,
+                WheelieOptimalMinSpeed = 100.0,
+                WheelieOptimalMaxSpeed = 400.0,
+                WheelieMaxSpeed = 700.0,
+                WheelieOptimalAngle = 0.1,
+                WheelieBalanceAngle = 0.4,
+                WheelieBalanceTolerance = 0.1,
+                WheelieBalanceStrength = 2.5,
+                WheelieControlMultiplier = 4.0,
+                WheelieStabilizationFactor = 1.2,
+                WheelieBalanceResponseFactor = 3.0,
+                WheelieEasyTime = 1.0,
+                WheelieHardTimeDelta = 2.0,
+                WheelieProgressiveDifficulty = 0.5;
+
+            public const double
+                StoppieThresholdMinimum = 0.6,
+                StoppieBrakeMultiplier = 1.0,
+                StoppieForceBase = 0.15,
+                StoppieMinSpeed = 300.0,
+                StoppieOptimalMinSpeed = 400.0,
+                StoppieOptimalMaxSpeed = 700.0,
+                StoppieMaxSpeed = 900.0,
+                StoppieOptimalAngle = 0.05,
+                StoppieMinAngle = 0.2,
+                StoppieHeightFactor = 0.4,
+                StoppieBalanceAngle = -0.3,
+                StoppieBalanceTolerance = 0.08,
+                StoppieBalanceStrength = 2.0,
+                StoppieControlMultiplier = 3.0,
+                StoppieStabilizationFactor = 0.8,
+                StoppieBalanceResponseFactor = 2.5,
+                StoppieEasyTime = 0.5,
+                StoppieHardTimeDelta = 1.0,
+                StoppieProgressiveDifficulty = 0.6;
         }
 
         public static class Motorcycle

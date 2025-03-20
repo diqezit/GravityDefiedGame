@@ -1,4 +1,4 @@
-﻿using System;
+﻿// BikeGeom.cs
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
