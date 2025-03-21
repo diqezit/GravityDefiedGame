@@ -35,24 +35,91 @@ namespace GravityDefiedGame.Utilities
 
     public static class GameConstants
     {
-        public static class Validation
+        public static class Bike
+        {
+            public static readonly BikeProperties Standard = new(
+                mass: 180.0,
+                power: 10000.0,
+                brakeForce: 2000.0,
+                drag: 0.35,
+                maxLeanAngle: Math.PI / 2.5,
+                leanSpeed: 6.0,
+                friction: 1.0,
+                suspensionStrength: 8000.0,
+                suspensionDamping: 800.0,
+                suspensionRestLength: 25.0,
+                maxSuspensionAngle: Math.PI / 12
+            );
+
+            public static readonly BikeProperties Sport = new(
+                mass: 150.0,
+                power: 14000.0,
+                brakeForce: 2400.0,
+                drag: 0.25,
+                maxLeanAngle: Math.PI / 2,
+                leanSpeed: 7.0,
+                friction: 1.0,
+                suspensionStrength: 4500.0,
+                suspensionDamping: 450.0,
+                suspensionRestLength: 20.0,
+                maxSuspensionAngle: Math.PI / 5.14
+            );
+
+            public static readonly BikeProperties OffRoad = new(
+                mass: 200.0,
+                power: 12000.0,
+                brakeForce: 1800.0,
+                drag: 0.45,
+                maxLeanAngle: Math.PI / 3,
+                leanSpeed: 5.5,
+                friction: 1.0,
+                suspensionStrength: 5500.0,
+                suspensionDamping: 550.0,
+                suspensionRestLength: 30.0,
+                maxSuspensionAngle: Math.PI / 7.2
+            );
+        }
+
+        public static class Debug
+        {
+            public const string
+                BikePhysicsTag = nameof(BikePhysics),
+                MotorcycleTag = nameof(Motorcycle);
+
+            public const double
+                LogThrottle = 0.5,
+                EngineForceThreshold = 1.2;
+        }
+
+        public static class Motorcycle
         {
             public const double
-                MaxSafeVelocity = 3000.0,
-                MaxSafeAngularVelocity = Math.PI * 4,
-                MaxSafeAcceleration = 6000.0,
-                MaxSafeHeight = 600.0,
-                MaxSafeSpeed = 2000.0,
-                MaxSafeRotation = 6.0,
-                DangerLandingVelocity = 1200.0,
-                MinSuspensionOffset = 0.1,
-                HighSuspensionCompressionThreshold = 0.8,
-                SignificantAirTimeThreshold = 0.5,
-                LongAirTimeThreshold = 3.0;
+                DefaultWheelBase = 75.0,
+                FullRotation = 2 * Math.PI,
+                AirDetectionThreshold = 7.5;
+
+            public const double
+                WheelCircumferenceFactor = 2 * Math.PI,
+                AirRotationFactor = 12.0,
+                GroundRotationFactor = 12.0,
+                ThrottleRotationFactor = 6.0,
+                SlipThrottleFactor = 1.8;
+
+            public static readonly Point DefaultStartPosition = new(100, 100);
+            public static readonly Color DefaultBikeColor = Colors.Red;
         }
 
         public static class Physics
         {
+            public const double
+                ThrottleTransitionRate = 3.0,
+                BrakeTransitionRate = 4.0,
+                BrakeTransitionThreshold = 0.01,
+                TorqueSmoothingFactor = 2.5,
+                TorqueIdleThreshold = 0.1,
+                TorqueFadeThreshold = 0.05,
+                SlopeTransitionRate = 2.0;
+
             public const double
                 DefaultGravity = 1000.0,
                 DefaultWheelRadius = 15.0,
@@ -63,6 +130,10 @@ namespace GravityDefiedGame.Utilities
                 DirectControlFactor = 10.0,
                 WheelieTransitionSpeed = 5.0,
                 AirFrictionMultiplier = 0.05,
+                DragThrottleThreshold = 0.1,
+                DragThrottleMultiplierBase = 1.0,
+                DragThrottleMultiplier = 1.5,
+                DragIdleMultiplier = 2.0,
                 GroundToAirTransitionSpeed = 10.0,
                 AirToGroundTransitionSpeed = 10.0,
                 LeanControlSpeed = 4.0,
@@ -93,6 +164,7 @@ namespace GravityDefiedGame.Utilities
                 FrameCollisionLowSpeedThreshold = 30.0,
                 FrameCollisionLowSpeedImpulse = 10.0,
                 FrameCriticalBackwardTiltAngle = Math.PI / 2.5,
+                FrameCollisionHighSpeedThreshold = 200.0,
                 WheelDistanceMinRatio = 0.8,
                 WheelDistanceMaxRatio = 1.2;
 
@@ -101,23 +173,36 @@ namespace GravityDefiedGame.Utilities
                 MaxSuspensionCompression = 0.85,
                 MinSuspensionCompression = 0.2,
                 MaxWheelPenetration = 0.75,
-                PenetrationBaseMultiplier = 1.1,
-                PenetrationProgressiveFactor = 0.4,
+                BaseCompressionMultiplier = 0.5,
+                ProgressiveFactorBase = 1.0,
+                ProgressiveFactorMultiplier = 2.0,
                 WheelRadiusHalfFactor = 0.5,
                 WheelieReducedSuspensionFactor = 0.3,
-                CompressionSmoothingFactor = 0.4,
-                LargeSuspensionChangeThreshold = 0.3,
-                LargeSuspensionChangeSmoothingFactor = 0.3,
-                VelocityDampingFactor = 0.7,
+                CompressionSmoothingFactor = 0.3,
+                LargeSuspensionChangeThreshold = 0.2,
+                LargeSuspensionChangeSmoothingFactor = 0.4,
+                CompressionRatioBase = 1.0,
+                ProgressiveFactorForceMultiplier = 2.0,
+                VelocityDampingFactor = 0.5,
+                FrictionForceMultiplier = 0.8,
+                ReactionForceSmoothingFactor = 0.5,
                 LandingSmoothingFactor = 0.6,
                 WheelieIntensityDampingMax = 0.7,
                 WheelieIntensityDampingMultiplier = 0.8;
 
             public const double
                 MaxAngularVelocity = Math.PI * 3.0,
+                MaxAirAngularVelocity = Math.PI,
+                AirDampingFactor = 0.5,
                 LeanProportionalCoefficient = 5.0,
                 LeanDifferentialCoefficient = 3.0,
                 GroundAngularVelocityFactor = 0.95;
+
+            public const double
+                SlopeAngleDifferenceThreshold = 0.1,
+                SpeedFactorDenominator = 300.0,
+                BlendBase = 0.5,
+                BlendSpeedFactor = 0.3;
 
             public const double
                 SurfaceReactionMultiplier = 0.85,
@@ -171,6 +256,7 @@ namespace GravityDefiedGame.Utilities
                 WheelieThrottleMinimum = 0.4,
                 WheelieThrottleMultiplier = 1.5,
                 WheelieForceBase = 0.3,
+                WheelieMaxForceMultiplier = 2.0,
                 WheelieOptimalMinSpeed = 80.0,
                 WheelieOptimalMaxSpeed = 400.0,
                 WheelieMaxSpeed = 700.0,
@@ -183,12 +269,20 @@ namespace GravityDefiedGame.Utilities
                 WheelieBalanceResponseFactor = 2.5,
                 WheelieEasyTime = 2.0,
                 WheelieHardTimeDelta = 3.0,
-                WheelieProgressiveDifficulty = 0.4;
+                WheelieProgressiveDifficulty = 0.4,
+                WheelieLowSpeedEfficiency = 0.5,
+                WheelieHighSpeedEfficiency = 0.1,
+                WheelieAngleMinOffset = Math.PI / 6,
+                WheelieAngleMaxOffset = Math.PI / 4,
+                WheelieLowAngleEfficiency = 0.4,
+                WheelieHighAngleEfficiency = 0.2,
+                WheelieBalanceMinFactor = 0.2;
 
             public const double
                 StoppieThresholdMinimum = 0.6,
                 StoppieBrakeMultiplier = 1.0,
                 StoppieForceBase = 0.15,
+                StoppieMaxForceMultiplier = 2.0,
                 StoppieMinSpeed = 300.0,
                 StoppieOptimalMinSpeed = 400.0,
                 StoppieOptimalMaxSpeed = 700.0,
@@ -204,70 +298,55 @@ namespace GravityDefiedGame.Utilities
                 StoppieBalanceResponseFactor = 2.5,
                 StoppieEasyTime = 0.5,
                 StoppieHardTimeDelta = 1.0,
-                StoppieProgressiveDifficulty = 0.6;
+                StoppieProgressiveDifficulty = 0.6,
+                StoppieLowSpeedEfficiency = 0.3,
+                StoppieHighSpeedEfficiency = 0.2,
+                StoppieAngleMinOffset = Math.PI / 4,
+                StoppieAngleMaxOffset = Math.PI / 6,
+                StoppieLowAngleEfficiency = 0.2,
+                StoppieHighAngleEfficiency = 0.4,
+                StoppieBalanceMinFactor = 0.2;
+
+            public const double
+                SlopeAngleSmoothingThreshold = 0.02,
+                LeanSpeedFactorDenominator = 300.0,
+                LeanSpeedBaseMultiplier = 0.8,
+                LeanSpeedFactorMultiplier = 0.4,
+                TerrainAdaptationSpeedThreshold = 200.0,
+                ThrottleLeanInfluence = 0.2,
+                AngularVelocityDampingBase = 200.0,
+                AngularVelocityDampingFactor = 100.0,
+                LeanControlTorqueMultiplier = 1000.0,
+                InputIdleThreshold = 0.1,
+                AngularVelocityIdleThreshold = 0.1,
+                StabilizationFactorBase = 1.2,
+                StabilizationFactorSpeedMultiplier = 0.8,
+                StabilizationSpeedThreshold = 400.0,
+                StabilizationTorqueMultiplier = 100.0;
+
+            public const int StatusLogInterval = 100;
         }
 
-        public static class Motorcycle
+        public static class Validation
         {
             public const double
-                DefaultWheelBase = 75.0,
-                FullRotation = 2 * Math.PI,
-                AirDetectionThreshold = 7.5;
-
-            public const double
-                WheelCircumferenceFactor = 2 * Math.PI,
-                AirRotationFactor = 12.0,
-                GroundRotationFactor = 12.0,
-                ThrottleRotationFactor = 6.0,
-                SlipThrottleFactor = 1.8;
-
-            public static readonly Point DefaultStartPosition = new(100, 100);
-            public static readonly Color DefaultBikeColor = Colors.Red;
-        }
-
-        public static class Bike
-        {
-            public static readonly BikeProperties Standard = new(
-                mass: 180.0,
-                power: 10000.0,
-                brakeForce: 2000.0,
-                drag: 0.35,
-                maxLeanAngle: Math.PI / 2.5,
-                leanSpeed: 6.0,
-                friction: 1.0,
-                suspensionStrength: 8000.0,
-                suspensionDamping: 800.0,
-                suspensionRestLength: 25.0,
-                maxSuspensionAngle: Math.PI / 12
-            );
-
-            public static readonly BikeProperties Sport = new(
-                mass: 150.0,
-                power: 14000.0,
-                brakeForce: 2400.0,
-                drag: 0.25,
-                maxLeanAngle: Math.PI / 2,
-                leanSpeed: 7.0,
-                friction: 1.0,
-                suspensionStrength: 4500.0,
-                suspensionDamping: 450.0,
-                suspensionRestLength: 20.0,
-                maxSuspensionAngle: Math.PI / 5.14
-            );
-
-            public static readonly BikeProperties OffRoad = new(
-                mass: 200.0,
-                power: 12000.0,
-                brakeForce: 1800.0,
-                drag: 0.45,
-                maxLeanAngle: Math.PI / 3,
-                leanSpeed: 5.5,
-                friction: 1.0,
-                suspensionStrength: 5500.0,
-                suspensionDamping: 550.0,
-                suspensionRestLength: 30.0,
-                maxSuspensionAngle: Math.PI / 7.2
-            );
+                MaxSafeVelocity = 3000.0,
+                MaxSafeAngularVelocity = Math.PI * 4,
+                MaxSafeAcceleration = 6000.0,
+                MaxSafeHeight = 600.0,
+                MaxSafeSpeed = 2000.0,
+                MaxSafeRotation = 6.0,
+                DangerLandingVelocity = 1200.0,
+                MinSuspensionOffset = 0.1,
+                HighSuspensionCompressionThreshold = 0.8,
+                CriticalSuspensionCompressionThreshold = 0.95,
+                SignificantAirTimeThreshold = 0.5,
+                LongAirTimeThreshold = 3.0,
+                SpeedWarningThresholdMultiplier = 0.8,
+                SpeedCriticalThresholdMultiplier = 1.2,
+                SpeedWarningCooldown = 1.0,
+                ExtremeTiltAngleThreshold = Math.PI / 2.2,
+                TiltWarningCooldown = 1.0;
         }
 
         public static class Wheels
@@ -292,17 +371,6 @@ namespace GravityDefiedGame.Utilities
                 suspensionStrength: 1.3,
                 suspensionDamping: 1.2
             );
-        }
-
-        public static class Debug
-        {
-            public const string
-                BikePhysicsTag = nameof(BikePhysics),
-                MotorcycleTag = nameof(Motorcycle);
-
-            public const double
-                LogThrottle = 0.5,
-                EngineForceThreshold = 1.2;
         }
     }
 }

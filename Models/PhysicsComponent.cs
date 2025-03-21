@@ -3,18 +3,17 @@ using System.Collections.Generic;
 using System.Windows;
 using GravityDefiedGame.Utilities;
 using static System.Math;
+using static GravityDefiedGame.Utilities.LoggerCore;
 
 namespace GravityDefiedGame.Models
 {
     public abstract class PhysicsComponent
     {
         protected const double FullRotation = 2 * PI;
-        protected readonly string _logTag;
-        protected internal double _logThrottleTime;
 
-        public PhysicsComponent(string logTag) => _logTag = logTag;
+        public PhysicsComponent() { }
 
-        // кэшированиt тригонометрических значений
+        // Inner class for caching trigonometric values
         protected class TrigCache
         {
             public double Sin { get; private set; }
@@ -27,55 +26,25 @@ namespace GravityDefiedGame.Models
             }
         }
 
-        #region Logging and Utility Methods
+        #region Utility Methods
 
-        protected void UpdateLogTimer(double deltaTime)
-        {
-            if (_logThrottleTime > 0)
-            {
-                _logThrottleTime -= deltaTime;
-            }
-        }
+        protected static double ClampValue(double value, double min, double max) => Max(min, Min(max, value));
 
-        protected void TryLog(LogLevel level, string message)
-        {
-            if (_logThrottleTime <= 0)
-            {
-                LogMessage(level, message);
-                _logThrottleTime = GameConstants.Debug.LogThrottle;
-            }
-        }
-
-        private void LogMessage(LogLevel level, string message)
-        {
-            switch (level)
-            {
-                case LogLevel.D:
-                    Logger.Debug(_logTag, message);
-                    break;
-                case LogLevel.I:
-                    Logger.Info(_logTag, message);
-                    break;
-                case LogLevel.W:
-                    Logger.Warning(_logTag, message);
-                    break;
-                case LogLevel.E:
-                    Logger.Error(_logTag, message);
-                    break;
-                default:
-                    Logger.Info(_logTag, message);
-                    break;
-            }
-        }
-
-        protected double ClampValue(double value, double min, double max) => Max(min, Min(max, value));
-
-        protected double SafeDivide(double numerator, double denominator, double defaultValue = 0) =>
+        protected static double SafeDivide(double numerator, double denominator, double defaultValue = 0) =>
             Abs(denominator) < 1e-10 ? defaultValue : numerator / denominator;
 
-        protected double Lerp(double a, double b, double t) => a + (b - a) * ClampValue(t, 0, 1);
+        protected static double Lerp(double a, double b, double t) => a + (b - a) * ClampValue(t, 0, 1);
 
-        protected double Smoothstep(double edge0, double edge1, double x)
+        protected static Vector LerpVector(Vector a, Vector b, double t)
+        {
+            double factor = ClampValue(t, 0, 1);
+            return new Vector(
+                a.X + (b.X - a.X) * factor,
+                a.Y + (b.Y - a.Y) * factor
+            );
+        }
+
+        protected static double Smoothstep(double edge0, double edge1, double x)
         {
             double t = ClampValue((x - edge0) / (edge1 - edge0), 0, 1);
             return t * t * (3 - 2 * t);
@@ -105,32 +74,32 @@ namespace GravityDefiedGame.Models
 
         #region Sanitization Methods
 
-        protected internal T SanitizeValue<T>(T value, T defaultValue, string errorMessage) where T : IConvertible =>
+        protected internal static T SanitizeValue<T>(T value, T defaultValue, string errorMessage) where T : IConvertible =>
             double.IsNaN(Convert.ToDouble(value)) || double.IsInfinity(Convert.ToDouble(value))
                 ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
                 : value;
 
-        private T LogErrorAndReturnDefault<T>(string errorMessage, T value, T defaultValue)
+        private static T LogErrorAndReturnDefault<T>(string errorMessage, T value, T defaultValue)
         {
-            TryLog(LogLevel.E, $"{errorMessage}: {value}");
+            WriteLog(LogLevel.E, "PhysicsComponent", $"{errorMessage}: {value}");
             return defaultValue;
         }
 
-        protected internal Vector SanitizeVector(Vector value, Vector defaultValue, string errorMessage) =>
+        protected internal static Vector SanitizeVector(Vector value, Vector defaultValue, string errorMessage) =>
             IsVectorInvalid(value)
                 ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
                 : value;
 
-        protected internal Point SanitizePosition(Point value, Point defaultValue, string errorMessage) =>
+        protected internal static Point SanitizePosition(Point value, Point defaultValue, string errorMessage) =>
             IsPointInvalid(value)
                 ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
                 : value;
 
-        private bool IsVectorInvalid(Vector value) =>
+        private static bool IsVectorInvalid(Vector value) =>
             double.IsNaN(value.X) || double.IsNaN(value.Y) ||
             double.IsInfinity(value.X) || double.IsInfinity(value.Y);
 
-        private bool IsPointInvalid(Point value) =>
+        private static bool IsPointInvalid(Point value) =>
             double.IsNaN(value.X) || double.IsNaN(value.Y) ||
             double.IsInfinity(value.X) || double.IsInfinity(value.Y);
 
@@ -138,29 +107,29 @@ namespace GravityDefiedGame.Models
 
         #region Parameter Validation
 
-        protected internal bool IsExceedingSafeValue<T>(T value, T threshold, string message) where T : IComparable<T>
+        protected internal static bool IsExceedingSafeValue<T>(T value, T threshold, string message) where T : IComparable<T>
         {
             if (value.CompareTo(threshold) > 0)
             {
-                TryLog(LogLevel.W, message);
+                WriteLog(LogLevel.W, "PhysicsComponent", message);
                 return true;
             }
             return false;
         }
 
-        protected bool IsVectorExceedingSafeValue(Vector vector, double threshold, string message) =>
+        protected static bool IsVectorExceedingSafeValue(Vector vector, double threshold, string message) =>
             CheckConditionWithLog(vector.Length > threshold, LogLevel.W, message);
 
-        protected bool CheckConditionWithLog(bool condition, LogLevel level, string message)
+        protected static bool CheckConditionWithLog(bool condition, LogLevel level, string message)
         {
             if (condition)
             {
-                TryLog(level, message);
+                WriteLog(level, "PhysicsComponent", message);
             }
             return condition;
         }
 
-        protected internal bool ValidatePhysicalParameter(
+        protected internal static bool ValidatePhysicalParameter(
             string parameterName,
             double value,
             double minSafe,
@@ -169,21 +138,21 @@ namespace GravityDefiedGame.Models
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                TryLog(LogLevel.E, $"CRITICAL: {componentName} - {parameterName} has invalid value: {value}");
+                WriteLog(LogLevel.E, componentName, $"CRITICAL: {parameterName} has invalid value: {value}");
                 return false;
             }
 
             if (value < minSafe || value > maxSafe)
             {
-                var level = (value < minSafe * 2 || value > maxSafe * 0.5) ? LogLevel.W : LogLevel.E;
-                TryLog(level, $"{componentName} - {parameterName} outside safe range: {value:F2} (safe range: {minSafe:F2} to {maxSafe:F2})");
+                var logLevel = (value < minSafe * 2 || value > maxSafe * 0.5) ? LogLevel.W : LogLevel.E;
+                WriteLog(logLevel, componentName, $"{parameterName} outside safe range: {value:F2} (safe range: {minSafe:F2} to {maxSafe:F2})");
                 return false;
             }
 
             return true;
         }
 
-        protected internal bool ValidateVectorParameter(
+        protected internal static bool ValidateVectorParameter(
             string parameterName,
             Vector vector,
             double maxMagnitude,
@@ -191,22 +160,22 @@ namespace GravityDefiedGame.Models
         {
             if (IsVectorInvalid(vector))
             {
-                TryLog(LogLevel.E, $"CRITICAL: {componentName} - {parameterName} has invalid values: {vector}");
+                WriteLog(LogLevel.E, componentName, $"CRITICAL: {parameterName} has invalid values: {vector}");
                 return false;
             }
 
             double magnitude = vector.Length;
             if (magnitude > maxMagnitude)
             {
-                var level = magnitude > maxMagnitude * 1.5 ? LogLevel.E : LogLevel.W;
-                TryLog(level, $"{componentName} - {parameterName} magnitude too high: {magnitude:F2} (max safe: {maxMagnitude:F2})");
+                var logLevel = magnitude > maxMagnitude * 1.5 ? LogLevel.E : LogLevel.W;
+                WriteLog(logLevel, componentName, $"{parameterName} magnitude too high: {magnitude:F2} (max safe: {maxMagnitude:F2})");
                 return false;
             }
 
             return true;
         }
 
-        protected internal bool ValidateConnectionStrain(
+        protected internal static bool ValidateConnectionStrain(
             string connectionName,
             double currentLength,
             double restLength,
@@ -231,7 +200,7 @@ namespace GravityDefiedGame.Models
             return true;
         }
 
-        private void ProcessConnectionStrain(
+        private static void ProcessConnectionStrain(
             string connectionName,
             double ratio,
             double safeRatio,
@@ -239,10 +208,10 @@ namespace GravityDefiedGame.Models
             string componentName)
         {
             double severity = isCompression ? safeRatio / Max(ratio, 0.001) : ratio / safeRatio;
-            var level = severity > 1.5 ? LogLevel.E : LogLevel.W;
+            var logLevel = severity > 1.5 ? LogLevel.E : LogLevel.W;
             var strainType = isCompression ? "compressed" : "stretched";
 
-            TryLog(level, $"{componentName} - {connectionName} excessively {strainType}: {ratio:P2} (safe {(isCompression ? "min" : "max")}: {safeRatio:P2})");
+            WriteLog(logLevel, componentName, $"{connectionName} excessively {strainType}: {ratio:P2} (safe {(isCompression ? "min" : "max")}: {safeRatio:P2})");
         }
 
         #endregion
@@ -272,23 +241,34 @@ namespace GravityDefiedGame.Models
 
         #region Position Update Methods
 
-        protected Point UpdatePosition(Point currentPosition, Vector velocity, double deltaTime) =>
-            new(
-                currentPosition.X + velocity.X * deltaTime,
-                currentPosition.Y + velocity.Y * deltaTime
-            );
+        protected static Point UpdatePosition(Point currentPosition, Vector velocity, double deltaTime)
+        {
+            double newX = currentPosition.X + velocity.X * deltaTime;
+            double newY = currentPosition.Y + velocity.Y * deltaTime;
+            Point newPosition = new Point(newX, newY);
+            return SanitizePosition(newPosition, currentPosition, "Invalid position update detected");
+        }
 
         #endregion
 
         #region Miscellaneous Methods
 
-        internal void AddClosedPolygonLines<T, U>(List<T> lines, int startIndex, int pointCount, U lineType, Func<int, int, U, T> createLineFunc)
+        internal static void AddClosedPolygonLines<T, U>(List<T> lines, int startIndex, int pointCount, U lineType, Func<int, int, U, T> createLineFunc)
         {
             for (int i = 0; i < pointCount - 1; i++)
             {
                 lines.Add(createLineFunc(startIndex + i, startIndex + i + 1, lineType));
             }
             lines.Add(createLineFunc(startIndex + pointCount - 1, startIndex, lineType));
+        }
+
+        #endregion
+
+        #region Logging Integration
+
+        protected static void TryLog(LogLevel level, string message)
+        {
+            WriteLog(level, "PhysicsComponent", message);
         }
 
         #endregion
