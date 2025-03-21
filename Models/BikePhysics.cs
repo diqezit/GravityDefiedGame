@@ -33,7 +33,7 @@ namespace GravityDefiedGame.Models
         public Vector CalculateThrustForce()
         {
             double engineForce = _bike.Throttle * _physics.EnginePower;
-            var (cosAngle, sinAngle) = GetTrigsFromAngle(_bike.Angle);
+            var (cosAngle, sinAngle) = _physics.GetBikeTrigs(); 
             return new Vector(cosAngle * engineForce, sinAngle * engineForce);
         }
 
@@ -92,7 +92,8 @@ namespace GravityDefiedGame.Models
                 return 0;
 
             double engineForce = _bike.Throttle * _physics.EnginePower;
-            Vector thrustForce = new(Cos(_bike.Angle) * engineForce, Sin(_bike.Angle) * engineForce);
+            var (cosAngle, sinAngle) = _physics.GetBikeTrigs();
+            Vector thrustForce = new(cosAngle * engineForce, sinAngle * engineForce);
             Vector r_rear = _bike.WheelPositions.Rear - _bike.Position;
             return r_rear.X * thrustForce.Y - r_rear.Y * thrustForce.X;
         }
@@ -551,6 +552,7 @@ namespace GravityDefiedGame.Models
         private readonly TricksComponent _tricksComponent;
         private readonly SuspensionComponent _suspensionComponent;
         private readonly CollisionComponent _collisionComponent;
+        private readonly TrigCache _trigCache = new TrigCache();
 
         private double _prevAngularVelocity = 0;
         private Vector _prevVelocity = new(0, 0);
@@ -576,6 +578,7 @@ namespace GravityDefiedGame.Models
         public double WheelieBalance { get; set; } = 0.0;
         public double StoppieBalance { get; set; } = 0.0;
         public double MaxSuspensionAngle { get; private set; }
+        public (double cos, double sin) GetBikeTrigs() => (_trigCache.Cos, _trigCache.Sin);
 
         public BikePhysics(Motorcycle bike) : base(BikePhysicsTag)
         {
@@ -614,6 +617,8 @@ namespace GravityDefiedGame.Models
         public void UpdatePhysics(double deltaTime, Level level, CancellationToken cancellationToken = default)
         {
             if (cancellationToken.IsCancellationRequested) return;
+
+            _trigCache.Update(_bike.Angle);
 
             Vector oldVelocity = _bike.Velocity;
             double oldAngularVelocity = _bike.AngularVelocity;

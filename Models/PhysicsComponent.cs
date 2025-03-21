@@ -14,6 +14,19 @@ namespace GravityDefiedGame.Models
 
         public PhysicsComponent(string logTag) => _logTag = logTag;
 
+        // кэшированиt тригонометрических значений
+        protected class TrigCache
+        {
+            public double Sin { get; private set; }
+            public double Cos { get; private set; }
+
+            public void Update(double angle)
+            {
+                Sin = Math.Sin(angle);
+                Cos = Math.Cos(angle);
+            }
+        }
+
         #region Logging and Utility Methods
 
         protected void UpdateLogTimer(double deltaTime)
@@ -110,7 +123,7 @@ namespace GravityDefiedGame.Models
 
         protected internal Point SanitizePosition(Point value, Point defaultValue, string errorMessage) =>
             IsPointInvalid(value)
-? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
+                ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
                 : value;
 
         private bool IsVectorInvalid(Vector value) =>

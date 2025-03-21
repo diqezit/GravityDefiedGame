@@ -354,7 +354,8 @@ namespace GravityDefiedGame.Models
                     return;
                 }
 
-                Vector bikeDirection = new(Math.Cos(_bike.Angle), Math.Sin(_bike.Angle));
+                var (cosAngle, sinAngle) = _bike._physics.GetBikeTrigs();
+                Vector bikeDirection = new(cosAngle, sinAngle);
                 double forwardSpeed = Vector.Multiply(_bike.Velocity, bikeDirection);
 
                 if (Math.Abs(forwardSpeed) < ReverseStartThreshold || forwardSpeed < 0)
@@ -397,7 +398,7 @@ namespace GravityDefiedGame.Models
             public void UpdateAttachmentPoints()
             {
                 double halfWheelBase = _bike.WheelBase / 2;
-                var (cosAngle, sinAngle) = PhysicsComponent.GetTrigsFromAngle(_bike.Angle);
+                var (cosAngle, sinAngle) = _bike._physics.GetBikeTrigs();
                 double adjustedFrameHeight = -_bike.FrameHeight;
 
                 Point rearBase = new(
@@ -457,14 +458,16 @@ namespace GravityDefiedGame.Models
                         (_bike._physics.SuspensionRestLength - rearSuspOffset) * (1.0 - _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
                 }
 
+                var (cosSuspAngle, sinSuspAngle) = GetTrigsFromAngle(suspensionAngle);
+
                 _bike.WheelPositions = (
                     new Point(
-                        _bike.AttachmentPoints.Front.X + frontSuspOffset * Math.Cos(suspensionAngle),
-                        _bike.AttachmentPoints.Front.Y + frontSuspOffset * Math.Sin(suspensionAngle)
+                        _bike.AttachmentPoints.Front.X + frontSuspOffset * cosSuspAngle,
+                        _bike.AttachmentPoints.Front.Y + frontSuspOffset * sinSuspAngle
                     ),
                     new Point(
-                        _bike.AttachmentPoints.Rear.X + rearSuspOffset * Math.Cos(suspensionAngle),
-                        _bike.AttachmentPoints.Rear.Y + rearSuspOffset * Math.Sin(suspensionAngle)
+                        _bike.AttachmentPoints.Rear.X + rearSuspOffset * cosSuspAngle,
+                        _bike.AttachmentPoints.Rear.Y + rearSuspOffset * sinSuspAngle
                     )
                 );
 
@@ -484,7 +487,8 @@ namespace GravityDefiedGame.Models
 
             private void UpdateWheelRotations(double deltaTime)
             {
-                double groundSpeed = Vector.Multiply(_bike.Velocity, new Vector(Math.Cos(_bike.Angle), Math.Sin(_bike.Angle)));
+                var (cosAngle, sinAngle) = _bike._physics.GetBikeTrigs();
+                double groundSpeed = Vector.Multiply(_bike.Velocity, new Vector(cosAngle, sinAngle));
                 double wheelCircumference = WheelCircumferenceFactor * _bike._physics.WheelRadius;
 
                 double frontRotation = UpdateSingleWheelRotation(_bike.WheelRotations.Front, groundSpeed, deltaTime, true, wheelCircumference);
@@ -603,7 +607,7 @@ namespace GravityDefiedGame.Models
                     if (speed > MaxSafeSpeed && _lastHighSpeedTime <= 0)
                     {
                         _bike.TryLog(LogLevel.W, $"Extreme velocity detected: {speed:F1} units/s");
-                        _lastHighSpeedTime = 1.0; 
+                        _lastHighSpeedTime = 1.0;
                     }
                     else if (speed > MaxSafeSpeed * 1.2)
                     {
