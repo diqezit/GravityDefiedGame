@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading;
+﻿using GravityDefiedGame.Utilities;
 using System.Windows;
-using GravityDefiedGame.Utilities;
 using static GravityDefiedGame.Utilities.GameConstants;
 using static GravityDefiedGame.Utilities.GameConstants.Debug;
 using static GravityDefiedGame.Utilities.GameConstants.Physics;
@@ -154,7 +151,7 @@ namespace GravityDefiedGame.Models
 
                 if (trickForce > maxForce)
                 {
-                    Logger.Warning("TorqueComponent", $"Excessive {(isWheelie ? "wheelie" : "stoppie")} force: {trickForce:F1}, clamping to {maxForce:F1}");
+                    TryLog(LogLevel.W, $"Excessive {(isWheelie ? "wheelie" : "stoppie")} force: {trickForce:F1}, clamping to {maxForce:F1}");
                     trickForce = maxForce;
                 }
 
@@ -310,6 +307,8 @@ namespace GravityDefiedGame.Models
     {
         private readonly Motorcycle _bike;
         private readonly BikePhysics _physics;
+        private double _prevFrontCompression = 0;
+        private double _prevRearCompression = 0;
 
         public SuspensionComponent(Motorcycle bike, BikePhysics physics) : base(string.Empty)
         {
@@ -341,37 +340,105 @@ namespace GravityDefiedGame.Models
                 return false;
             }
 
-            ProcessWheelPenetration(isFrontWheel, penetration, deltaTime);
+            ProcessWheelPenetration(isFrontWheel, wheelPosition, penetration, deltaTime);
             return true;
         }
 
-        private void ProcessWheelPenetration(bool isFrontWheel, double penetration, double deltaTime)
+        private void ProcessWheelPenetration(bool isFrontWheel, Point wheelPosition, double penetration, double deltaTime)
         {
+            if (_bike.IsInWheelie && isFrontWheel)
+            {
+                penetration *= WheelieReducedSuspensionFactor;
+                if (penetration <= 0)
+                {
+                    SetSuspensionOffset(isFrontWheel, _physics.SuspensionRestLength);
+                    return;
+                }
+            }
+            else if (_bike.IsInStoppie && !isFrontWheel)
+            {
+                penetration *= WheelieReducedSuspensionFactor;
+                if (penetration <= 0)
+                {
+                    SetSuspensionOffset(isFrontWheel, _physics.SuspensionRestLength);
+                    return;
+                }
+            }
+
             penetration = Min(penetration, _physics.WheelRadius * MaxWheelPenetration);
 
             double baseCompression = penetration * PenetrationBaseMultiplier;
             double progressiveFactor = 1.0 + Pow(SafeDivide(penetration, _physics.WheelRadius * WheelRadiusHalfFactor), 2) * PenetrationProgressiveFactor;
             double desiredCompression = baseCompression * progressiveFactor;
 
+            if (double.IsNaN(desiredCompression) || double.IsInfinity(desiredCompression))
+            {
+                TryLog(LogLevel.E, $"Critical error: Invalid suspension compression calculated: {desiredCompression}");
+                desiredCompression = 0;
+            }
+            else if (desiredCompression > _physics.WheelRadius * 0.9)
+            {
+                TryLog(LogLevel.W, $"Extreme suspension compression detected: {desiredCompression:F2}");
+                desiredCompression = _physics.WheelRadius * 0.9;
+            }
+
             double currentOffset = isFrontWheel ? _bike.SuspensionOffsets.Front : _bike.SuspensionOffsets.Rear;
-            double dampingFactor = SuspensionDampingFactor * deltaTime;
-            double newOffset = Lerp(currentOffset, _physics.SuspensionRestLength - desiredCompression, dampingFactor);
+            double currentCompression = _physics.SuspensionRestLength - currentOffset;
+            double prevCompression = isFrontWheel ? _prevFrontCompression : _prevRearCompression;
+            double smoothedCompression = Lerp(prevCompression, desiredCompression, CompressionSmoothingFactor);
+
+            if (isFrontWheel)
+                _prevFrontCompression = smoothedCompression;
+            else
+                _prevRearCompression = smoothedCompression;
+
+            double newOffset = _physics.SuspensionRestLength - smoothedCompression;
+
+            if (Math.Abs(newOffset - currentOffset) > _physics.SuspensionRestLength * LargeSuspensionChangeThreshold)
+            {
+                newOffset = Lerp(currentOffset, newOffset, LargeSuspensionChangeSmoothingFactor);
+                TryLog(LogLevel.D, $"Smoothing large suspension change for {(isFrontWheel ? "front" : "rear")} wheel");
+            }
 
             newOffset = ClampValue(newOffset, _physics.SuspensionRestLength * MinSuspensionCompression, _physics.SuspensionRestLength);
-            Point attachmentPoint = isFrontWheel ? _bike.AttachmentPoints.Front : _bike.AttachmentPoints.Rear;
-            Point wheelPosition = isFrontWheel ? _bike.WheelPositions.Front : _bike.WheelPositions.Rear;
-            double compressionRatio = 1.0 - SafeDivide(newOffset, _physics.SuspensionRestLength);
 
+            double compressionRatio = 1.0 - SafeDivide(newOffset, _physics.SuspensionRestLength);
             double progressiveFactorForce = 1.0 + Pow(compressionRatio, 2) * SuspensionProgressiveFactor;
             double adjustedSuspensionStrength = _physics.SuspensionStrength * progressiveFactorForce;
 
+            double reactionMultiplier = 1.0;
+            if (_bike.IsInWheelie && isFrontWheel)
+            {
+                reactionMultiplier = 1.0 - Min(WheelieIntensityDampingMax, _bike.WheelieIntensity * WheelieIntensityDampingMultiplier);
+            }
+            else if (_bike.IsInStoppie && !isFrontWheel)
+            {
+                reactionMultiplier = 1.0 - Min(WheelieIntensityDampingMax, _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
+            }
+
             Vector reactionForce = new(
-                -_bike.Velocity.X * _physics.GroundFriction * FrictionMultiplier,
-                -adjustedSuspensionStrength * penetration - _physics.SuspensionDamping * _bike.Velocity.Y
+                -_bike.Velocity.X * _physics.GroundFriction * FrictionMultiplier * reactionMultiplier,
+                -adjustedSuspensionStrength * penetration * reactionMultiplier - _physics.SuspensionDamping * _bike.Velocity.Y * reactionMultiplier * VelocityDampingFactor
             );
+
+            if (!ValidateVectorParameter("ReactionForce", reactionForce, _physics.Mass * MaxSafeAcceleration * 2, "SuspensionComponent"))
+            {
+                TryLog(LogLevel.W, $"Excessive reaction force: {reactionForce.Length:F1}N, wheel: {(isFrontWheel ? "front" : "rear")}");
+                if (reactionForce.Length > 0)
+                {
+                    double maxForce = _physics.Mass * MaxSafeAcceleration;
+                    reactionForce = reactionForce * (maxForce / reactionForce.Length);
+                }
+            }
 
             Vector r = wheelPosition - _bike.Position;
             double torque = r.X * reactionForce.Y - r.Y * reactionForce.X;
+
+            if (_bike.WasInAir && !_bike.IsInAir)
+            {
+                reactionForce *= LandingSmoothingFactor;
+                torque *= LandingSmoothingFactor;
+            }
 
             _bike.Velocity += reactionForce / _physics.Mass * deltaTime;
             _bike.AngularVelocity += torque / _physics.MomentOfInertia * deltaTime;
@@ -418,8 +485,7 @@ namespace GravityDefiedGame.Models
             if (collisionInfo.MaxPenetration > crashThreshold && (isHighSpeed || isBadAngle))
             {
                 _bike.State |= BikeState.Crashed;
-                Logger.Warning("CollisionComponent",
-                    $"Frame collision detected at {collisionInfo.CollisionPoint}, " +
+                TryLog(LogLevel.W, $"Frame collision detected at {collisionInfo.CollisionPoint}, " +
                     $"penetration: {collisionInfo.MaxPenetration:F1}, " +
                     $"speed: {_bike.Velocity.Length:F1}, " +
                     $"angle: {_bike.Angle * 180 / PI:F1}°");
@@ -535,7 +601,7 @@ namespace GravityDefiedGame.Models
                 (props.suspensionStrength * wheelProps.suspensionStrength,
                  props.suspensionDamping * wheelProps.suspensionDamping,
                  props.suspensionRestLength);
-            MaxSuspensionAngle = props.maxSuspensionAngle; 
+            MaxSuspensionAngle = props.maxSuspensionAngle;
             WheelRadius = wheelProps.radius;
 
             MomentOfInertia = Mass * Pow(_bike.WheelBase / 2, 2) * MomentOfInertiaMultiplier;
@@ -556,14 +622,14 @@ namespace GravityDefiedGame.Models
             _suspensionComponent.HandleWheelCollisions(level, deltaTime);
 
             Vector totalForce = _forcesComponent.CalculateTotalForce(level);
-            if (!ValidateVectorParameter("TotalForce", totalForce, Mass * MaxSafeAcceleration))
+            if (!ValidateVectorParameter("TotalForce", totalForce, Mass * MaxSafeAcceleration, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"High total force: {totalForce.Length:F1} N");
             }
 
             double totalTorque = _torqueComponent.CalculateTotalTorque(deltaTime);
             double maxTorque = MomentOfInertia * MaxAngularVelocity / deltaTime;
-            if (!ValidatePhysicalParameter("TotalTorque", Abs(totalTorque), 0, maxTorque))
+            if (!ValidatePhysicalParameter("TotalTorque", Abs(totalTorque), 0, maxTorque, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"High torque: {totalTorque:F1} Nm (max safe: {maxTorque:F1})");
             }
@@ -573,13 +639,13 @@ namespace GravityDefiedGame.Models
 
             Vector velocityDelta = _bike.Velocity - oldVelocity;
             double acceleration = velocityDelta.Length / deltaTime;
-            if (!ValidatePhysicalParameter("Acceleration", acceleration, 0, MaxSafeAcceleration))
+            if (!ValidatePhysicalParameter("Acceleration", acceleration, 0, MaxSafeAcceleration, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"High acceleration: {acceleration:F1} units/s² (max safe: {MaxSafeAcceleration:F1})");
             }
 
             double angularAcceleration = Abs(_bike.AngularVelocity - oldAngularVelocity) / deltaTime;
-            if (!ValidatePhysicalParameter("AngularAcceleration", angularAcceleration, 0, MaxAngularVelocity * 2))
+            if (!ValidatePhysicalParameter("AngularAcceleration", angularAcceleration, 0, MaxAngularVelocity * 2, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"High angular acceleration: {angularAcceleration:F1} rad/s² (max safe: {MaxAngularVelocity * 2:F1})");
             }
@@ -593,27 +659,27 @@ namespace GravityDefiedGame.Models
             double frontCompression = 1.0 - SafeDivide(_bike.SuspensionOffsets.Front, SuspensionRestLength);
             double rearCompression = 1.0 - SafeDivide(_bike.SuspensionOffsets.Rear, SuspensionRestLength);
 
-            if (!ValidatePhysicalParameter("FrontSuspensionCompression", frontCompression, 0, MaxSuspensionCompression))
+            if (!ValidatePhysicalParameter("FrontSuspensionCompression", frontCompression, 0, MaxSuspensionCompression, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"High front suspension compression: {frontCompression:P0}");
             }
 
-            if (!ValidatePhysicalParameter("RearSuspensionCompression", rearCompression, 0, MaxSuspensionCompression))
+            if (!ValidatePhysicalParameter("RearSuspensionCompression", rearCompression, 0, MaxSuspensionCompression, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"High rear suspension compression: {rearCompression:P0}");
             }
 
             double wheelDistance = CalculateWheelDistance();
-            if (!ValidateConnectionStrain("WheelBase", wheelDistance, NominalWheelBase, WheelDistanceMinRatio, WheelDistanceMaxRatio))
+            if (!ValidateConnectionStrain("WheelBase", wheelDistance, NominalWheelBase, WheelDistanceMinRatio, WheelDistanceMaxRatio, "BikePhysics"))
             {
                 TryLog(LogLevel.W, $"Abnormal wheel distance: {wheelDistance:F1} (nominal: {NominalWheelBase:F1})");
             }
 
             if (_bike.IsInWheelie)
             {
-                ValidatePhysicalParameter("WheelieAngle", _bike.Angle, 0, PI / 1.5);
-                ValidatePhysicalParameter("WheelieTime", _bike.WheelieTime, 0, 60);
-                ValidatePhysicalParameter("WheelieBalance", WheelieBalance, -10, 10);
+                ValidatePhysicalParameter("WheelieAngle", _bike.Angle, 0, PI / 1.5, "BikePhysics");
+                ValidatePhysicalParameter("WheelieTime", _bike.WheelieTime, 0, 60, "BikePhysics");
+                ValidatePhysicalParameter("WheelieBalance", WheelieBalance, -10, 10, "BikePhysics");
 
                 if (_bike.WheelieTime % 1.0 < deltaTime)
                 {
@@ -623,9 +689,9 @@ namespace GravityDefiedGame.Models
 
             if (_bike.IsInStoppie)
             {
-                ValidatePhysicalParameter("StoppieAngle", _bike.Angle, -PI / 1.5, 0);
-                ValidatePhysicalParameter("StoppieTime", _bike.StoppieTime, 0, 30);
-                ValidatePhysicalParameter("StoppieBalance", StoppieBalance, -10, 10);
+                ValidatePhysicalParameter("StoppieAngle", _bike.Angle, -PI / 1.5, 0, "BikePhysics");
+                ValidatePhysicalParameter("StoppieTime", _bike.StoppieTime, 0, 30, "BikePhysics");
+                ValidatePhysicalParameter("StoppieBalance", StoppieBalance, -10, 10, "BikePhysics");
 
                 if (_bike.StoppieTime % 1.0 < deltaTime)
                 {

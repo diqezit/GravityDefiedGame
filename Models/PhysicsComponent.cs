@@ -110,7 +110,7 @@ namespace GravityDefiedGame.Models
 
         protected internal Point SanitizePosition(Point value, Point defaultValue, string errorMessage) =>
             IsPointInvalid(value)
-                ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
+? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
                 : value;
 
         private bool IsVectorInvalid(Vector value) =>

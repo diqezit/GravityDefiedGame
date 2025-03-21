@@ -23,7 +23,7 @@ namespace GravityDefiedGame.Utilities
         double suspensionStrength,
         double suspensionDamping,
         double suspensionRestLength,
-        double maxSuspensionAngle 
+        double maxSuspensionAngle
     );
 
     public record WheelProperties(
@@ -97,13 +97,21 @@ namespace GravityDefiedGame.Utilities
                 WheelDistanceMaxRatio = 1.2;
 
             public const double
-                SuspensionProgressiveFactor = 2.0,
-                MaxSuspensionCompression = 0.9,
+                SuspensionProgressiveFactor = 1.8,
+                MaxSuspensionCompression = 0.85,
                 MinSuspensionCompression = 0.2,
-                MaxWheelPenetration = 0.8,
-                PenetrationBaseMultiplier = 1.2,
-                PenetrationProgressiveFactor = 0.5,
-                WheelRadiusHalfFactor = 0.5;
+                MaxWheelPenetration = 0.75,
+                PenetrationBaseMultiplier = 1.1,
+                PenetrationProgressiveFactor = 0.4,
+                WheelRadiusHalfFactor = 0.5,
+                WheelieReducedSuspensionFactor = 0.3,
+                CompressionSmoothingFactor = 0.4,
+                LargeSuspensionChangeThreshold = 0.3,
+                LargeSuspensionChangeSmoothingFactor = 0.3,
+                VelocityDampingFactor = 0.7,
+                LandingSmoothingFactor = 0.6,
+                WheelieIntensityDampingMax = 0.7,
+                WheelieIntensityDampingMultiplier = 0.8;
 
             public const double
                 MaxAngularVelocity = Math.PI * 3.0,
@@ -127,11 +135,11 @@ namespace GravityDefiedGame.Utilities
                 EnginePowerLimitMultiplier = 1.8;
 
             public const double
-                WheelieMinAngle = 0.25,
+                WheelieMinAngle = 0.15,
                 WheelieHeightFactor = 0.5,
-                WheelieForceMultiplier = 0.2,
-                WheelieAngleBoost = 1.0,
-                WheelieThrottleThreshold = 0.5;
+                WheelieForceMultiplier = 0.35,
+                WheelieAngleBoost = 1.5,
+                WheelieThrottleThreshold = 0.4;
 
             public const double
                 AirRotationMultiplier = 0.5,
@@ -160,22 +168,22 @@ namespace GravityDefiedGame.Utilities
                 MomentOfInertiaMultiplier = 0.6;
 
             public const double
-                WheelieThrottleMinimum = 0.5,
-                WheelieThrottleMultiplier = 1.2,
-                WheelieForceBase = 0.2,
-                WheelieOptimalMinSpeed = 100.0,
+                WheelieThrottleMinimum = 0.4,
+                WheelieThrottleMultiplier = 1.5,
+                WheelieForceBase = 0.3,
+                WheelieOptimalMinSpeed = 80.0,
                 WheelieOptimalMaxSpeed = 400.0,
                 WheelieMaxSpeed = 700.0,
                 WheelieOptimalAngle = 0.1,
                 WheelieBalanceAngle = 0.4,
-                WheelieBalanceTolerance = 0.1,
-                WheelieBalanceStrength = 2.5,
-                WheelieControlMultiplier = 4.0,
-                WheelieStabilizationFactor = 1.2,
-                WheelieBalanceResponseFactor = 3.0,
-                WheelieEasyTime = 1.0,
-                WheelieHardTimeDelta = 2.0,
-                WheelieProgressiveDifficulty = 0.5;
+                WheelieBalanceTolerance = 0.15,
+                WheelieBalanceStrength = 2.0,
+                WheelieControlMultiplier = 5.0,
+                WheelieStabilizationFactor = 1.0,
+                WheelieBalanceResponseFactor = 2.5,
+                WheelieEasyTime = 2.0,
+                WheelieHardTimeDelta = 3.0,
+                WheelieProgressiveDifficulty = 0.4;
 
             public const double
                 StoppieThresholdMinimum = 0.6,
@@ -230,7 +238,7 @@ namespace GravityDefiedGame.Utilities
                 suspensionStrength: 8000.0,
                 suspensionDamping: 800.0,
                 suspensionRestLength: 25.0,
-                maxSuspensionAngle: Math.PI / 12 // 15 градусов
+                maxSuspensionAngle: Math.PI / 12
             );
 
             public static readonly BikeProperties Sport = new(
@@ -244,7 +252,7 @@ namespace GravityDefiedGame.Utilities
                 suspensionStrength: 4500.0,
                 suspensionDamping: 450.0,
                 suspensionRestLength: 20.0,
-                maxSuspensionAngle: Math.PI / 5.14 // 35 градусов
+                maxSuspensionAngle: Math.PI / 5.14
             );
 
             public static readonly BikeProperties OffRoad = new(
@@ -258,7 +266,7 @@ namespace GravityDefiedGame.Utilities
                 suspensionStrength: 5500.0,
                 suspensionDamping: 550.0,
                 suspensionRestLength: 30.0,
-                maxSuspensionAngle: Math.PI / 7.2 // 25 градусов
+                maxSuspensionAngle: Math.PI / 7.2
             );
         }
 

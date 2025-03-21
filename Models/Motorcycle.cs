@@ -229,6 +229,7 @@ namespace GravityDefiedGame.Models
                 Logger.Error(_bike._logTag, $"Error updating motorcycle: {ex.Message}");
                 Logger.Exception(_bike._logTag, ex);
                 _bike.IsCrashed = true;
+                _bike.TryLog(LogLevel.E, "Critical physics error detected, bike crashed");
             }
 
             public void LogStateChanges()
@@ -275,7 +276,7 @@ namespace GravityDefiedGame.Models
                     return;
 
                 _airTime += deltaTime;
-                if (_airTime > LongAirTimeThreshold)
+                if (_airTime > LongAirTimeThreshold && _airTime % 1.0 < deltaTime)
                     _bike.TryLog(LogLevel.D, $"Long air time: {_airTime:F1}s");
 
                 _bike.IsExceedingSafeValue(-_bike.Position.Y, MaxSafeHeight, $"Extreme height detected: {-_bike.Position.Y:F1}");
@@ -425,23 +426,45 @@ namespace GravityDefiedGame.Models
                 while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
                 while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
                 double suspensionAngle;
-                if (Math.Abs(angleDiff) <= maxAngle)
+
+                if (_bike.EnforceSuspensionAngleLimits)
                 {
-                    suspensionAngle = verticalAngle;
+                    if (Math.Abs(angleDiff) <= maxAngle)
+                    {
+                        suspensionAngle = verticalAngle;
+                    }
+                    else
+                    {
+                        suspensionAngle = normalAngle - Math.Sign(angleDiff) * maxAngle;
+                    }
                 }
                 else
                 {
-                    suspensionAngle = normalAngle - Math.Sign(angleDiff) * maxAngle;
+                    suspensionAngle = verticalAngle;
+                }
+
+                double frontSuspOffset = _bike.SuspensionOffsets.Front;
+                double rearSuspOffset = _bike.SuspensionOffsets.Rear;
+
+                if (_bike.IsInWheelie && !_bike.IsInAir)
+                {
+                    frontSuspOffset = _bike._physics.SuspensionRestLength -
+                        (_bike._physics.SuspensionRestLength - frontSuspOffset) * (1.0 - _bike.WheelieIntensity * WheelieIntensityDampingMultiplier);
+                }
+                else if (_bike.IsInStoppie && !_bike.IsInAir)
+                {
+                    rearSuspOffset = _bike._physics.SuspensionRestLength -
+                        (_bike._physics.SuspensionRestLength - rearSuspOffset) * (1.0 - _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
                 }
 
                 _bike.WheelPositions = (
                     new Point(
-                        _bike.AttachmentPoints.Front.X + _bike.SuspensionOffsets.Front * Math.Cos(suspensionAngle),
-                        _bike.AttachmentPoints.Front.Y + _bike.SuspensionOffsets.Front * Math.Sin(suspensionAngle)
+                        _bike.AttachmentPoints.Front.X + frontSuspOffset * Math.Cos(suspensionAngle),
+                        _bike.AttachmentPoints.Front.Y + frontSuspOffset * Math.Sin(suspensionAngle)
                     ),
                     new Point(
-                        _bike.AttachmentPoints.Rear.X + _bike.SuspensionOffsets.Rear * Math.Cos(suspensionAngle),
-                        _bike.AttachmentPoints.Rear.Y + _bike.SuspensionOffsets.Rear * Math.Sin(suspensionAngle)
+                        _bike.AttachmentPoints.Rear.X + rearSuspOffset * Math.Cos(suspensionAngle),
+                        _bike.AttachmentPoints.Rear.Y + rearSuspOffset * Math.Sin(suspensionAngle)
                     )
                 );
 
@@ -517,16 +540,24 @@ namespace GravityDefiedGame.Models
         private class ValidationController
         {
             private readonly Motorcycle _bike;
+            private double _lastHighSpeedTime = 0;
+            private double _lastExtremeTiltTime = 0;
 
             public ValidationController(Motorcycle bike) => _bike = bike;
 
-            public void UpdateLogTimer(double deltaTime) => _bike.UpdateLogTimer(deltaTime);
+            public void UpdateLogTimer(double deltaTime)
+            {
+                _bike.UpdateLogTimer(deltaTime);
+
+                if (_lastHighSpeedTime > 0) _lastHighSpeedTime -= deltaTime;
+                if (_lastExtremeTiltTime > 0) _lastExtremeTiltTime -= deltaTime;
+            }
 
             public void ValidateAndSanitizeState(double deltaTime)
             {
                 SanitizePhysicalState();
                 _bike._stateController.UpdateAirTime(deltaTime);
-                ValidateState();
+                ValidateState(deltaTime);
             }
 
             private void SanitizePhysicalState()
@@ -549,6 +580,12 @@ namespace GravityDefiedGame.Models
 
             private double GetValidOffset(double offset, double restLength, double minOffset, string wheel)
             {
+                if (double.IsNaN(offset) || double.IsInfinity(offset))
+                {
+                    _bike.TryLog(LogLevel.E, $"Critical error: Invalid {wheel} suspension offset: {offset}");
+                    return restLength;
+                }
+
                 if (offset < minOffset)
                 {
                     _bike.TryLog(LogLevel.W, $"Correcting invalid {wheel} suspension offset: {offset:F1} → {minOffset:F1}");
@@ -558,9 +595,30 @@ namespace GravityDefiedGame.Models
                 return offset > restLength ? restLength : offset;
             }
 
-            private void ValidateState()
+            private void ValidateState(double deltaTime)
             {
-                _bike.IsVectorExceedingSafeValue(_bike.Velocity, MaxSafeSpeed, $"Extreme velocity: {_bike.Velocity.Length:F1}");
+                double speed = _bike.Velocity.Length;
+                if (speed > MaxSafeSpeed * 0.8)
+                {
+                    if (speed > MaxSafeSpeed && _lastHighSpeedTime <= 0)
+                    {
+                        _bike.TryLog(LogLevel.W, $"Extreme velocity detected: {speed:F1} units/s");
+                        _lastHighSpeedTime = 1.0; 
+                    }
+                    else if (speed > MaxSafeSpeed * 1.2)
+                    {
+                        _bike.TryLog(LogLevel.E, $"Critically high velocity: {speed:F1} units/s");
+                        _lastHighSpeedTime = 1.0;
+                    }
+                }
+
+                double absAngle = Math.Abs(_bike.Angle);
+                if (absAngle > Math.PI / 2.2 && _lastExtremeTiltTime <= 0)
+                {
+                    _bike.TryLog(LogLevel.W, $"Extreme tilt angle: {_bike.Angle * 180 / Math.PI:F1}°");
+                    _lastExtremeTiltTime = 1.0;
+                }
+
                 ValidateWheelRotation();
                 CheckSuspensionCompression();
             }
@@ -583,6 +641,11 @@ namespace GravityDefiedGame.Models
 
                 _bike.CheckConditionWithLog(frontCompression > threshold, LogLevel.W, $"Front suspension compressed to {frontCompression:P0}");
                 _bike.CheckConditionWithLog(rearCompression > threshold, LogLevel.W, $"Rear suspension compressed to {rearCompression:P0}");
+
+                if (frontCompression > 0.95 || rearCompression > 0.95)
+                {
+                    _bike.TryLog(LogLevel.E, $"Critical suspension compression: front={frontCompression:P0}, rear={rearCompression:P0}");
+                }
             }
         }
 
