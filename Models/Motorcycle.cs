@@ -18,7 +18,8 @@ namespace GravityDefiedGame.Models
         private readonly KinematicsController _kinematicsController;
         private readonly ValidationController _validationController;
         private readonly BikeGeom _geometry;
-
+        public double SuspensionRealMaxAngle { get; internal set; }
+        public bool EnforceSuspensionAngleLimits { get; set; } = true;
         public Point Position { get; internal set; }
         public Vector Velocity { get; internal set; }
         public double Angle { get; internal set; }
@@ -118,6 +119,7 @@ namespace GravityDefiedGame.Models
 
         private void InitializeBikeProperties()
         {
+            SuspensionRealMaxAngle = _physics.MaxSuspensionAngle;
             _physics.InitializeProperties(BikeType);
             BikeColor = DefaultBikeColor;
             FrameHeight = _physics.WheelRadius * 1.5;
@@ -189,8 +191,7 @@ namespace GravityDefiedGame.Models
         private class StateController
         {
             private readonly Motorcycle _bike;
-            private bool _wasInWheelie;
-            private bool _wasInStoppie;
+            private bool _wasInWheelie, _wasInStoppie;
             private double _airTime, _brakeHoldTime;
 
             public StateController(Motorcycle bike)
@@ -204,21 +205,13 @@ namespace GravityDefiedGame.Models
             {
                 _bike.Position = DefaultStartPosition;
                 _bike.Velocity = new Vector(0, 0);
-                _bike.Throttle = 0;
-                _bike.Brake = 0;
-                _bike.LeanAmount = 0;
+                _bike.Throttle = _bike.Brake = _bike.LeanAmount = 0;
                 _bike.State = BikeState.None;
-                _bike.WasInAir = false;
-                _wasInWheelie = false;
-                _wasInStoppie = false;
-                _bike.Angle = 0;
-                _bike.AngularVelocity = 0;
+                _bike.WasInAir = _wasInWheelie = _wasInStoppie = false;
+                _bike.Angle = _bike.AngularVelocity = 0;
                 _bike.WheelRotations = (0, 0);
                 _bike.SuspensionOffsets = (_bike._physics.SuspensionRestLength, _bike._physics.SuspensionRestLength);
-                _brakeHoldTime = 0;
-                _airTime = 0;
-                _bike.WheelieTime = 0;
-                _bike.StoppieTime = 0;
+                _brakeHoldTime = _airTime = _bike.WheelieTime = _bike.StoppieTime = 0;
             }
 
             public bool ShouldSkipUpdate(CancellationToken token) =>
@@ -343,10 +336,8 @@ namespace GravityDefiedGame.Models
 
             public InputController(Motorcycle bike) => _bike = bike;
 
-            public void ApplyThrottle(double amount)
-            {
+            public void ApplyThrottle(double amount) =>
                 _bike.Throttle = _bike.ClampValue(amount, 0, 1);
-            }
 
             public void ApplyBrake(double amount)
             {
@@ -369,6 +360,7 @@ namespace GravityDefiedGame.Models
                 {
                     _bike.Velocity -= bikeDirection * (_bike.Brake * ReverseForceBase * FrameTimeApproximation);
                     double currentReverseSpeed = -Vector.Multiply(_bike.Velocity, bikeDirection);
+
                     if (currentReverseSpeed > MaxReverseSpeed)
                         _bike.Velocity = -bikeDirection * MaxReverseSpeed;
 
@@ -380,10 +372,8 @@ namespace GravityDefiedGame.Models
                 }
             }
 
-            public void Lean(double direction)
-            {
+            public void Lean(double direction) =>
                 _bike.LeanAmount = _bike.ClampValue(direction, -1, 1);
-            }
         }
 
         private class KinematicsController
@@ -400,10 +390,8 @@ namespace GravityDefiedGame.Models
                 UpdateWheelPositions();
             }
 
-            private void UpdatePosition(double deltaTime)
-            {
+            private void UpdatePosition(double deltaTime) =>
                 _bike.Position = _bike.UpdatePosition(_bike.Position, _bike.Velocity, deltaTime);
-            }
 
             public void UpdateAttachmentPoints()
             {
@@ -429,27 +417,47 @@ namespace GravityDefiedGame.Models
 
             public void UpdateWheelPositions()
             {
+                double maxAngle = _bike._physics.MaxSuspensionAngle;
+                double bikeAngle = _bike.Angle;
+                double verticalAngle = Math.PI / 2;
+                double normalAngle = bikeAngle + Math.PI / 2;
+                double angleDiff = normalAngle - verticalAngle;
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                double suspensionAngle;
+                if (Math.Abs(angleDiff) <= maxAngle)
+                {
+                    suspensionAngle = verticalAngle;
+                }
+                else
+                {
+                    suspensionAngle = normalAngle - Math.Sign(angleDiff) * maxAngle;
+                }
+
                 _bike.WheelPositions = (
-                    new Point(_bike.AttachmentPoints.Front.X, _bike.AttachmentPoints.Front.Y + _bike.SuspensionOffsets.Front),
-                    new Point(_bike.AttachmentPoints.Rear.X, _bike.AttachmentPoints.Rear.Y + _bike.SuspensionOffsets.Rear)
+                    new Point(
+                        _bike.AttachmentPoints.Front.X + _bike.SuspensionOffsets.Front * Math.Cos(suspensionAngle),
+                        _bike.AttachmentPoints.Front.Y + _bike.SuspensionOffsets.Front * Math.Sin(suspensionAngle)
+                    ),
+                    new Point(
+                        _bike.AttachmentPoints.Rear.X + _bike.SuspensionOffsets.Rear * Math.Cos(suspensionAngle),
+                        _bike.AttachmentPoints.Rear.Y + _bike.SuspensionOffsets.Rear * Math.Sin(suspensionAngle)
+                    )
                 );
+
                 UpdateWheelieState();
                 UpdateStoppieState();
             }
 
-            private void UpdateWheelieState()
-            {
+            private void UpdateWheelieState() =>
                 _bike.IsInWheelie = !_bike.IsInAir &&
-                                      _bike.WheelPositions.Front.Y < _bike.WheelPositions.Rear.Y - _bike._physics.WheelRadius * WheelieHeightFactor &&
-                                      _bike.Angle > WheelieMinAngle;
-            }
+                                    _bike.WheelPositions.Front.Y < _bike.WheelPositions.Rear.Y - _bike._physics.WheelRadius * WheelieHeightFactor &&
+                                    _bike.Angle > WheelieMinAngle;
 
-            private void UpdateStoppieState()
-            {
+            private void UpdateStoppieState() =>
                 _bike.IsInStoppie = !_bike.IsInAir &&
-                                      _bike.WheelPositions.Rear.Y < _bike.WheelPositions.Front.Y - _bike._physics.WheelRadius * StoppieHeightFactor &&
-                                      _bike.Angle < -StoppieMinAngle;
-            }
+                                    _bike.WheelPositions.Rear.Y < _bike.WheelPositions.Front.Y - _bike._physics.WheelRadius * StoppieHeightFactor &&
+                                    _bike.Angle < -StoppieMinAngle;
 
             private void UpdateWheelRotations(double deltaTime)
             {
@@ -463,7 +471,7 @@ namespace GravityDefiedGame.Models
             }
 
             private double UpdateSingleWheelRotation(double currentRotation, double groundSpeed, double deltaTime,
-                                                       bool isFrontWheel, double wheelCircumference)
+                                                    bool isFrontWheel, double wheelCircumference)
             {
                 double rotationFactor = _bike.IsInAir ? AirRotationFactor : GroundRotationFactor;
                 double rotationDelta = _bike.SafeDivide(groundSpeed, wheelCircumference);
@@ -475,10 +483,8 @@ namespace GravityDefiedGame.Models
                 return currentRotation + rotationDelta * deltaTime * rotationFactor;
             }
 
-            private double AdjustAirRotationDelta(double rotationDelta, bool isFrontWheel, double wheelCircumference)
-            {
-                return isFrontWheel ? rotationDelta : rotationDelta + _bike.SafeDivide(_bike.Throttle * ThrottleRotationFactor, wheelCircumference);
-            }
+            private double AdjustAirRotationDelta(double rotationDelta, bool isFrontWheel, double wheelCircumference) =>
+                isFrontWheel ? rotationDelta : rotationDelta + _bike.SafeDivide(_bike.Throttle * ThrottleRotationFactor, wheelCircumference);
 
             private double AdjustGroundRotationDelta(double rotationDelta, bool isFrontWheel)
             {
@@ -548,9 +554,8 @@ namespace GravityDefiedGame.Models
                     _bike.TryLog(LogLevel.W, $"Correcting invalid {wheel} suspension offset: {offset:F1} → {minOffset:F1}");
                     return minOffset;
                 }
-                if (offset > restLength)
-                    return restLength;
-                return offset;
+
+                return offset > restLength ? restLength : offset;
             }
 
             private void ValidateState()

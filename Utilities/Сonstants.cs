@@ -22,7 +22,8 @@ namespace GravityDefiedGame.Utilities
         double friction,
         double suspensionStrength,
         double suspensionDamping,
-        double suspensionRestLength
+        double suspensionRestLength,
+        double maxSuspensionAngle 
     );
 
     public record WheelProperties(
@@ -228,7 +229,8 @@ namespace GravityDefiedGame.Utilities
                 friction: 1.0,
                 suspensionStrength: 8000.0,
                 suspensionDamping: 800.0,
-                suspensionRestLength: 25.0
+                suspensionRestLength: 25.0,
+                maxSuspensionAngle: Math.PI / 12 // 15 градусов
             );
 
             public static readonly BikeProperties Sport = new(
@@ -241,7 +243,8 @@ namespace GravityDefiedGame.Utilities
                 friction: 1.0,
                 suspensionStrength: 4500.0,
                 suspensionDamping: 450.0,
-                suspensionRestLength: 20.0
+                suspensionRestLength: 20.0,
+                maxSuspensionAngle: Math.PI / 5.14 // 35 градусов
             );
 
             public static readonly BikeProperties OffRoad = new(
@@ -254,7 +257,8 @@ namespace GravityDefiedGame.Utilities
                 friction: 1.0,
                 suspensionStrength: 5500.0,
                 suspensionDamping: 550.0,
-                suspensionRestLength: 30.0
+                suspensionRestLength: 30.0,
+                maxSuspensionAngle: Math.PI / 7.2 // 25 градусов
             );
         }
 

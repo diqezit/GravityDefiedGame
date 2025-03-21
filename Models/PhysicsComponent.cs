@@ -1,24 +1,20 @@
-﻿// PhysicsComponent.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using GravityDefiedGame.Utilities;
+using static System.Math;
 
 namespace GravityDefiedGame.Models
 {
-    /// <summary>
-    /// Класс компонента игры, предоставляющий базовые методы для работы с физикой объектов,
-    /// логирования, проверки параметров и диагностики.
-    /// </summary>
     public abstract class PhysicsComponent
     {
-        protected const double FullRotation = 2 * Math.PI;
+        protected const double FullRotation = 2 * PI;
         protected readonly string _logTag;
-        protected internal double _logThrottleTime; // время блокировки логирования
+        protected internal double _logThrottleTime;
 
         public PhysicsComponent(string logTag) => _logTag = logTag;
 
-        #region Логирование и вспомогательные методы
+        #region Logging and Utility Methods
 
         protected void UpdateLogTimer(double deltaTime)
         {
@@ -59,10 +55,10 @@ namespace GravityDefiedGame.Models
             }
         }
 
-        protected double ClampValue(double value, double min, double max) => Math.Max(min, Math.Min(max, value));
+        protected double ClampValue(double value, double min, double max) => Max(min, Min(max, value));
 
         protected double SafeDivide(double numerator, double denominator, double defaultValue = 0) =>
-            Math.Abs(denominator) < 1e-10 ? defaultValue : numerator / denominator;
+            Abs(denominator) < 1e-10 ? defaultValue : numerator / denominator;
 
         protected double Lerp(double a, double b, double t) => a + (b - a) * ClampValue(t, 0, 1);
 
@@ -72,10 +68,10 @@ namespace GravityDefiedGame.Models
             return t * t * (3 - 2 * t);
         }
 
-        protected double NormalizeAngle(double angle)
+        protected static double NormalizeAngle(double angle)
         {
-            const double twoPi = 2 * Math.PI;
-            if (angle >= -Math.PI && angle <= Math.PI)
+            const double twoPi = 2 * PI;
+            if (angle >= -PI && angle <= PI)
             {
                 return angle;
             }
@@ -85,7 +81,7 @@ namespace GravityDefiedGame.Models
             {
                 angle += twoPi;
             }
-            if (angle > Math.PI)
+            if (angle > PI)
             {
                 angle -= twoPi;
             }
@@ -94,41 +90,40 @@ namespace GravityDefiedGame.Models
 
         #endregion
 
-        #region Методы санитации
+        #region Sanitization Methods
 
-        protected internal T SanitizeValue<T>(T value, T defaultValue, string errorMessage) where T : IConvertible
+        protected internal T SanitizeValue<T>(T value, T defaultValue, string errorMessage) where T : IConvertible =>
+            double.IsNaN(Convert.ToDouble(value)) || double.IsInfinity(Convert.ToDouble(value))
+                ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
+                : value;
+
+        private T LogErrorAndReturnDefault<T>(string errorMessage, T value, T defaultValue)
         {
-            if (double.IsNaN(Convert.ToDouble(value)) || double.IsInfinity(Convert.ToDouble(value)))
-            {
-                TryLog(LogLevel.E, $"{errorMessage}: {value}");
-                return defaultValue;
-            }
-            return value;
+            TryLog(LogLevel.E, $"{errorMessage}: {value}");
+            return defaultValue;
         }
 
-        protected internal Vector SanitizeVector(Vector value, Vector defaultValue, string errorMessage)
-        {
-            if (double.IsNaN(value.X) || double.IsNaN(value.Y) || double.IsInfinity(value.X) || double.IsInfinity(value.Y))
-            {
-                TryLog(LogLevel.E, $"{errorMessage}: {value}");
-                return defaultValue;
-            }
-            return value;
-        }
+        protected internal Vector SanitizeVector(Vector value, Vector defaultValue, string errorMessage) =>
+            IsVectorInvalid(value)
+                ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
+                : value;
 
-        protected internal Point SanitizePosition(Point value, Point defaultValue, string errorMessage)
-        {
-            if (double.IsNaN(value.X) || double.IsNaN(value.Y) || double.IsInfinity(value.X) || double.IsInfinity(value.Y))
-            {
-                TryLog(LogLevel.E, $"{errorMessage}: {value}");
-                return defaultValue;
-            }
-            return value;
-        }
+        protected internal Point SanitizePosition(Point value, Point defaultValue, string errorMessage) =>
+            IsPointInvalid(value)
+                ? LogErrorAndReturnDefault(errorMessage, value, defaultValue)
+                : value;
+
+        private bool IsVectorInvalid(Vector value) =>
+            double.IsNaN(value.X) || double.IsNaN(value.Y) ||
+            double.IsInfinity(value.X) || double.IsInfinity(value.Y);
+
+        private bool IsPointInvalid(Point value) =>
+            double.IsNaN(value.X) || double.IsNaN(value.Y) ||
+            double.IsInfinity(value.X) || double.IsInfinity(value.Y);
 
         #endregion
 
-        #region Валидация параметров
+        #region Parameter Validation
 
         protected internal bool IsExceedingSafeValue<T>(T value, T threshold, string message) where T : IComparable<T>
         {
@@ -140,22 +135,14 @@ namespace GravityDefiedGame.Models
             return false;
         }
 
-        protected bool IsVectorExceedingSafeValue(Vector vector, double threshold, string message)
-        {
-            if (vector.Length > threshold)
-            {
-                TryLog(LogLevel.W, message);
-                return true;
-            }
-            return false;
-        }
+        protected bool IsVectorExceedingSafeValue(Vector vector, double threshold, string message) =>
+            CheckConditionWithLog(vector.Length > threshold, LogLevel.W, message);
 
         protected bool CheckConditionWithLog(bool condition, LogLevel level, string message)
         {
             if (condition)
             {
                 TryLog(level, message);
-                return true;
             }
             return condition;
         }
@@ -175,7 +162,7 @@ namespace GravityDefiedGame.Models
 
             if (value < minSafe || value > maxSafe)
             {
-                LogLevel level = (value < minSafe * 2 || value > maxSafe * 0.5) ? LogLevel.W : LogLevel.E;
+                var level = (value < minSafe * 2 || value > maxSafe * 0.5) ? LogLevel.W : LogLevel.E;
                 TryLog(level, $"{componentName} - {parameterName} outside safe range: {value:F2} (safe range: {minSafe:F2} to {maxSafe:F2})");
                 return false;
             }
@@ -189,7 +176,7 @@ namespace GravityDefiedGame.Models
             double maxMagnitude,
             string componentName = "Unknown")
         {
-            if (double.IsNaN(vector.X) || double.IsNaN(vector.Y) || double.IsInfinity(vector.X) || double.IsInfinity(vector.Y))
+            if (IsVectorInvalid(vector))
             {
                 TryLog(LogLevel.E, $"CRITICAL: {componentName} - {parameterName} has invalid values: {vector}");
                 return false;
@@ -198,7 +185,7 @@ namespace GravityDefiedGame.Models
             double magnitude = vector.Length;
             if (magnitude > maxMagnitude)
             {
-                LogLevel level = magnitude > maxMagnitude * 1.5 ? LogLevel.E : LogLevel.W;
+                var level = magnitude > maxMagnitude * 1.5 ? LogLevel.E : LogLevel.W;
                 TryLog(level, $"{componentName} - {parameterName} magnitude too high: {magnitude:F2} (max safe: {maxMagnitude:F2})");
                 return false;
             }
@@ -215,12 +202,14 @@ namespace GravityDefiedGame.Models
             string componentName = "Unknown")
         {
             double ratio = currentLength / restLength;
+
             if (ratio < maxCompressionRatio)
             {
                 ProcessConnectionStrain(connectionName, ratio, maxCompressionRatio, true, componentName);
                 return false;
             }
-            else if (ratio > maxExtensionRatio)
+
+            if (ratio > maxExtensionRatio)
             {
                 ProcessConnectionStrain(connectionName, ratio, maxExtensionRatio, false, componentName);
                 return false;
@@ -236,56 +225,49 @@ namespace GravityDefiedGame.Models
             bool isCompression,
             string componentName)
         {
-            double severity = isCompression ? safeRatio / Math.Max(ratio, 0.001) : ratio / safeRatio;
-            LogLevel level = severity > 1.5 ? LogLevel.E : LogLevel.W;
-            string strainType = isCompression ? "compressed" : "stretched";
+            double severity = isCompression ? safeRatio / Max(ratio, 0.001) : ratio / safeRatio;
+            var level = severity > 1.5 ? LogLevel.E : LogLevel.W;
+            var strainType = isCompression ? "compressed" : "stretched";
 
             TryLog(level, $"{componentName} - {connectionName} excessively {strainType}: {ratio:P2} (safe {(isCompression ? "min" : "max")}: {safeRatio:P2})");
         }
 
-        protected internal bool ValidateComponents(IEnumerable<(string Name, double Value, double Min, double Max)> parameters, string componentName)
-        {
-            bool hasValidationErrors = false;
-            foreach (var (Name, Value, Min, Max) in parameters)
-            {
-                if (!ValidatePhysicalParameter(Name, Value, Min, Max, componentName))
-                {
-                    hasValidationErrors = true;
-                }
-            }
-            return !hasValidationErrors;
-        }
-
         #endregion
 
-        #region Статические методы для геометрических преобразований
+        #region Geometric Transformation Methods
 
         internal static Point Offset(Point point, double dx, double dy, double angle)
         {
-            double cosAngle = Math.Cos(angle);
-            double sinAngle = Math.Sin(angle);
-            return new Point(point.X + dx * cosAngle - dy * sinAngle, point.Y + dx * sinAngle + dy * cosAngle);
+            var (cosAngle, sinAngle) = GetTrigsFromAngle(angle);
+            return new Point(
+                point.X + dx * cosAngle - dy * sinAngle,
+                point.Y + dx * sinAngle + dy * cosAngle
+            );
         }
 
         internal static double CalculateDistance(Point pointA, Point pointB)
         {
             double dx = pointA.X - pointB.X;
             double dy = pointA.Y - pointB.Y;
-            return Math.Sqrt(dx * dx + dy * dy);
+            return Sqrt(dx * dx + dy * dy);
         }
 
-        internal static (double cosAngle, double sinAngle) GetTrigsFromAngle(double angle) => (Math.Cos(angle), Math.Sin(angle));
+        internal static (double cosAngle, double sinAngle) GetTrigsFromAngle(double angle) =>
+            (Cos(angle), Sin(angle));
 
         #endregion
 
-        #region Методы обновления и вычисления позиций
+        #region Position Update Methods
 
         protected Point UpdatePosition(Point currentPosition, Vector velocity, double deltaTime) =>
-            new Point(currentPosition.X + velocity.X * deltaTime, currentPosition.Y + velocity.Y * deltaTime);
+            new(
+                currentPosition.X + velocity.X * deltaTime,
+                currentPosition.Y + velocity.Y * deltaTime
+            );
 
         #endregion
 
-        #region Прочие методы
+        #region Miscellaneous Methods
 
         internal void AddClosedPolygonLines<T, U>(List<T> lines, int startIndex, int pointCount, U lineType, Func<int, int, U, T> createLineFunc)
         {
