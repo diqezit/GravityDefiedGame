@@ -26,8 +26,11 @@ namespace GravityDefiedGame.Utilities
         {
             try
             {
-                string directory = Path.GetDirectoryName(LogFilePath);
-                if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                string? directory = Path.GetDirectoryName(LogFilePath);
+                if (directory != null && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
                 if (File.Exists(LogFilePath)) File.Delete(LogFilePath);
 
                 using StreamWriter writer = File.CreateText(LogFilePath);
@@ -62,7 +65,7 @@ namespace GravityDefiedGame.Utilities
         {
             try
             {
-                while (_logQueue.TryDequeue(out string logMessage))
+                while (_logQueue.TryDequeue(out string? logMessage))
                 {
                     try
                     {
@@ -107,7 +110,7 @@ namespace GravityDefiedGame.Utilities
                 LoggerCore.WriteLog(LogLevel.D, source, $"Inner: {ex.InnerException.Message}");
         }
 
-        public static T Log<T>(string source, string operation, Func<T> action, T defaultValue)
+        public static T Log<T>(string source, string operation, Func<T> action, T? defaultValue)
         {
             try
             {
@@ -116,7 +119,7 @@ namespace GravityDefiedGame.Utilities
             catch (Exception ex)
             {
                 Error(source, $"Error in {operation}: {ex.Message}");
-                return defaultValue;
+                return defaultValue!;
             }
         }
 

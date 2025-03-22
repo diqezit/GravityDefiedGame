@@ -14,7 +14,7 @@ namespace GravityDefiedGame.Utilities
 
         public Camera(Canvas canvas)
         {
-            _canvas = canvas;
+            _canvas = canvas ?? throw new ArgumentNullException(nameof(canvas));
             Reset();
         }
 
