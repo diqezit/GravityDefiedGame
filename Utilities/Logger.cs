@@ -106,5 +106,30 @@ namespace GravityDefiedGame.Utilities
             if (ex.InnerException != null)
                 LoggerCore.WriteLog(LogLevel.D, source, $"Inner: {ex.InnerException.Message}");
         }
+
+        public static T Log<T>(string source, string operation, Func<T> action, T defaultValue)
+        {
+            try
+            {
+                return action();
+            }
+            catch (Exception ex)
+            {
+                Error(source, $"Error in {operation}: {ex.Message}");
+                return defaultValue;
+            }
+        }
+
+        public static void Log(string source, string operation, Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                Error(source, $"Error in {operation}: {ex.Message}");
+            }
+        }
     }
 }

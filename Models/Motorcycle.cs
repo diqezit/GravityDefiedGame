@@ -8,6 +8,7 @@ using static GravityDefiedGame.Utilities.GameConstants.Motorcycle;
 using static GravityDefiedGame.Utilities.GameConstants.Physics;
 using static GravityDefiedGame.Utilities.GameConstants.Validation;
 using static GravityDefiedGame.Utilities.LoggerCore;
+using static GravityDefiedGame.Utilities.Logger;
 
 namespace GravityDefiedGame.Models
 {
@@ -83,8 +84,13 @@ namespace GravityDefiedGame.Models
         public double WheelieTime { get; internal set; }
         public double StoppieTime { get; internal set; }
 
-        public double WheelieIntensity => IsInWheelie ? Math.Min(1.0, WheelieTime / 1.0) : 0;
-        public double StoppieIntensity => IsInStoppie ? Math.Min(1.0, StoppieTime / 0.5) : 0;
+        public double WheelieIntensity =>
+            Log("Motorcycle", "calculating wheelie intensity", () =>
+                IsInWheelie ? Math.Min(1.0, WheelieTime / 1.0) : 0, 0.0);
+
+        public double StoppieIntensity =>
+            Log("Motorcycle", "calculating stoppie intensity", () =>
+                IsInStoppie ? Math.Min(1.0, StoppieTime / 0.5) : 0, 0.0);
 
         public Point FrontAttachmentPoint { get; set; }
         public Point RearAttachmentPoint { get; set; }
@@ -105,46 +111,108 @@ namespace GravityDefiedGame.Models
         public Motorcycle(BikeType bikeType = BikeType.Standard)
         {
             _physics = new BikePhysics(this);
-            BikeType = bikeType;
-            InitializeBikeProperties();
-            Reset();
+
+            Log("Motorcycle", "initializing motorcycle", () =>
+            {
+                BikeType = bikeType;
+                InitializeBikeProperties();
+                Reset();
+                Info("Motorcycle", $"Created {bikeType} motorcycle");
+            });
         }
 
         private void InitializeBikeProperties()
         {
-            SuspensionRealMaxAngle = _physics.MaxSuspensionAngle;
-            _physics.InitializeProperties(BikeType);
-            BikeColor = DefaultBikeColor;
-            FrameHeight = _physics.WheelRadius * 1.5;
-            WriteLog(LogLevel.I, "Motorcycle", $"Initialized {BikeType} motorcycle");
+            Log("Motorcycle", "initializing bike properties", () =>
+            {
+                SuspensionRealMaxAngle = _physics.MaxSuspensionAngle;
+                _physics.InitializeProperties(BikeType);
+                BikeColor = DefaultBikeColor;
+                FrameHeight = _physics.WheelRadius * 1.5;
+                Info("Motorcycle", $"Initialized {BikeType} motorcycle with wheel radius {_physics.WheelRadius:F2}");
+            });
         }
 
         // Основные методы (делегирующие вызовы к BikePhysics)
-        public void Reset() => _physics.Reset();
+        public void Reset()
+        {
+            Log("Motorcycle", "resetting motorcycle", () =>
+            {
+                _physics.Reset();
+                Debug("Motorcycle", "Motorcycle reset to initial state");
+            });
+        }
 
-        public void SetPosition(Point position) => _physics.SetPosition(position);
+        public void SetPosition(Point position)
+        {
+            Log("Motorcycle", "setting position", () =>
+            {
+                _physics.SetPosition(position);
+                Debug("Motorcycle", $"Position set to {position}");
+            });
+        }
 
         public void SetBikeType(BikeType bikeType)
         {
-            BikeType = bikeType;
-            _physics.SetBikeType(bikeType);
-            WriteLog(LogLevel.I, "Motorcycle", $"Bike type changed to {bikeType}");
+            Log("Motorcycle", $"changing bike type to {bikeType}", () =>
+            {
+                BikeType = bikeType;
+                _physics.SetBikeType(bikeType);
+                Info("Motorcycle", $"Bike type changed to {bikeType}");
+            });
         }
 
-        public void SetBikeColor(Color color) => BikeColor = color;
+        public void SetBikeColor(Color color)
+        {
+            Log("Motorcycle", "setting bike color", () =>
+            {
+                BikeColor = color;
+                Debug("Motorcycle", $"Bike color set to {color}");
+            });
+        }
 
-        public void Update(double deltaTime, Level level, CancellationToken cancellationToken = default) =>
-            _physics.Update(deltaTime, level, cancellationToken);
+        public void Update(double deltaTime, Level level, CancellationToken cancellationToken = default)
+        {
+            Log("Motorcycle", "updating motorcycle", () =>
+            {
+                _physics.Update(deltaTime, level, cancellationToken);
+            });
+        }
 
         // Методы управления
-        public void ApplyThrottle(double amount) => _physics.ApplyThrottle(amount);
-        public void ApplyBrake(double amount) => _physics.ApplyBrake(amount);
-        public void Lean(double direction) => _physics.Lean(direction);
+        public void ApplyThrottle(double amount)
+        {
+            Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
+            {
+                _physics.ApplyThrottle(amount);
+            });
+        }
+
+        public void ApplyBrake(double amount)
+        {
+            Log("Motorcycle", $"applying brake: {amount:F2}", () =>
+            {
+                _physics.ApplyBrake(amount);
+            });
+        }
+
+        public void Lean(double direction)
+        {
+            Log("Motorcycle", $"leaning: {direction:F2}", () =>
+            {
+                _physics.Lean(direction);
+            });
+        }
 
         // Геометрия и визуализация
-        public double GetWheelRadius() => _physics.WheelRadius;
-        public List<Point> GetFramePoints() => _physics.GetFramePoints();
+        public double GetWheelRadius() =>
+            Log("Motorcycle", "getting wheel radius", () => _physics.WheelRadius, DefaultWheelRadius);
+
+        public List<Point> GetFramePoints() =>
+            Log("Motorcycle", "getting frame points", () => _physics.GetFramePoints(), new List<Point>());
+
         public (List<BikeGeom.SkeletonPoint> Points, List<BikeGeom.SkeletonLine> Lines) GetSkeleton() =>
-            _physics.GetSkeleton();
+            Log("Motorcycle", "getting skeleton", () => _physics.GetSkeleton(),
+                (new List<BikeGeom.SkeletonPoint>(), new List<BikeGeom.SkeletonLine>()));
     }
 }
