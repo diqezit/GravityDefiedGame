@@ -10,7 +10,9 @@ using GravityDefiedGame.Controllers;
 using GravityDefiedGame.Utilities;
 using GravityDefiedGame.Views;
 using System.Windows.Media;
+using System.Windows.Data;
 using static GravityDefiedGame.Utilities.Logger;
+using System.ComponentModel.DataAnnotations;
 
 namespace GravityDefiedGame
 {
@@ -47,10 +49,19 @@ namespace GravityDefiedGame
         private CancellationTokenSource? _gameLoopCts;
 
         // UI state
-        private readonly InputState _inputState = new();
-        private TextBlock _notificationText = null!;
         private DispatcherTimer _notificationTimer = null!;
         private GameState _currentGameState;
+
+        // Commands
+        [Required] public ICommand ContinueCommand { get; private set; } = null!;
+        [Required] public ICommand RestartCommand { get; private set; } = null!;
+        [Required] public ICommand BikeSelectCommand { get; private set; } = null!;
+        [Required] public ICommand LevelSelectCommand { get; private set; } = null!;
+        [Required] public ICommand ExitCommand { get; private set; } = null!;
+        [Required] public ICommand BackCommand { get; private set; } = null!;
+        [Required] public ICommand BikeSelectBackCommand { get; private set; } = null!;
+        [Required] public ICommand BikeTypeCommand { get; private set; } = null!;
+        [Required] public ICommand LevelButtonCommand { get; private set; } = null!;
 
         public MainWindow()
         {
@@ -58,8 +69,65 @@ namespace GravityDefiedGame
             InitializeComponent();
             _gameController = new();
             _gameController.GameEvent += GameController_GameEvent;
+            InitializeCommands();
             RegisterEventHandlers();
         }
+
+        private void InitializeCommands()
+        {
+            ContinueCommand = new RelayCommand(ExecuteContinue);
+            RestartCommand = new RelayCommand(ExecuteRestart);
+            BikeSelectCommand = new RelayCommand(ExecuteBikeSelect);
+            LevelSelectCommand = new RelayCommand(ExecuteLevelSelect);
+            ExitCommand = new RelayCommand(ExecuteExit);
+            BackCommand = new RelayCommand(ExecuteBack);
+            BikeSelectBackCommand = new RelayCommand(ExecuteBikeSelectBack);
+            BikeTypeCommand = new RelayCommand<string>(ExecuteBikeType);
+            LevelButtonCommand = new RelayCommand<int>(ExecuteLevelButton);
+        }
+
+        private void ExecuteContinue()
+        {
+            switch (_currentGameState)
+            {
+                case GameState.Paused:
+                    ResumeGame();
+                    break;
+                case GameState.LevelComplete:
+                    StartNextLevel();
+                    break;
+                case GameState.GameOver:
+                    RestartCurrentLevel();
+                    break;
+            }
+        }
+
+        private void ExecuteRestart() => RestartCurrentLevel();
+        private void ExecuteBikeSelect() => ShowBikeSelect();
+        private void ExecuteLevelSelect() => ShowLevelSelect();
+        private void ExecuteExit() => Application.Current.Shutdown();
+        private void ExecuteBack() => ShowMainMenu();
+        private void ExecuteBikeSelectBack() => ShowMainMenu();
+
+        private void ExecuteBikeType(string bikeTypeStr)
+        {
+            if (Enum.TryParse<BikeType>(bikeTypeStr, out var bikeType))
+            {
+                string bikeName = GetBikeTypeName(bikeType);
+                _gameController.SetBikeType(bikeType);
+                ShowNotification($"Selected bike: {bikeName}");
+                Info("MainWindow", $"Bike type changed to {bikeType}");
+
+                BikeSelectOverlay.Visibility = Visibility.Collapsed;
+
+                if (_currentGameState == GameState.Paused)
+                    MenuOverlay.Visibility = Visibility.Visible;
+                else
+                    ResumeGame();
+            }
+        }
+
+        private void ExecuteLevelButton(int levelId) => StartGame(levelId);
 
         private void RegisterEventHandlers()
         {
@@ -74,6 +142,7 @@ namespace GravityDefiedGame
         private void MainWindow_Loaded(object sender, RoutedEventArgs e) =>
             Log("MainWindow", "initializing window", () =>
             {
+                InitializeWindow();
                 InitializeGameComponents();
                 InitializeTimers();
                 InitializeUI();
@@ -82,6 +151,24 @@ namespace GravityDefiedGame
             });
 
         #region Initialization
+
+        private void InitializeWindow()
+        {
+            var minimizeButton = Template.FindName("MinimizeButton", this) as Button;
+            var closeButton = Template.FindName("CloseButton", this) as Button;
+
+            if (minimizeButton != null)
+                minimizeButton.Click += (s, e) => WindowState = WindowState.Minimized;
+
+            if (closeButton != null)
+                closeButton.Click += (s, e) => Application.Current.Shutdown();
+
+            MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.ButtonState == MouseButtonState.Pressed)
+                    DragMove();
+            };
+        }
 
         private void InitializeGameComponents()
         {
@@ -107,28 +194,7 @@ namespace GravityDefiedGame
 
         private void InitializeNotifications()
         {
-            // Create notification text
-            _notificationText = new()
-            {
-                FontSize = Constants.NotificationFontSize,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextAlignment = TextAlignment.Center,
-                Visibility = Visibility.Collapsed
-            };
-
-            Canvas.SetZIndex(_notificationText, Constants.NotificationZIndex);
-            GameCanvas.Children.Add(_notificationText);
-
-            // Configure notification timer
             _notificationTimer = new() { Interval = TimeSpan.FromSeconds(Constants.NotificationDuration) };
-            _notificationTimer.Tick += (_, _) =>
-            {
-                _notificationText.Visibility = Visibility.Collapsed;
-                _notificationTimer.Stop();
-            };
         }
 
         private void LoadLevels() =>
@@ -150,11 +216,19 @@ namespace GravityDefiedGame
                     Width = Constants.LevelButtonWidth,
                     Height = Constants.LevelButtonHeight,
                     Margin = new(Constants.LevelButtonMargin),
-                    Style = (Style)Resources["RoundButton"],
+                    Style = (Style)FindResource("LevelButton"),
                     Tag = level.Id
                 };
 
-                button.Click += LevelButton_Click;
+                button.SetBinding(Button.CommandProperty, new Binding("LevelButtonCommand")
+                {
+                    RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Window), 1)
+                });
+                button.SetBinding(Button.CommandParameterProperty, new Binding("Tag")
+                {
+                    RelativeSource = new RelativeSource(RelativeSourceMode.Self)
+                });
+
                 LevelsPanel.Children.Add(button);
             }
         }
@@ -215,7 +289,7 @@ namespace GravityDefiedGame
                 _currentGameState = GameState.Paused;
                 StopGameTimers();
                 _gameController.PauseGame();
-                ShowMenu("PAUSE");
+                ShowMenu("ПАУЗА");
                 Info("MainWindow", "Game paused");
             });
 
@@ -264,7 +338,7 @@ namespace GravityDefiedGame
             {
                 _currentGameState = GameState.LevelComplete;
                 StopGameTimers();
-                ShowMenu("LEVEL COMPLETE!");
+                ShowMenu("УРОВЕНЬ ПРОЙДЕН!");
                 Info("MainWindow", "Level completed");
             });
 
@@ -273,7 +347,7 @@ namespace GravityDefiedGame
             {
                 _currentGameState = GameState.GameOver;
                 StopGameTimers();
-                ShowMenu("GAME OVER");
+                ShowMenu("ИГРА ОКОНЧЕНА");
                 Info("MainWindow", "Game over");
             });
 
@@ -287,6 +361,19 @@ namespace GravityDefiedGame
             MenuOverlay.Visibility = Visibility.Visible;
         }
 
+        private void ShowMainMenu()
+        {
+            BikeSelectOverlay.Visibility = Visibility.Collapsed;
+            LevelSelectOverlay.Visibility = Visibility.Collapsed;
+            MenuOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void ShowBikeSelect()
+        {
+            MenuOverlay.Visibility = Visibility.Collapsed;
+            BikeSelectOverlay.Visibility = Visibility.Visible;
+        }
+
         private void ShowLevelSelect()
         {
             MenuOverlay.Visibility = Visibility.Collapsed;
@@ -297,21 +384,19 @@ namespace GravityDefiedGame
 
         private void ShowNotification(string message)
         {
-            _notificationText.Text = message;
-            _notificationText.Visibility = Visibility.Visible;
-            PositionNotification();
+            NotificationText.Text = message;
+            NotificationPanel.Visibility = Visibility.Visible;
             RestartNotificationTimer();
-        }
-
-        private void PositionNotification()
-        {
-            Canvas.SetLeft(_notificationText, (GameCanvas.ActualWidth - _notificationText.ActualWidth) / 2);
-            Canvas.SetTop(_notificationText, GameCanvas.ActualHeight * Constants.NotificationTopPosition);
         }
 
         private void RestartNotificationTimer()
         {
             _notificationTimer.Stop();
+            _notificationTimer.Tick += (_, _) =>
+            {
+                NotificationPanel.Visibility = Visibility.Collapsed;
+                _notificationTimer.Stop();
+            };
             _notificationTimer.Start();
         }
 
@@ -389,13 +474,13 @@ namespace GravityDefiedGame
         private void GameController_GameEvent(object? sender, GameEventArgs e) =>
             Dispatcher.InvokeAsync(() =>
             {
-                switch (e.Type)
-                {
+            switch (e.Type)
+            {
                     case GameEventType.LevelComplete:
-                        ShowNotification("Level completed!");
+                        ShowNotification("Уровень пройден!");
                         break;
                     case GameEventType.GameOver:
-                        ShowNotification("Game over!");
+                        ShowNotification("Игра окончена!");
                         break;
                     case GameEventType.BikeChanged:
                         ShowNotification(e.Message);
@@ -419,11 +504,11 @@ namespace GravityDefiedGame
             if (e.Key == Key.Escape)
             {
                 if (MenuOverlay.Visibility == Visibility.Visible)
-                    ContinueButton_Click(this, e);
+                    ExecuteContinue();
                 else if (BikeSelectOverlay.Visibility == Visibility.Visible)
-                    BikeSelectBackButton_Click(this, e);
+                    ExecuteBikeSelectBack();
                 else if (LevelSelectOverlay.Visibility == Visibility.Visible)
-                    BackButton_Click(this, e);
+                    ExecuteBack();
             }
         }
 
@@ -432,19 +517,19 @@ namespace GravityDefiedGame
             switch (e.Key)
             {
                 case Key.W:
-                    HandleThrottleDown();
+                    _gameController.HandleKeyDown("W");
                     break;
                 case Key.S:
-                    HandleBrakeDown();
+                    _gameController.HandleKeyDown("S");
                     break;
                 case Key.A:
-                    HandleLeanLeftDown();
+                    _gameController.HandleKeyDown("A");
                     break;
                 case Key.D:
-                    HandleLeanRightDown();
+                    _gameController.HandleKeyDown("D");
                     break;
                 case Key.R:
-                    RestartButton_Click(this, e);
+                    ExecuteRestart();
                     break;
                 case Key.Escape:
                     PauseGame();
@@ -452,146 +537,30 @@ namespace GravityDefiedGame
             }
         }
 
-        private void HandleThrottleDown()
-        {
-            _gameController.HandleKeyDown("W");
-            _inputState.IsThrottlePressed = true;
-        }
-
-        private void HandleBrakeDown()
-        {
-            _gameController.HandleKeyDown("S");
-            _inputState.IsBrakePressed = true;
-        }
-
-        private void HandleLeanLeftDown()
-        {
-            _gameController.HandleKeyDown("A");
-            _inputState.IsLeaningLeft = true;
-        }
-
-        private void HandleLeanRightDown()
-        {
-            _gameController.HandleKeyDown("D");
-            _inputState.IsLeaningRight = true;
-        }
-
         private void Window_KeyUp(object sender, KeyEventArgs e)
         {
             switch (e.Key)
             {
                 case Key.W:
-                    HandleThrottleUp();
+                    _gameController.HandleKeyUp("W");
                     break;
                 case Key.S:
-                    HandleBrakeUp();
+                    _gameController.HandleKeyUp("S");
                     break;
                 case Key.A:
-                    HandleLeanLeftUp();
+                    _gameController.HandleKeyUp("A");
                     break;
                 case Key.D:
-                    HandleLeanRightUp();
+                    _gameController.HandleKeyUp("D");
                     break;
             }
-        }
-
-        private void HandleThrottleUp()
-        {
-            _gameController.HandleKeyUp("W");
-            _inputState.IsThrottlePressed = false;
-        }
-
-        private void HandleBrakeUp()
-        {
-            _gameController.HandleKeyUp("S");
-            _inputState.IsBrakePressed = false;
-        }
-
-        private void HandleLeanLeftUp()
-        {
-            _gameController.HandleKeyUp("A");
-            _inputState.IsLeaningLeft = false;
-        }
-
-        private void HandleLeanRightUp()
-        {
-            _gameController.HandleKeyUp("D");
-            _inputState.IsLeaningRight = false;
-        }
-
-        private void LevelButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button { Tag: int levelId })
-                StartGame(levelId);
-        }
-
-        private void ContinueButton_Click(object sender, RoutedEventArgs e)
-        {
-            switch (_currentGameState)
-            {
-                case GameState.Paused:
-                    ResumeGame();
-                    break;
-                case GameState.LevelComplete:
-                    StartNextLevel();
-                    break;
-                case GameState.GameOver:
-                    RestartCurrentLevel();
-                    break;
-            }
-        }
-
-        private void RestartButton_Click(object sender, RoutedEventArgs e) =>
-            RestartCurrentLevel();
-
-        private void LevelSelectButton_Click(object sender, RoutedEventArgs e) =>
-            ShowLevelSelect();
-
-        private void BackButton_Click(object sender, RoutedEventArgs e)
-        {
-            LevelSelectOverlay.Visibility = Visibility.Collapsed;
-            MenuOverlay.Visibility = Visibility.Visible;
-        }
-
-        private void ExitButton_Click(object sender, RoutedEventArgs e) =>
-            Application.Current.Shutdown();
-
-        private void BikeSelectButton_Click(object sender, RoutedEventArgs e)
-        {
-            MenuOverlay.Visibility = Visibility.Collapsed;
-            BikeSelectOverlay.Visibility = Visibility.Visible;
-        }
-
-        private void BikeTypeButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button { Tag: string bikeTypeStr } &&
-                Enum.TryParse<BikeType>(bikeTypeStr, out var bikeType))
-            {
-                string bikeName = GetBikeTypeName(bikeType);
-                _gameController.SetBikeType(bikeType);
-                ShowNotification($"Selected bike: {bikeName}");
-                Info("MainWindow", $"Bike type changed to {bikeType}");
-
-                BikeSelectOverlay.Visibility = Visibility.Collapsed;
-
-                if (_currentGameState == GameState.Paused)
-                    MenuOverlay.Visibility = Visibility.Visible;
-                else
-                    ResumeGame();
-            }
-        }
-
-        private void BikeSelectBackButton_Click(object sender, RoutedEventArgs e)
-        {
-            BikeSelectOverlay.Visibility = Visibility.Collapsed;
-            MenuOverlay.Visibility = Visibility.Visible;
         }
 
         private static string GetBikeTypeName(BikeType bikeType) => bikeType switch
         {
-            BikeType.Standard => "Standard",
-            BikeType.Sport => "Sport",
-            BikeType.OffRoad => "Off-Road",
+            BikeType.Standard => "Стандартный",
+            BikeType.Sport => "Спортивный",
+            BikeType.OffRoad => "Внедорожный",
             _ => bikeType.ToString()
         };
 
@@ -604,16 +573,5 @@ namespace GravityDefiedGame
         Paused,
         GameOver,
         LevelComplete
-    }
-
-    public sealed record InputState
-    {
-        public bool IsThrottlePressed { get; set; }
-        public bool IsBrakePressed { get; set; }
-        public bool IsLeaningLeft { get; set; }
-        public bool IsLeaningRight { get; set; }
-
-        public void Reset() =>
-            (IsThrottlePressed, IsBrakePressed, IsLeaningLeft, IsLeaningRight) = (false, false, false, false);
     }
 }

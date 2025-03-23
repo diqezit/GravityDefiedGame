@@ -7,7 +7,7 @@
         WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown"
         KeyUp="Window_KeyUp"
-        Background="{StaticResource BackgroundBrush}">
+        Style="{StaticResource CustomWindowStyle}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -18,8 +18,8 @@
 
         <!-- Top information panel -->
         <Border Grid.Row="0"
-                Background="{StaticResource OverlayBrush}"
-                Padding="10">
+                Background="{StaticResource HeaderGradient}"
+                Padding="15,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -30,14 +30,14 @@
                 <TextBlock x:Name="LevelNameText"
                            Grid.Column="1"
                            Text="УРОВЕНЬ 1"
-                           Foreground="White"
+                           Foreground="{StaticResource TextBrush}"
                            FontWeight="Bold"
                            FontSize="20"/>
 
                 <TextBlock x:Name="TimeText"
                            Grid.Column="2"
                            Text="00:00"
-                           Foreground="White"
+                           Foreground="{StaticResource TextBrush}"
                            FontWeight="Bold"
                            FontSize="18"
                            HorizontalAlignment="Right"/>
@@ -51,12 +51,12 @@
 
         <!-- Bottom control panel -->
         <Border Grid.Row="2"
-                Background="{StaticResource OverlayBrush}"
-                Padding="10">
+                Background="{StaticResource HeaderGradient}"
+                Padding="15,10">
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Center">
                 <TextBlock Text="W - Газ | S - Тормоз | A/D - Наклон | R - Рестарт | ESC - Меню"
-                           Foreground="White"
+                           Foreground="{StaticResource SubtextBrush}"
                            FontSize="14"/>
             </StackPanel>
         </Border>
@@ -67,56 +67,103 @@
                 Grid.RowSpan="3"
                 Background="{StaticResource OverlayBrush}"
                 Visibility="Collapsed">
-            <StackPanel VerticalAlignment="Center"
-                        HorizontalAlignment="Center">
-                <TextBlock x:Name="MenuTitle"
-                           Text="ПАУЗА"
-                           Foreground="White"
-                           FontSize="48"
-                           FontWeight="Bold"
-                           Margin="0,0,0,30"
-                           HorizontalAlignment="Center"/>
+            <Border Style="{StaticResource GlassPanel}"
+                    Width="350">
+                <StackPanel VerticalAlignment="Center"
+                            HorizontalAlignment="Center">
+                    <TextBlock x:Name="MenuTitle"
+                               Text="ПАУЗА"
+                               Style="{StaticResource HeaderText}"
+                               Margin="0,0,0,30"/>
 
-                <Button Content="ПРОДОЛЖИТЬ"
-                        Style="{StaticResource RoundButton}"
-                        Width="250"
-                        Height="60"
-                        Margin="0,10"
-                        FontSize="20"
-                        Click="ContinueButton_Click"/>
+                    <Button Content="ПРОДОЛЖИТЬ"
+                            Style="{StaticResource ContinueButton}"
+                            Width="250"
+                            Height="60"
+                            Margin="0,10"
+                            FontSize="20"
+                            Command="{Binding ContinueCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="▶️" FontSize="20" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
 
-                <Button Content="НАЧАТЬ ЗАНОВО"
-                        Style="{StaticResource RoundButton}"
-                        Width="250"
-                        Height="60"
-                        Margin="0,10"
-                        FontSize="20"
-                        Click="RestartButton_Click"/>
+                    <Button Content="НАЧАТЬ ЗАНОВО"
+                            Style="{StaticResource RoundButton}"
+                            Width="250"
+                            Height="60"
+                            Margin="0,10"
+                            FontSize="20"
+                            Command="{Binding RestartCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🔄" FontSize="20" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
 
-                <Button Content="ВЫБОР БАЙКА"
-                        Style="{StaticResource RoundButton}"
-                        Width="250"
-                        Height="60"
-                        Margin="0,10"
-                        FontSize="20"
-                        Click="BikeSelectButton_Click"/>
+                    <Button Content="ВЫБОР БАЙКА"
+                            Style="{StaticResource RoundButton}"
+                            Background="{StaticResource AccentGradient}"
+                            Width="250"
+                            Height="60"
+                            Margin="0,10"
+                            FontSize="20"
+                            Command="{Binding BikeSelectCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🏍️" FontSize="20" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
 
-                <Button Content="ВЫБОР УРОВНЯ"
-                        Style="{StaticResource RoundButton}"
-                        Width="250"
-                        Height="60"
-                        Margin="0,10"
-                        FontSize="20"
-                        Click="LevelSelectButton_Click"/>
+                    <Button Content="ВЫБОР УРОВНЯ"
+                            Style="{StaticResource RoundButton}"
+                            Background="{StaticResource WarningGradient}"
+                            Width="250"
+                            Height="60"
+                            Margin="0,10"
+                            FontSize="20"
+                            Command="{Binding LevelSelectCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🏁" FontSize="20" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
 
-                <Button Content="ВЫХОД"
-                        Style="{StaticResource RoundButton}"
-                        Width="250"
-                        Height="60"
-                        Margin="0,10"
-                        FontSize="20"
-                        Click="ExitButton_Click"/>
-            </StackPanel>
+                    <Button Content="ВЫХОД"
+                            Style="{StaticResource ExitButton}"
+                            Width="250"
+                            Height="60"
+                            Margin="0,10"
+                            FontSize="20"
+                            Command="{Binding ExitCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🚪" FontSize="20" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
+                </StackPanel>
+            </Border>
         </Border>
 
         <!-- Level selection overlay -->
@@ -125,35 +172,50 @@
                 Grid.RowSpan="3"
                 Background="{StaticResource OverlayBrush}"
                 Visibility="Collapsed">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <Border Style="{StaticResource GlassPanel}" 
+                    MaxWidth="800" 
+                    MaxHeight="600">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <TextBlock Text="ВЫБОР УРОВНЯ"
-                           Grid.Row="0"
-                           Foreground="White"
-                           FontSize="36"
-                           FontWeight="Bold"
-                           Margin="0,20,0,20"
-                           HorizontalAlignment="Center"/>
+                    <TextBlock Text="ВЫБОР УРОВНЯ"
+                               Grid.Row="0"
+                               Style="{StaticResource HeaderText}"/>
 
-                <WrapPanel x:Name="LevelsPanel"
-                           Grid.Row="1"
-                           HorizontalAlignment="Center"/>
+                    <ScrollViewer Grid.Row="1" 
+                                  HorizontalScrollBarVisibility="Disabled" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  Margin="0,10,0,10"
+                                  Template="{StaticResource CustomScrollViewerTemplate}">
+                        <WrapPanel x:Name="LevelsPanel"
+                                   HorizontalAlignment="Center"/>
+                    </ScrollViewer>
 
-                <Button Content="НАЗАД"
-                        Grid.Row="2"
-                        Style="{StaticResource RoundButton}"
-                        Width="150"
-                        Height="50"
-                        Margin="0,20"
-                        FontSize="18"
-                        HorizontalAlignment="Center"
-                        Click="BackButton_Click"/>
-            </Grid>
+                    <Button Content="НАЗАД"
+                            Grid.Row="2"
+                            Style="{StaticResource RoundButton}"
+                            Background="{StaticResource DangerGradient}"
+                            Width="150"
+                            Height="50"
+                            Margin="0,20"
+                            FontSize="18"
+                            HorizontalAlignment="Center"
+                            Command="{Binding BackCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⬅️" FontSize="18" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
+                </Grid>
+            </Border>
         </Border>
 
         <!-- Bike selection overlay -->
@@ -162,163 +224,214 @@
                 Grid.RowSpan="3"
                 Background="{StaticResource OverlayBrush}"
                 Visibility="Collapsed">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <Border Style="{StaticResource GlassPanel}" 
+                    MaxWidth="550" 
+                    MaxHeight="600">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <TextBlock Text="ВЫБОР БАЙКА"
-                           Grid.Row="0"
+                    <TextBlock Text="ВЫБОР БАЙКА"
+                               Grid.Row="0"
+                               Style="{StaticResource HeaderText}"/>
+
+                    <ScrollViewer Grid.Row="1" 
+                                  HorizontalScrollBarVisibility="Disabled" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  Margin="0,10,0,10"
+                                  Template="{StaticResource CustomScrollViewerTemplate}">
+                        <StackPanel VerticalAlignment="Center">
+                            <!-- Standard bike -->
+                            <Border Style="{StaticResource BikeCard}">
+                                <Grid Margin="15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            Grid.RowSpan="2"
+                                            Style="{StaticResource BikeIcon}">
+                                        <TextBlock Text="🏍️" 
+                                                   FontSize="24" 
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <TextBlock Text="СТАНДАРТНЫЙ"
+                                               Grid.Column="1"
+                                               Grid.Row="0"
+                                               Style="{StaticResource SubHeaderText}"/>
+
+                                    <TextBlock Text="Сбалансированный мотоцикл с хорошими характеристиками"
+                                               Grid.Column="1"
+                                               Grid.Row="1"
+                                               Style="{StaticResource DescriptionText}"/>
+
+                                    <Button Content="ВЫБРАТЬ"
+                                            Tag="Standard"
+                                            Grid.Column="2"
+                                            Grid.RowSpan="2"
+                                            Style="{StaticResource RoundButton}"
+                                            Background="{StaticResource PrimaryGradient}"
+                                            Width="120"
+                                            Height="45"
+                                            Margin="10,0,0,0"
+                                            Command="{Binding BikeTypeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Sport bike -->
+                            <Border Style="{StaticResource BikeCard}">
+                                <Grid Margin="15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            Grid.RowSpan="2"
+                                            Style="{StaticResource BikeIcon}"
+                                            Background="{StaticResource RedBrush}">
+                                        <TextBlock Text="🏎️" 
+                                                   FontSize="24" 
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <TextBlock Text="СПОРТИВНЫЙ"
+                                               Grid.Column="1"
+                                               Grid.Row="0"
+                                               Style="{StaticResource SubHeaderText}"/>
+
+                                    <TextBlock Text="Легкий и мощный мотоцикл с высокой скоростью"
+                                               Grid.Column="1"
+                                               Grid.Row="1"
+                                               Style="{StaticResource DescriptionText}"/>
+
+                                    <Button Content="ВЫБРАТЬ"
+                                            Tag="Sport"
+                                            Grid.Column="2"
+                                            Grid.RowSpan="2"
+                                            Style="{StaticResource RoundButton}"
+                                            Background="{StaticResource AccentGradient}"
+                                            Width="120"
+                                            Height="45"
+                                            Margin="10,0,0,0"
+                                            Command="{Binding BikeTypeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Off-road bike -->
+                            <Border Style="{StaticResource BikeCard}">
+                                <Grid Margin="15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Border Grid.Column="0"
+                                            Grid.RowSpan="2"
+                                            Style="{StaticResource BikeIcon}"
+                                            Background="{StaticResource GreenBrush}">
+                                        <TextBlock Text="🚵" 
+                                                   FontSize="24" 
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <TextBlock Text="ВНЕДОРОЖНЫЙ"
+                                               Grid.Column="1"
+                                               Grid.Row="0"
+                                               Style="{StaticResource SubHeaderText}"/>
+
+                                    <TextBlock Text="Тяжелый мотоцикл с хорошим сцеплением для пересеченной местности"
+                                               Grid.Column="1"
+                                               Grid.Row="1"
+                                               Style="{StaticResource DescriptionText}"/>
+
+                                    <Button Content="ВЫБРАТЬ"
+                                            Tag="OffRoad"
+                                            Grid.Column="2"
+                                            Grid.RowSpan="2"
+                                            Style="{StaticResource RoundButton}"
+                                            Background="{StaticResource WarningGradient}"
+                                            Width="120"
+                                            Height="45"
+                                            Margin="10,0,0,0"
+                                            Command="{Binding BikeTypeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Button Content="НАЗАД"
+                            Grid.Row="2"
+                            Style="{StaticResource RoundButton}"
+                            Background="{StaticResource DangerGradient}"
+                            Width="150"
+                            Height="50"
+                            Margin="0,20"
+                            FontSize="18"
+                            HorizontalAlignment="Center"
+                            Command="{Binding BikeSelectBackCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Button.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⬅️" FontSize="18" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </Button.ContentTemplate>
+                    </Button>
+                </Grid>
+            </Border>
+        </Border>
+
+        <!-- Notification panel -->
+        <Border x:Name="NotificationPanel"
+                Grid.Row="1"
+                Style="{StaticResource NotificationPanel}"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="36" 
+                        Height="36" 
+                        Background="{StaticResource BlueBrush}" 
+                        CornerRadius="18"
+                        Margin="0,0,12,0">
+                    <TextBlock Text="ℹ️" 
+                               FontSize="20" 
+                               HorizontalAlignment="Center" 
+                               VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock x:Name="NotificationText"
+                           FontSize="20"
+                           FontWeight="SemiBold"
                            Foreground="White"
-                           FontSize="36"
-                           FontWeight="Bold"
-                           Margin="0,20,0,20"
-                           HorizontalAlignment="Center"/>
-
-                <StackPanel Grid.Row="1"
-                            VerticalAlignment="Center">
-                    <!-- Standard bike -->
-                    <Border Background="#33FFFFFF"
-                            Margin="0,10"
-                            CornerRadius="10"
-                            Width="450">
-                        <Grid Margin="15">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="СТАНДАРТНЫЙ"
-                                       Grid.Column="0"
-                                       Grid.Row="0"
-                                       Foreground="White"
-                                       FontSize="22"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Center"/>
-
-                            <TextBlock Text="Сбалансированный мотоцикл с хорошими характеристиками"
-                                       Grid.Column="0"
-                                       Grid.Row="1"
-                                       Foreground="#CCCCCC"
-                                       FontSize="14"
-                                       TextWrapping="Wrap"
-                                       Margin="0,5,0,0"/>
-
-                            <Button Content="ВЫБРАТЬ"
-                                    Tag="Standard"
-                                    Grid.Column="1"
-                                    Grid.RowSpan="2"
-                                    Style="{StaticResource RoundButton}"
-                                    Width="120"
-                                    Height="45"
-                                    Margin="10,0,0,0"
-                                    Click="BikeTypeButton_Click"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Sport bike -->
-                    <Border Background="#33FFFFFF"
-                            Margin="0,10"
-                            CornerRadius="10"
-                            Width="450">
-                        <Grid Margin="15">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="СПОРТИВНЫЙ"
-                                       Grid.Column="0"
-                                       Grid.Row="0"
-                                       Foreground="White"
-                                       FontSize="22"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Center"/>
-
-                            <TextBlock Text="Легкий и мощный мотоцикл с высокой скоростью"
-                                       Grid.Column="0"
-                                       Grid.Row="1"
-                                       Foreground="#CCCCCC"
-                                       FontSize="14"
-                                       TextWrapping="Wrap"
-                                       Margin="0,5,0,0"/>
-
-                            <Button Content="ВЫБРАТЬ"
-                                    Tag="Sport"
-                                    Grid.Column="1"
-                                    Grid.RowSpan="2"
-                                    Style="{StaticResource RoundButton}"
-                                    Width="120"
-                                    Height="45"
-                                    Margin="10,0,0,0"
-                                    Click="BikeTypeButton_Click"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Off-road bike -->
-                    <Border Background="#33FFFFFF"
-                            Margin="0,10"
-                            CornerRadius="10"
-                            Width="450">
-                        <Grid Margin="15">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="ВНЕДОРОЖНЫЙ"
-                                       Grid.Column="0"
-                                       Grid.Row="0"
-                                       Foreground="White"
-                                       FontSize="22"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Center"/>
-
-                            <TextBlock Text="Тяжелый мотоцикл с хорошим сцеплением для пересеченной местности"
-                                       Grid.Column="0"
-                                       Grid.Row="1"
-                                       Foreground="#CCCCCC"
-                                       FontSize="14"
-                                       TextWrapping="Wrap"
-                                       Margin="0,5,0,0"/>
-
-                            <Button Content="ВЫБРАТЬ"
-                                    Tag="OffRoad"
-                                    Grid.Column="1"
-                                    Grid.RowSpan="2"
-                                    Style="{StaticResource RoundButton}"
-                                    Width="120"
-                                    Height="45"
-                                    Margin="10,0,0,0"
-                                    Click="BikeTypeButton_Click"/>
-                        </Grid>
-                    </Border>
-                </StackPanel>
-
-                <Button Content="НАЗАД"
-                        Grid.Row="2"
-                        Style="{StaticResource RoundButton}"
-                        Width="150"
-                        Height="50"
-                        Margin="0,20"
-                        FontSize="18"
-                        HorizontalAlignment="Center"
-                        Click="BikeSelectBackButton_Click"/>
-            </Grid>
+                           TextAlignment="Left"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>

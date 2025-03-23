@@ -113,10 +113,7 @@ namespace GravityDefiedGame.Controllers
             });
         }
 
-        private void UpdateGameTime(double deltaTime)
-        {
-            GameTime += TimeSpan.FromSeconds(deltaTime);
-        }
+        private void UpdateGameTime(double deltaTime) => GameTime += TimeSpan.FromSeconds(deltaTime);
 
         private void UpdateMotorcycle(double deltaTime, CancellationToken cancellationToken = default) =>
             Log("GameController", "updating motorcycle", () =>
