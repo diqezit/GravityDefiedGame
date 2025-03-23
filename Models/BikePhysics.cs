@@ -16,6 +16,9 @@ using static System.Math;
 
 namespace GravityDefiedGame.Models
 {
+    /// <summary>
+    /// Представляет различные состояния мотоцикла в игре
+    /// </summary>
     [Flags]
     public enum BikeState
     {
@@ -27,6 +30,9 @@ namespace GravityDefiedGame.Models
         InStoppie = 16
     }
 
+    /// <summary>
+    /// Компонент для расчета сил, действующих на мотоцикл
+    /// </summary>
     public class ForcesComponent : PhysicsComponent
     {
         private readonly Motorcycle _bike;
@@ -36,53 +42,48 @@ namespace GravityDefiedGame.Models
         public ForcesComponent(Motorcycle bike, BikePhysics physics) : base() =>
             (_bike, _physics, _prevThrottle, _prevBrake) = (bike, physics, 0, 0);
 
-        public Vector CalculateThrustForce(double deltaTime)
-        {
-            return Log("ForcesComponent", "calculating thrust force", () =>
+        public Vector CalculateThrustForce(double deltaTime) =>
+            Log("ForcesComponent", "calculating thrust force", () =>
             {
                 _prevThrottle += (_bike.Throttle - _prevThrottle) * Min(1.0, ThrottleTransitionRate * deltaTime);
                 double force = _prevThrottle * _physics.EnginePower;
                 var (cos, sin) = _physics.GetBikeTrigs();
                 return new Vector(cos * force, sin * force);
-            }, new Vector(0, 0));
-        }
+            }, new());
 
-        public Vector CalculateBrakeForce(double deltaTime)
-        {
-            return Log("ForcesComponent", "calculating brake force", () =>
+        public Vector CalculateBrakeForce(double deltaTime) =>
+            Log("ForcesComponent", "calculating brake force", () =>
             {
                 if (_bike.Brake <= MinBrakeInput || _bike.Velocity.Length <= 0)
                 {
                     _prevBrake = Max(0, _prevBrake - BrakeTransitionRate * deltaTime);
-                    return _prevBrake <= BrakeTransitionThreshold ? new Vector(0, 0) :
+                    return _prevBrake <= BrakeTransitionThreshold ? new() :
                         -_bike.Velocity * (_prevBrake * _physics.BrakeForce / _bike.Velocity.Length);
                 }
 
                 _prevBrake += (_bike.Brake - _prevBrake) * Min(1.0, BrakeTransitionRate * deltaTime);
                 return -_bike.Velocity * (_prevBrake * _physics.BrakeForce / _bike.Velocity.Length);
-            }, new Vector(0, 0));
-        }
+            }, new());
 
-        public Vector CalculateDragForce()
-        {
-            return Log("ForcesComponent", "calculating drag force", () =>
+        public Vector CalculateDragForce() =>
+            Log("ForcesComponent", "calculating drag force", () =>
             {
                 double speed = _bike.Velocity.Length;
-                if (speed <= 0) return new Vector(0, 0);
+                if (speed <= 0) return new();
 
                 double drag = _physics.DragCoefficient * (_bike.IsInAir ? AirFrictionMultiplier : 1.0);
                 if (!_bike.IsInAir && _bike.Throttle == 0 && _bike.Brake == 0)
-                    drag *= _prevThrottle > DragThrottleThreshold ? DragThrottleMultiplierBase + _prevThrottle * DragThrottleMultiplier : DragIdleMultiplier;
+                    drag *= _prevThrottle > DragThrottleThreshold ?
+                           DragThrottleMultiplierBase + _prevThrottle * DragThrottleMultiplier :
+                           DragIdleMultiplier;
 
                 return -_bike.Velocity * (drag * speed);
-            }, new Vector(0, 0));
-        }
+            }, new());
 
-        public Vector CalculateSlopeForce(Level level)
-        {
-            return Log("ForcesComponent", "calculating slope force", () =>
+        public Vector CalculateSlopeForce(Level level) =>
+            Log("ForcesComponent", "calculating slope force", () =>
             {
-                if (_bike.IsInAir) return new Vector(0, 0);
+                if (_bike.IsInAir) return new();
 
                 double frontAngle = level.CalculateSlopeAngle(_bike.WheelPositions.Front.X);
                 double rearAngle = level.CalculateSlopeAngle(_bike.WheelPositions.Rear.X);
@@ -90,46 +91,57 @@ namespace GravityDefiedGame.Models
                 Vector frontForce = CalculateWheelSlopeForce(frontAngle);
                 Vector rearForce = CalculateWheelSlopeForce(rearAngle);
                 return (frontForce + rearForce) * 0.5;
-            }, new Vector(0, 0));
-        }
+            }, new());
 
-        private Vector CalculateWheelSlopeForce(double slopeAngle)
-        {
-            return Log("ForcesComponent", "calculating wheel slope force", () =>
+        private Vector CalculateWheelSlopeForce(double slopeAngle) =>
+            Log("ForcesComponent", "calculating wheel slope force", () =>
             {
                 double forceMagnitude = _physics.Mass * _physics.Gravity * Sin(slopeAngle) * 0.5;
                 return new Vector(
                     forceMagnitude * Cos(slopeAngle),
                     -forceMagnitude * Sin(slopeAngle)
                 );
-            }, new Vector(0, 0));
-        }
+            }, new());
 
-        public Vector CalculateTotalForce(Level level, double deltaTime)
-        {
-            return Log("ForcesComponent", "calculating total force", () =>
-            {
-                return new Vector(0, _physics.Gravity * _physics.Mass) +
-                    CalculateThrustForce(deltaTime) +
-                    CalculateBrakeForce(deltaTime) +
-                    CalculateDragForce() +
-                    CalculateSlopeForce(level);
-            }, new Vector(0, _physics.Gravity * _physics.Mass));
-        }
+        public Vector CalculateTotalForce(Level level, double deltaTime) =>
+            Log("ForcesComponent", "calculating total force", () =>
+                new Vector(0, _physics.Gravity * _physics.Mass) +
+                CalculateThrustForce(deltaTime) +
+                CalculateBrakeForce(deltaTime) +
+                CalculateDragForce() +
+                CalculateSlopeForce(level),
+            new(0, _physics.Gravity * _physics.Mass));
     }
 
+    /// <summary>
+    /// Компонент для расчета крутящего момента на мотоцикле
+    /// </summary>
     public class TorqueComponent : PhysicsComponent
     {
         private readonly Motorcycle _bike;
         private readonly BikePhysics _physics;
         private double _prevTorque;
 
+        /// <summary>
+        /// Параметры для расчета крутящего момента при выполнении трюков
+        /// </summary>
+        private readonly record struct TrickParameters(
+            bool IsWheelie,
+            double InputValue,
+            double MinThreshold,
+            double ForceMultiplier,
+            double BaseForce,
+            double MaxForce,
+            Func<double> SpeedEfficiencyFunc,
+            Func<double> AngleEfficiencyFunc,
+            Func<double> BalanceFactorFunc,
+            Action<double> UpdateBalanceAction);
+
         public TorqueComponent(Motorcycle bike, BikePhysics physics) : base() =>
             (_bike, _physics, _prevTorque) = (bike, physics, 0);
 
-        public double CalculateBaseTorque(double deltaTime)
-        {
-            return Log("TorqueComponent", "calculating base torque", () =>
+        public double CalculateBaseTorque(double deltaTime) =>
+            Log("TorqueComponent", "calculating base torque", () =>
             {
                 if (_bike.Throttle <= 0 && _prevTorque <= TorqueIdleThreshold) return 0;
 
@@ -146,80 +158,85 @@ namespace GravityDefiedGame.Models
 
                 return _prevTorque;
             }, 0.0);
-        }
 
-        public double CalculateWheelieTorque(double deltaTime)
-        {
-            return Log("TorqueComponent", "calculating wheelie torque", () =>
+        public double CalculateWheelieTorque(double deltaTime) =>
+            Log("TorqueComponent", "calculating wheelie torque", () =>
             {
-                return CalculateTrickTorque(
-                    deltaTime, true, _bike.Throttle, WheelieThrottleMinimum,
-                    WheelieThrottleMultiplier * _physics.EnginePower, WheelieForceBase,
-                    _physics.EnginePower * WheelieMaxForceMultiplier, CalculateWheelieSpeedEfficiency,
-                    CalculateWheelieAngleEfficiency, CalculateWheelieBalanceFactor,
-                    UpdateWheelieBalance);
+                var parameters = new TrickParameters(
+                    IsWheelie: true,
+                    InputValue: _bike.Throttle,
+                    MinThreshold: WheelieThrottleMinimum,
+                    ForceMultiplier: WheelieThrottleMultiplier * _physics.EnginePower,
+                    BaseForce: WheelieForceBase,
+                    MaxForce: _physics.EnginePower * WheelieMaxForceMultiplier,
+                    SpeedEfficiencyFunc: CalculateWheelieSpeedEfficiency,
+                    AngleEfficiencyFunc: CalculateWheelieAngleEfficiency,
+                    BalanceFactorFunc: CalculateWheelieBalanceFactor,
+                    UpdateBalanceAction: UpdateWheelieBalance
+                );
+                return CalculateTrickTorque(deltaTime, parameters);
             }, 0.0);
-        }
 
-        public double CalculateStoppieTorque(double deltaTime)
-        {
-            return Log("TorqueComponent", "calculating stoppie torque", () =>
+        public double CalculateStoppieTorque(double deltaTime) =>
+            Log("TorqueComponent", "calculating stoppie torque", () =>
             {
-                return CalculateTrickTorque(
-                    deltaTime, false, _bike.Brake, StoppieThresholdMinimum,
-                    StoppieBrakeMultiplier * _physics.BrakeForce, StoppieForceBase,
-                    _physics.BrakeForce * StoppieMaxForceMultiplier, CalculateStoppieSpeedEfficiency,
-                    CalculateStoppieAngleEfficiency, CalculateStoppieBalanceFactor,
-                    UpdateStoppieBalance);
+                var parameters = new TrickParameters(
+                    IsWheelie: false,
+                    InputValue: _bike.Brake,
+                    MinThreshold: StoppieThresholdMinimum,
+                    ForceMultiplier: StoppieBrakeMultiplier * _physics.BrakeForce,
+                    BaseForce: StoppieForceBase,
+                    MaxForce: _physics.BrakeForce * StoppieMaxForceMultiplier,
+                    SpeedEfficiencyFunc: CalculateStoppieSpeedEfficiency,
+                    AngleEfficiencyFunc: CalculateStoppieAngleEfficiency,
+                    BalanceFactorFunc: CalculateStoppieBalanceFactor,
+                    UpdateBalanceAction: UpdateStoppieBalance
+                );
+                return CalculateTrickTorque(deltaTime, parameters);
             }, 0.0);
-        }
 
-        private double CalculateTrickTorque(
-            double deltaTime, bool isWheelie, double inputValue, double minThreshold,
-            double forceMultiplier, double baseForce, double maxForce,
-            Func<double> speedFunc, Func<double> angleFunc, Func<double> balanceFunc,
-            Action<double> updateBalance)
-        {
-            return Log("TorqueComponent", "calculating trick torque", () =>
+        private double CalculateTrickTorque(double deltaTime, TrickParameters parameters) =>
+            Log("TorqueComponent", "calculating trick torque", () =>
             {
-                if (_bike.IsInAir || inputValue <= minThreshold) return 0;
+                if (_bike.IsInAir || parameters.InputValue <= parameters.MinThreshold) return 0;
 
-                string trickName = isWheelie ? "wheelie" : "stoppie";
-                bool isInTrickState = isWheelie ? _bike.IsInWheelie : _bike.IsInStoppie;
+                string trickName = parameters.IsWheelie ? "wheelie" : "stoppie";
+                bool isInTrickState = parameters.IsWheelie ? _bike.IsInWheelie : _bike.IsInStoppie;
                 double torque = 0;
                 double speed = _bike.Velocity.Length;
 
-                bool validSpeed = isWheelie ? speed > 0 : speed > StoppieMinSpeed;
+                bool validSpeed = parameters.IsWheelie ? speed > 0 : speed > StoppieMinSpeed;
                 if (validSpeed)
                 {
-                    double efficiency = speedFunc() * angleFunc();
-                    double force = (inputValue - minThreshold) * forceMultiplier * baseForce * efficiency;
+                    double efficiency = parameters.SpeedEfficiencyFunc() * parameters.AngleEfficiencyFunc();
+                    double force = (parameters.InputValue - parameters.MinThreshold) *
+                                  parameters.ForceMultiplier * parameters.BaseForce * efficiency;
                     force = SanitizeValue(force, 0.0, "Invalid trick force calculated");
 
-                    if (force > maxForce)
+                    if (force > parameters.MaxForce)
                     {
-                        Warning("TorqueComponent", $"{trickName} force exceeded max limit: {force} > {maxForce}");
-                        force = maxForce;
+                        Warning("TorqueComponent", $"{trickName} force exceeded max limit: {force} > {parameters.MaxForce}");
+                        force = parameters.MaxForce;
                     }
 
-                    if (isInTrickState) force *= balanceFunc();
-                    torque += isWheelie ? force : -force;
+                    if (isInTrickState) force *= parameters.BalanceFactorFunc();
+                    torque += parameters.IsWheelie ? force : -force;
                 }
 
                 if (isInTrickState)
                 {
-                    updateBalance(deltaTime);
-                    double controlMult = isWheelie ? WheelieControlMultiplier : StoppieControlMultiplier;
-                    double balanceStrength = isWheelie ? WheelieBalanceStrength : StoppieBalanceStrength;
-                    double balanceValue = isWheelie ? _physics.WheelieBalance : _physics.StoppieBalance;
+                    parameters.UpdateBalanceAction(deltaTime);
+                    double controlMult = parameters.IsWheelie ? WheelieControlMultiplier : StoppieControlMultiplier;
+                    double balanceStrength = parameters.IsWheelie ? WheelieBalanceStrength : StoppieBalanceStrength;
+                    double balanceValue = parameters.IsWheelie ? _physics.WheelieBalance : _physics.StoppieBalance;
 
                     double control = _bike.LeanAmount * controlMult;
-                    double balance = balanceValue * balanceStrength + (isWheelie ? control : -control);
+                    double balance = balanceValue * balanceStrength + (parameters.IsWheelie ? control : -control);
                     balance = SanitizeValue(balance, 0.0, "Invalid balance torque calculated");
 
-                    if (isWheelie && _bike.Brake > 0)
+                    if (parameters.IsWheelie && _bike.Brake > 0)
                         balance += _bike.Brake * WheelieStabilizationFactor;
-                    else if (!isWheelie && _bike.Throttle > 0)
+                    else if (!parameters.IsWheelie && _bike.Throttle > 0)
                         balance -= _bike.Throttle * StoppieStabilizationFactor;
 
                     torque += balance;
@@ -227,85 +244,97 @@ namespace GravityDefiedGame.Models
 
                 return torque;
             }, 0.0);
-        }
 
-        private double CalculateEfficiency(
+        private static double CalculateEfficiency(
             double value, double minOptimal, double maxOptimal,
-            double minValue, double maxValue, double lowEff, double highEff)
-        {
-            return Log("TorqueComponent", "calculating efficiency", () =>
+            double minValue, double maxValue, double lowEff, double highEff) =>
+            Log("TorqueComponent", "calculating efficiency", () =>
             {
                 if (value < minValue) return 0.0;
                 if (value < minOptimal) return Lerp(lowEff, 1.0, (value - minValue) / (minOptimal - minValue));
-                if (value > maxOptimal) return Lerp(1.0, highEff, (value - maxOptimal) / (maxValue - maxValue));
+                if (value > maxOptimal) return Lerp(1.0, highEff, (value - maxOptimal) / (maxValue - maxOptimal));
                 return 1.0;
             }, 0.5);
-        }
 
-        private double CalculateWheelieSpeedEfficiency()
-        {
-            return Log("TorqueComponent", "calculating wheelie speed efficiency", () =>
-            {
-                return CalculateEfficiency(_bike.Velocity.Length, WheelieOptimalMinSpeed, WheelieOptimalMaxSpeed,
-                                        0, WheelieMaxSpeed, WheelieLowSpeedEfficiency, WheelieHighSpeedEfficiency);
-            }, 0.5);
-        }
+        private double CalculateWheelieSpeedEfficiency() =>
+            Log("TorqueComponent", "calculating wheelie speed efficiency", () =>
+                CalculateEfficiency(
+                    _bike.Velocity.Length,
+                    WheelieOptimalMinSpeed,
+                    WheelieOptimalMaxSpeed,
+                    0,
+                    WheelieMaxSpeed,
+                    WheelieLowSpeedEfficiency,
+                    WheelieHighSpeedEfficiency),
+            0.5);
 
-        private double CalculateStoppieSpeedEfficiency()
-        {
-            return Log("TorqueComponent", "calculating stoppie speed efficiency", () =>
-            {
-                return CalculateEfficiency(_bike.Velocity.Length, StoppieOptimalMinSpeed, StoppieOptimalMaxSpeed,
-                                       StoppieMinSpeed, StoppieMaxSpeed, StoppieLowSpeedEfficiency, StoppieHighSpeedEfficiency);
-            }, 0.5);
-        }
+        private double CalculateStoppieSpeedEfficiency() =>
+            Log("TorqueComponent", "calculating stoppie speed efficiency", () =>
+                CalculateEfficiency(
+                    _bike.Velocity.Length,
+                    StoppieOptimalMinSpeed,
+                    StoppieOptimalMaxSpeed,
+                    StoppieMinSpeed,
+                    StoppieMaxSpeed,
+                    StoppieLowSpeedEfficiency,
+                    StoppieHighSpeedEfficiency),
+            0.5);
 
-        private double CalculateWheelieAngleEfficiency()
-        {
-            return Log("TorqueComponent", "calculating wheelie angle efficiency", () =>
-            {
-                return CalculateEfficiency(_bike.Angle, -WheelieOptimalAngle, 0,
-                                       -WheelieOptimalAngle - WheelieAngleMinOffset, WheelieAngleMaxOffset,
-                                       WheelieLowAngleEfficiency, WheelieHighAngleEfficiency);
-            }, 0.5);
-        }
+        private double CalculateWheelieAngleEfficiency() =>
+            Log("TorqueComponent", "calculating wheelie angle efficiency", () =>
+                CalculateEfficiency(
+                    _bike.Angle,
+                    -WheelieOptimalAngle,
+                    0,
+                    -WheelieOptimalAngle - WheelieAngleMinOffset,
+                    WheelieAngleMaxOffset,
+                    WheelieLowAngleEfficiency,
+                    WheelieHighAngleEfficiency),
+            0.5);
 
-        private double CalculateStoppieAngleEfficiency()
-        {
-            return Log("TorqueComponent", "calculating stoppie angle efficiency", () =>
-            {
-                return CalculateEfficiency(_bike.Angle, -StoppieOptimalAngle, 0,
-                                       -StoppieOptimalAngle - StoppieAngleMinOffset, StoppieAngleMaxOffset,
-                                       StoppieLowAngleEfficiency, StoppieHighAngleEfficiency);
-            }, 0.5);
-        }
+        private double CalculateStoppieAngleEfficiency() =>
+            Log("TorqueComponent", "calculating stoppie angle efficiency", () =>
+                CalculateEfficiency(
+                    _bike.Angle,
+                    -StoppieOptimalAngle,
+                    0,
+                    -StoppieOptimalAngle - StoppieAngleMinOffset,
+                    StoppieAngleMaxOffset,
+                    StoppieLowAngleEfficiency,
+                    StoppieHighAngleEfficiency),
+            0.5);
 
-        private double CalculateWheelieBalanceFactor()
-        {
-            return Log("TorqueComponent", "calculating wheelie balance factor", () =>
+        private double CalculateWheelieBalanceFactor() =>
+            Log("TorqueComponent", "calculating wheelie balance factor", () =>
             {
                 double diff = Abs(_bike.Angle - WheelieBalanceAngle);
-                return diff < WheelieBalanceTolerance ? Lerp(WheelieBalanceMinFactor, 1.0, diff / WheelieBalanceTolerance) : 1.0;
+                return diff < WheelieBalanceTolerance ?
+                       Lerp(WheelieBalanceMinFactor, 1.0, diff / WheelieBalanceTolerance) :
+                       1.0;
             }, 0.5);
-        }
 
-        private double CalculateStoppieBalanceFactor()
-        {
-            return Log("TorqueComponent", "calculating stoppie balance factor", () =>
+        private double CalculateStoppieBalanceFactor() =>
+            Log("TorqueComponent", "calculating stoppie balance factor", () =>
             {
                 double diff = Abs(_bike.Angle - StoppieBalanceAngle);
-                return diff < StoppieBalanceTolerance ? Lerp(StoppieBalanceMinFactor, 1.0, diff / StoppieBalanceTolerance) : 1.0;
+                return diff < StoppieBalanceTolerance ?
+                       Lerp(StoppieBalanceMinFactor, 1.0, diff / StoppieBalanceTolerance) :
+                       1.0;
             }, 0.5);
-        }
 
-        private void UpdateWheelieBalance(double deltaTime)
-        {
+        private void UpdateWheelieBalance(double deltaTime) =>
             Log("TorqueComponent", "updating wheelie balance", () =>
             {
-            double diff = _bike.Angle - WheelieBalanceAngle;
-            _physics.WheelieBalance = SanitizeValue(-diff * WheelieBalanceResponseFactor,
-                                                   0.0, "Invalid wheelie balance value calculated");
-            _bike.WheelieTime = SanitizeValue(_bike.WheelieTime + deltaTime, 0.0, "Invalid wheelie time value");
+                double diff = _bike.Angle - WheelieBalanceAngle;
+                _physics.WheelieBalance = SanitizeValue(
+                    -diff * WheelieBalanceResponseFactor,
+                    0.0,
+                    "Invalid wheelie balance value calculated");
+
+                _bike.WheelieTime = SanitizeValue(
+                    _bike.WheelieTime + deltaTime,
+                    0.0,
+                    "Invalid wheelie time value");
 
                 if (_bike.WheelieTime > WheelieEasyTime)
                 {
@@ -313,16 +342,20 @@ namespace GravityDefiedGame.Models
                     _physics.WheelieBalance *= (1.0 - factor * WheelieProgressiveDifficulty);
                 }
             });
-        }
 
-        private void UpdateStoppieBalance(double deltaTime)
-        {
+        private void UpdateStoppieBalance(double deltaTime) =>
             Log("TorqueComponent", "updating stoppie balance", () =>
             {
                 double diff = _bike.Angle - StoppieBalanceAngle;
-                _physics.StoppieBalance = SanitizeValue(-diff * StoppieBalanceResponseFactor,
-                                                       0.0, "Invalid stoppie balance value calculated");
-                _bike.StoppieTime = SanitizeValue(_bike.StoppieTime + deltaTime, 0.0, "Invalid stoppie time value");
+                _physics.StoppieBalance = SanitizeValue(
+                    -diff * StoppieBalanceResponseFactor,
+                    0.0,
+                    "Invalid stoppie balance value calculated");
+
+                _bike.StoppieTime = SanitizeValue(
+                    _bike.StoppieTime + deltaTime,
+                    0.0,
+                    "Invalid stoppie time value");
 
                 if (_bike.StoppieTime > StoppieEasyTime)
                 {
@@ -330,28 +363,27 @@ namespace GravityDefiedGame.Models
                     _physics.StoppieBalance *= (1.0 - factor * StoppieProgressiveDifficulty);
                 }
             });
-        }
 
-        public double CalculateTotalTorque(double deltaTime)
-        {
-            return Log("TorqueComponent", "calculating total torque", () =>
-            {
-                return CalculateBaseTorque(deltaTime) +
-                    CalculateWheelieTorque(deltaTime) +
-                    CalculateStoppieTorque(deltaTime);
-            }, 0.0);
-        }
+        public double CalculateTotalTorque(double deltaTime) =>
+            Log("TorqueComponent", "calculating total torque", () =>
+                CalculateBaseTorque(deltaTime) +
+                CalculateWheelieTorque(deltaTime) +
+                CalculateStoppieTorque(deltaTime),
+            0.0);
     }
 
+    /// <summary>
+    /// Компонент для управления состояниями трюков
+    /// </summary>
     public class TricksComponent
     {
         private readonly Motorcycle _bike;
         private readonly BikePhysics _physics;
 
-        public TricksComponent(Motorcycle bike, BikePhysics physics) => (_bike, _physics) = (bike, physics);
+        public TricksComponent(Motorcycle bike, BikePhysics physics) =>
+            (_bike, _physics) = (bike, physics);
 
-        public void UpdateTrickStates(double deltaTime)
-        {
+        public void UpdateTrickStates(double deltaTime) =>
             Log("TricksComponent", "updating trick states", () =>
             {
                 bool wasInWheelie = _bike.IsInWheelie;
@@ -384,9 +416,8 @@ namespace GravityDefiedGame.Models
                 else if (!_bike.IsInStoppie && wasInStoppie)
                     Info("TricksComponent", $"Stoppie ended, duration: {stoppieTime:F2}s");
             });
-        }
 
-        private void UpdateTrickTime(bool wasActive, bool isActive, ref double trickTime)
+        private static void UpdateTrickTime(bool wasActive, bool isActive, ref double trickTime)
         {
             if (!isActive && wasActive)
             {
@@ -395,62 +426,69 @@ namespace GravityDefiedGame.Models
         }
     }
 
+    /// <summary>
+    /// Компонент для симуляции подвески мотоцикла
+    /// </summary>
     public class SuspensionComponent : PhysicsComponent
     {
         private readonly Motorcycle _bike;
         private readonly BikePhysics _physics;
-        private double _prevFrontPenetration, _prevRearPenetration;
-        private double _prevFrontCompression, _prevRearCompression;
-        private Vector _prevFrontReactionForce, _prevRearReactionForce;
+
+        private struct SuspensionState
+        {
+            public double FrontPenetration;
+            public double RearPenetration;
+            public double FrontCompression;
+            public double RearCompression;
+            public Vector FrontReactionForce;
+            public Vector RearReactionForce;
+        }
+
+        private SuspensionState _state = new()
+        {
+            FrontReactionForce = new(),
+            RearReactionForce = new()
+        };
+
+        // Константы для расчета сцепления с землей
         private const double SlopeGripReductionFactor = 0.5;
         private const double MinGripThreshold = 0.1;
         private const double MinPenetrationThreshold = 0.01;
-        private const double SurfaceNormalSampleDelta = 0.1;
         private const double MinNormalY = 0.2;
-        private const double MaxAllowedPenetration = 5.0;
 
-        public SuspensionComponent(Motorcycle bike, BikePhysics physics) : base()
-        {
-            _bike = bike;
-            _physics = physics;
-            _prevFrontReactionForce = _prevRearReactionForce = new Vector(0, 0);
-        }
+        public SuspensionComponent(Motorcycle bike, BikePhysics physics) : base() =>
+            (_bike, _physics) = (bike, physics);
 
-        private Vector CalculateSurfaceNormal(Level level, double x)
-        {
-            return Log("SuspensionComponent", "calculating surface normal", () =>
+        private Vector CalculateSurfaceNormal(Level level, double x) =>
+            Log("SuspensionComponent", "calculating surface normal", () =>
             {
                 double slopeAngle = level.CalculateSlopeAngle(x);
-                Vector normal = new Vector(-Math.Sin(slopeAngle), Math.Cos(slopeAngle));
+                Vector normal = new(-Sin(slopeAngle), Cos(slopeAngle));
 
                 if (normal.Y < 0)
                 {
-                    normal = new Vector(-normal.X, -normal.Y);
+                    normal = new(-normal.X, -normal.Y);
                 }
 
-                if (Math.Abs(normal.Y) < MinNormalY)
+                if (Abs(normal.Y) < MinNormalY)
                 {
                     double normalLength = normal.Length;
                     double newY = MinNormalY;
-                    double newX = Math.Sign(normal.X) * Math.Sqrt(normalLength * normalLength - newY * newY);
-                    normal = new Vector(newX, newY);
+                    double newX = Sign(normal.X) * Sqrt(normalLength * normalLength - newY * newY);
+                    normal = new(newX, newY);
                 }
 
                 return normal;
-            }, new Vector(0, 1));
-        }
+            }, new(0, 1));
 
-        private double CalculateGripFactor(double slopeAngle)
-        {
-            return Log("SuspensionComponent", "calculating grip factor", () =>
+        private double CalculateGripFactor(double slopeAngle) =>
+            Log("SuspensionComponent", "calculating grip factor", () =>
             {
                 double grip = _physics.GroundFriction * (1.0 - Abs(Sin(slopeAngle)) * SlopeGripReductionFactor);
                 return Max(grip, MinGripThreshold);
             }, MinGripThreshold);
-        }
 
-        public void HandleWheelCollisions(Level level, double deltaTime)
-        {
+        public void HandleWheelCollisions(Level level, double deltaTime) =>
             Log("SuspensionComponent", "handling wheel collisions", () =>
             {
                 double frontGroundY = level.GetGroundYAtX(_bike.WheelPositions.Front.X);
@@ -476,11 +514,9 @@ namespace GravityDefiedGame.Models
                     Info("SuspensionComponent", "Became airborne");
                 }
             });
-        }
 
-        public bool HandleWheelCollision(bool isFrontWheel, double groundY, Vector normal, Level level, double deltaTime)
-        {
-            return Log("SuspensionComponent", $"handling {(isFrontWheel ? "front" : "rear")} wheel collision", () =>
+        public bool HandleWheelCollision(bool isFrontWheel, double groundY, Vector normal, Level level, double deltaTime) =>
+            Log("SuspensionComponent", $"handling {(isFrontWheel ? "front" : "rear")} wheel collision", () =>
             {
                 Point wheelPos = isFrontWheel ? _bike.WheelPositions.Front : _bike.WheelPositions.Rear;
                 double penetration = wheelPos.Y + _physics.WheelRadius - groundY;
@@ -494,20 +530,19 @@ namespace GravityDefiedGame.Models
                 ProcessWheelPenetration(isFrontWheel, wheelPos, penetration, normal, level, deltaTime);
                 return true;
             }, false);
-        }
 
-        private void ProcessWheelPenetration(bool isFrontWheel, Point wheelPos, double penetration, Vector normal, Level level, double deltaTime)
-        {
+        private void ProcessWheelPenetration(bool isFrontWheel, Point wheelPos, double penetration, Vector normal, Level _, double deltaTime) =>
             Log("SuspensionComponent", $"processing {(isFrontWheel ? "front" : "rear")} wheel penetration", () =>
             {
-                double prevPenetration = isFrontWheel ? _prevFrontPenetration : _prevRearPenetration;
+                // Обновляем состояние проникновения сразу
+                double prevPenetration = isFrontWheel ? _state.FrontPenetration : _state.RearPenetration;
                 double penetrationVelocity = (penetration - prevPenetration) / deltaTime;
                 double relativeVelocity = Vector.Multiply(_bike.Velocity, normal);
 
                 if (isFrontWheel)
-                    _prevFrontPenetration = penetration;
+                    _state.FrontPenetration = penetration;
                 else
-                    _prevRearPenetration = penetration;
+                    _state.RearPenetration = penetration;
 
                 if (penetration < MinPenetrationThreshold)
                 {
@@ -515,77 +550,102 @@ namespace GravityDefiedGame.Models
                     return;
                 }
 
-                if (penetration > _physics.WheelRadius * MaxWheelPenetration)
+                // Функция для расчета компрессии
+                double CalculateCompression()
                 {
-                    string wheel = isFrontWheel ? "front" : "rear";
-                    Warning("SuspensionComponent", $"Excessive {wheel} wheel penetration: {penetration:F2}");
-                    penetration = Min(penetration, _physics.WheelRadius * MaxWheelPenetration);
+                    if (penetration > _physics.WheelRadius * MaxWheelPenetration)
+                    {
+                        string wheel = isFrontWheel ? "front" : "rear";
+                        Warning("SuspensionComponent", $"Excessive {wheel} wheel penetration: {penetration:F2}");
+                        penetration = Min(penetration, _physics.WheelRadius * MaxWheelPenetration);
+                    }
+
+                    double baseCompression = penetration * BaseCompressionMultiplier;
+                    double progressiveFactor = ProgressiveFactorBase +
+                        Pow(penetration / (_physics.WheelRadius * WheelRadiusHalfFactor), 2) * ProgressiveFactorMultiplier;
+                    double desiredCompression = baseCompression * progressiveFactor;
+
+                    double prevCompression = isFrontWheel ? _state.FrontCompression : _state.RearCompression;
+                    double smoothedCompression = Lerp(prevCompression, desiredCompression, CompressionSmoothingFactor);
+
+                    if (isFrontWheel)
+                        _state.FrontCompression = smoothedCompression;
+                    else
+                        _state.RearCompression = smoothedCompression;
+
+                    return smoothedCompression;
                 }
 
-                double baseCompression = penetration * BaseCompressionMultiplier;
-                double progressiveFactor = ProgressiveFactorBase + Pow(penetration / (_physics.WheelRadius * WheelRadiusHalfFactor), 2) * ProgressiveFactorMultiplier;
-                double desiredCompression = baseCompression * progressiveFactor;
-
-                double prevCompression = isFrontWheel ? _prevFrontCompression : _prevRearCompression;
-                double smoothedCompression = Lerp(prevCompression, desiredCompression, CompressionSmoothingFactor);
-
-                if (isFrontWheel)
-                    _prevFrontCompression = smoothedCompression;
-                else
-                    _prevRearCompression = smoothedCompression;
-
-                double newOffset = _physics.SuspensionRestLength - smoothedCompression;
-                double currentOffset = isFrontWheel ? _bike.SuspensionOffsets.Front : _bike.SuspensionOffsets.Rear;
-
-                if (Abs(newOffset - currentOffset) > _physics.SuspensionRestLength * LargeSuspensionChangeThreshold)
-                    newOffset = Lerp(currentOffset, newOffset, LargeSuspensionChangeSmoothingFactor);
-
-                newOffset = ClampValue(newOffset, _physics.SuspensionRestLength * MinSuspensionOffset, _physics.SuspensionRestLength);
-
-                double compressionRatio = CompressionRatioBase - newOffset / _physics.SuspensionRestLength;
-                double progressiveFactorForce = ProgressiveFactorBase + Pow(compressionRatio, 2) * ProgressiveFactorForceMultiplier;
-                double adjustedSuspensionStrength = _physics.SuspensionStrength * progressiveFactorForce;
-
-                double penetrationDamping = -_physics.SuspensionDamping * penetrationVelocity;
-                double velocityDamping = -_physics.SuspensionDamping * relativeVelocity * VelocityDampingFactor;
-
-                Vector suspensionForce = normal * (-adjustedSuspensionStrength * penetration);
-                Vector dampingForce = normal * (penetrationDamping + velocityDamping);
-
-                Vector tangent = new Vector(-normal.Y, normal.X);
-                double tangentialVelocity = Vector.Multiply(_bike.Velocity, tangent);
-                double slopeAngle = Atan2(normal.Y, normal.X) - PI / 2;
-                double gripFactor = CalculateGripFactor(slopeAngle);
-                double maxFriction = gripFactor * suspensionForce.Length;
-
-                Vector frictionForce = tangent * (-tangentialVelocity * _physics.GroundFriction * FrictionForceMultiplier);
-                bool isSlipping = frictionForce.Length > maxFriction;
-
-                if (isSlipping)
+                // Функция для расчета смещения подвески
+                double CalculateSuspensionOffset(double compression)
                 {
-                    string wheel = isFrontWheel ? "Front" : "Rear";
-                    Info("SuspensionComponent", $"{wheel} wheel slipping");
-                    frictionForce = frictionForce * (maxFriction / frictionForce.Length);
+                    double newOffset = _physics.SuspensionRestLength - compression;
+                    double currentOffset = isFrontWheel ? _bike.SuspensionOffsets.Front : _bike.SuspensionOffsets.Rear;
+
+                    if (Abs(newOffset - currentOffset) > _physics.SuspensionRestLength * LargeSuspensionChangeThreshold)
+                        newOffset = Lerp(currentOffset, newOffset, LargeSuspensionChangeSmoothingFactor);
+
+                    return ClampValue(newOffset, _physics.SuspensionRestLength * MinSuspensionOffset, _physics.SuspensionRestLength);
                 }
 
-                Vector reactionForce = suspensionForce + dampingForce + frictionForce;
-                Vector prevReactionForce = isFrontWheel ? _prevFrontReactionForce : _prevRearReactionForce;
-                reactionForce = LerpVector(prevReactionForce, reactionForce, ReactionForceSmoothingFactor);
+                // Функция для расчета силы реакции
+                Vector CalculateReactionForce(double newOffset)
+                {
+                    double compressionRatio = CompressionRatioBase - newOffset / _physics.SuspensionRestLength;
+                    double progressiveFactorForce = ProgressiveFactorBase +
+                        Pow(compressionRatio, 2) * ProgressiveFactorForceMultiplier;
+                    double adjustedSuspensionStrength = _physics.SuspensionStrength * progressiveFactorForce;
 
-                if (isFrontWheel)
-                    _prevFrontReactionForce = reactionForce;
-                else
-                    _prevRearReactionForce = reactionForce;
+                    double penetrationDamping = -_physics.SuspensionDamping * penetrationVelocity;
+                    double velocityDamping = -_physics.SuspensionDamping * relativeVelocity * VelocityDampingFactor;
 
-                Vector r = wheelPos - _bike.Position;
-                double torque = r.X * reactionForce.Y - r.Y * reactionForce.X;
+                    Vector suspensionForce = normal * (-adjustedSuspensionStrength * penetration);
+                    Vector dampingForce = normal * (penetrationDamping + velocityDamping);
 
-                _bike.Velocity += reactionForce / _physics.Mass * deltaTime;
-                _bike.AngularVelocity += torque / _physics.MomentOfInertia * deltaTime;
+                    Vector tangent = new(-normal.Y, normal.X);
+                    double tangentialVelocity = Vector.Multiply(_bike.Velocity, tangent);
+                    double slopeAngle = Atan2(normal.Y, normal.X) - PI / 2;
+                    double gripFactor = CalculateGripFactor(slopeAngle);
+                    double maxFriction = gripFactor * suspensionForce.Length;
 
+                    Vector frictionForce = tangent * (-tangentialVelocity * _physics.GroundFriction * FrictionForceMultiplier);
+                    bool isSlipping = frictionForce.Length > maxFriction;
+
+                    if (isSlipping)
+                    {
+                        string wheel = isFrontWheel ? "Front" : "Rear";
+                        Info("SuspensionComponent", $"{wheel} wheel slipping");
+                        frictionForce = frictionForce * (maxFriction / frictionForce.Length);
+                    }
+
+                    return suspensionForce + dampingForce + frictionForce;
+                }
+
+                // Функция для применения силы реакции
+                void ApplyReactionForce(Vector reactionForce)
+                {
+                    Vector prevReactionForce = isFrontWheel ? _state.FrontReactionForce : _state.RearReactionForce;
+                    reactionForce = LerpVector(prevReactionForce, reactionForce, ReactionForceSmoothingFactor);
+
+                    if (isFrontWheel)
+                        _state.FrontReactionForce = reactionForce;
+                    else
+                        _state.RearReactionForce = reactionForce;
+
+                    Vector r = wheelPos - _bike.Position;
+                    double torque = r.X * reactionForce.Y - r.Y * reactionForce.X;
+
+                    _bike.Velocity += reactionForce / _physics.Mass * deltaTime;
+                    _bike.AngularVelocity += torque / _physics.MomentOfInertia * deltaTime;
+                }
+
+                // Основной код метода, вызывающий все локальные функции
+                double compression = CalculateCompression();
+                double newOffset = CalculateSuspensionOffset(compression);
+                Vector reactionForce = CalculateReactionForce(newOffset);
+                ApplyReactionForce(reactionForce);
                 SetSuspensionOffset(isFrontWheel, newOffset);
             });
-        }
 
         private void SetSuspensionOffset(bool isFrontWheel, double offset)
         {
@@ -594,6 +654,9 @@ namespace GravityDefiedGame.Models
         }
     }
 
+    /// <summary>
+    /// Компонент для обработки столкновений рамы мотоцикла
+    /// </summary>
     public class CollisionComponent : PhysicsComponent
     {
         private readonly Motorcycle _bike;
@@ -602,21 +665,18 @@ namespace GravityDefiedGame.Models
         public CollisionComponent(Motorcycle bike, BikePhysics physics) : base() =>
             (_bike, _physics) = (bike, physics);
 
-        public void CheckFrameCollision(Level level, double deltaTime)
-        {
+        public void CheckFrameCollision(Level level, double deltaTime) =>
             Log("CollisionComponent", "checking frame collision", () =>
             {
-                if (_bike.IsInAir || _bike.IsCrashed || _bike.Velocity.Length <= FrameCollisionMinVelocity)
+                if (_bike is { IsInAir: true } or { IsCrashed: true } || _bike.Velocity.Length <= FrameCollisionMinVelocity)
                     return;
 
                 var collisionInfo = DetectFrameCollision(level);
                 if (collisionInfo.IsCollision && collisionInfo.MaxPenetration > _physics.WheelRadius * FrameCollisionMinPenetration)
                     HandleFrameCollision(collisionInfo, deltaTime);
             });
-        }
 
-        private void HandleFrameCollision((bool IsCollision, Point CollisionPoint, double MaxPenetration) collisionInfo, double deltaTime)
-        {
+        private void HandleFrameCollision((bool IsCollision, Point CollisionPoint, double MaxPenetration) collisionInfo, double deltaTime) =>
             Log("CollisionComponent", "handling frame collision", () =>
             {
                 double crashThreshold = _physics.WheelRadius * FrameCrashThreshold;
@@ -633,10 +693,8 @@ namespace GravityDefiedGame.Models
                     ApplyFrameCollisionResponse(collisionInfo.CollisionPoint, collisionInfo.MaxPenetration, deltaTime);
                 }
             });
-        }
 
-        private void ApplyFrameCollisionResponse(Point collisionPoint, double penetration, double deltaTime)
-        {
+        private void ApplyFrameCollisionResponse(Point _, double penetration, double deltaTime) =>
             Log("CollisionComponent", "applying frame collision response", () =>
             {
                 double reactionForce = penetration * _physics.SuspensionStrength * FrameCollisionReactionForce;
@@ -644,7 +702,7 @@ namespace GravityDefiedGame.Models
                 double deltaVelocityY = -impulse / _physics.Mass;
 
                 deltaVelocityY = Max(deltaVelocityY, -FrameCollisionMaxDeltaVelocity * deltaTime);
-                _bike.Velocity = new Vector(_bike.Velocity.X, _bike.Velocity.Y + deltaVelocityY);
+                _bike.Velocity = new(_bike.Velocity.X, _bike.Velocity.Y + deltaVelocityY);
 
                 double stabilizingFactor = Abs(_bike.Angle) > FrameStabilizingAngleThreshold
                     ? FrameStabilizingFactorStrong
@@ -653,17 +711,16 @@ namespace GravityDefiedGame.Models
                 double stabilizingTorque = -_bike.Angle * stabilizingFactor;
                 double deltaAngularVelocity = stabilizingTorque * deltaTime / _physics.MomentOfInertia;
 
-                deltaAngularVelocity = ClampValue(deltaAngularVelocity,
-                                                -FrameCollisionMaxDeltaAngular * deltaTime,
-                                                 FrameCollisionMaxDeltaAngular * deltaTime);
+                deltaAngularVelocity = ClampValue(
+                    deltaAngularVelocity,
+                    -FrameCollisionMaxDeltaAngular * deltaTime,
+                    FrameCollisionMaxDeltaAngular * deltaTime);
 
                 _bike.AngularVelocity += deltaAngularVelocity;
             });
-        }
 
-        private (bool IsCollision, Point CollisionPoint, double MaxPenetration) DetectFrameCollision(Level level)
-        {
-            return Log("CollisionComponent", "detecting frame collision", () =>
+        private (bool IsCollision, Point CollisionPoint, double MaxPenetration) DetectFrameCollision(Level level) =>
+            Log("CollisionComponent", "detecting frame collision", () =>
             {
                 var framePoints = _bike.GetFramePoints();
                 bool frameCollision = false;
@@ -684,10 +741,12 @@ namespace GravityDefiedGame.Models
                 }
 
                 return (frameCollision, collisionPoint, maxPenetration);
-            }, (false, new Point(0, 0), 0));
-        }
+            }, (false, new(), 0));
     }
 
+    /// <summary>
+    /// Основной класс физики мотоцикла, координирующий все физические компоненты
+    /// </summary>
     public class BikePhysics : PhysicsComponent
     {
         private readonly Motorcycle _bike;
@@ -704,11 +763,10 @@ namespace GravityDefiedGame.Models
         private readonly TrigCache _trigCache = new();
         private const double MaxAllowedPenetration = 5.0;
 
-        private double _prevAngularVelocity;
-        private Vector _prevVelocity = new(0, 0);
         private int _updateCounter;
         private double _prevSlopeAngle;
 
+        // Свойства мотоцикла
         public double BrakeForce { get; private set; }
         public double DragCoefficient { get; private set; }
         public double EnginePower { get; private set; }
@@ -728,14 +786,13 @@ namespace GravityDefiedGame.Models
         public double WheelieBalance { get; set; }
         public double StoppieBalance { get; set; }
         public double MaxSuspensionAngle { get; private set; }
+
         public (double cos, double sin) GetBikeTrigs() => (_trigCache.Cos, _trigCache.Sin);
 
         public BikePhysics(Motorcycle bike) : base()
         {
             _bike = bike;
             Gravity = DefaultGravity * GravityMultiplier;
-            _prevVelocity = new Vector(0, 0);
-            _prevAngularVelocity = 0;
             _updateCounter = 0;
             _prevSlopeAngle = 0;
             WheelieBalance = StoppieBalance = 0.0;
@@ -753,8 +810,7 @@ namespace GravityDefiedGame.Models
             _geometryComponent = new BikeGeom(bike);
         }
 
-        public void InitializeProperties(BikeType bikeType)
-        {
+        public void InitializeProperties(BikeType bikeType) =>
             Log("BikePhysics", "initializing bike properties", () =>
             {
                 var props = GetBikeProperties(bikeType);
@@ -775,10 +831,8 @@ namespace GravityDefiedGame.Models
 
                 Info("BikePhysics", $"Initialized {bikeType} bike with mass: {Mass}, power: {EnginePower}, brake: {BrakeForce}");
             });
-        }
 
-        public void Reset()
-        {
+        public void Reset() =>
             Log("BikePhysics", "resetting bike", () =>
             {
                 _stateComponent.Reset();
@@ -786,25 +840,20 @@ namespace GravityDefiedGame.Models
                 _kinematicsComponent.UpdateWheelPositions();
                 Info("BikePhysics", "Bike reset to initial state");
             });
-        }
 
-        public void SetPosition(Point position)
-        {
+        public void SetPosition(Point position) =>
             Log("BikePhysics", "setting position", () =>
             {
                 _bike.Position = position;
                 _kinematicsComponent.UpdateAttachmentPoints();
                 _kinematicsComponent.UpdateWheelPositions();
             });
-        }
 
-        public void SetBikeType(BikeType bikeType)
-        {
+        public void SetBikeType(BikeType bikeType) =>
             Log("BikePhysics", $"setting bike type to {bikeType}", () =>
             {
                 InitializeProperties(bikeType);
             });
-        }
 
         public void ApplyThrottle(double amount) => _inputComponent.ApplyThrottle(amount);
         public void ApplyBrake(double amount) => _inputComponent.ApplyBrake(amount);
@@ -844,7 +893,6 @@ namespace GravityDefiedGame.Models
             Log("BikePhysics", "updating physics", () =>
             {
                 _trigCache.Update(_bike.Angle);
-                SavePreviousState();
                 _suspensionComponent.HandleWheelCollisions(level, deltaTime);
 
                 Vector totalForce = _forcesComponent.CalculateTotalForce(level, deltaTime);
@@ -864,8 +912,8 @@ namespace GravityDefiedGame.Models
                 if (_bike.Position.Y > groundY + MaxAllowedPenetration)
                 {
                     Warning("BikePhysics", $"Excessive ground penetration: {_bike.Position.Y - groundY}");
-                    _bike.Position = new Point(_bike.Position.X, groundY);
-                    _bike.Velocity = new Vector(_bike.Velocity.X, 0);
+                    _bike.Position = new(_bike.Position.X, groundY);
+                    _bike.Velocity = new(_bike.Velocity.X, 0);
                 }
 
                 _kinematicsComponent.UpdateAttachmentPoints();
@@ -879,8 +927,8 @@ namespace GravityDefiedGame.Models
                 {
                     Warning("BikePhysics", "Wheel penetration exceeded maximum allowed value");
                     double centerGroundY = level.GetGroundYAtX(_bike.Position.X);
-                    _bike.Position = new Point(_bike.Position.X, centerGroundY - WheelRadius);
-                    _bike.Velocity = new Vector(_bike.Velocity.X, 0);
+                    _bike.Position = new(_bike.Position.X, centerGroundY - WheelRadius);
+                    _bike.Velocity = new(_bike.Velocity.X, 0);
                     _kinematicsComponent.UpdateAttachmentPoints();
                     _kinematicsComponent.UpdateWheelPositions();
                 }
@@ -899,8 +947,7 @@ namespace GravityDefiedGame.Models
             });
         }
 
-        private void CheckCrashConditions()
-        {
+        private void CheckCrashConditions() =>
             Log("BikePhysics", "checking crash conditions", () =>
             {
                 if (_bike.IsInAir || _bike.IsCrashed)
@@ -920,18 +967,16 @@ namespace GravityDefiedGame.Models
                     Info("BikePhysics", $"Bike crashed due to invalid wheel distance: {currentDistance:F2}");
                 }
             });
-        }
 
-        private void UpdateLean(double deltaTime, Level level)
-        {
+        private void UpdateLean(double deltaTime, Level level) =>
             Log("BikePhysics", "updating lean", () =>
             {
-            if (_bike.IsInAir)
-            {
-                double desiredAngularVelocity = _bike.LeanAmount * MaxAirAngularVelocity;
-                _bike.AngularVelocity += (desiredAngularVelocity - _bike.AngularVelocity) * AirDampingFactor * deltaTime;
-                return;
-            }
+                if (_bike.IsInAir)
+                {
+                    double desiredAngularVelocity = _bike.LeanAmount * MaxAirAngularVelocity;
+                    _bike.AngularVelocity += (desiredAngularVelocity - _bike.AngularVelocity) * AirDampingFactor * deltaTime;
+                    return;
+                }
 
                 double currentSlopeAngle = level.CalculateSlopeAngle(_bike.Position.X);
                 double smoothedSlopeAngle = Abs(currentSlopeAngle - _prevSlopeAngle) > SlopeAngleSmoothingThreshold
@@ -948,11 +993,14 @@ namespace GravityDefiedGame.Models
                 double leanError = targetLean - _bike.Angle;
                 double angularVelocityDamping = AngularVelocityDampingBase + AngularVelocityDampingFactor * speedFactor;
 
-                double controlTorque = LeanControlTorqueMultiplier * leanError * adaptiveLeanSpeed + angularVelocityDamping * (-_bike.AngularVelocity);
+                double controlTorque = LeanControlTorqueMultiplier * leanError * adaptiveLeanSpeed +
+                                     angularVelocityDamping * (-_bike.AngularVelocity);
 
-                if (_bike.Throttle < InputIdleThreshold && _bike.Brake < InputIdleThreshold && Abs(_bike.AngularVelocity) > AngularVelocityIdleThreshold)
+                if (_bike.Throttle < InputIdleThreshold && _bike.Brake < InputIdleThreshold &&
+                    Abs(_bike.AngularVelocity) > AngularVelocityIdleThreshold)
                 {
-                    double stabilizationFactor = StabilizationFactorBase + StabilizationFactorSpeedMultiplier * Min(1.0, _bike.Velocity.Length / StabilizationSpeedThreshold);
+                    double stabilizationFactor = StabilizationFactorBase +
+                        StabilizationFactorSpeedMultiplier * Min(1.0, _bike.Velocity.Length / StabilizationSpeedThreshold);
                     controlTorque += -_bike.AngularVelocity * stabilizationFactor * StabilizationTorqueMultiplier;
                 }
 
@@ -960,32 +1008,29 @@ namespace GravityDefiedGame.Models
                 double maxAngularVel = MaxAngularVelocity * GroundAngularVelocityFactor;
                 _bike.AngularVelocity = ClampValue(_bike.AngularVelocity, -maxAngularVel, maxAngularVel);
             });
-        }
 
-        private void SavePreviousState()
-        {
-            _prevVelocity = _bike.Velocity;
-            _prevAngularVelocity = _bike.AngularVelocity;
-        }
+        private void SavePreviousState() { /* Метод сохранён для обратной совместимости */ }
 
-        private void SanitizePhysicalState()
-        {
+        private void SanitizePhysicalState() =>
             Log("BikePhysics", "sanitizing physical state", () =>
             {
                 _bike.Angle = NormalizeAngle(SanitizeValue(_bike.Angle, 0, "Invalid angle value"));
-                _bike.AngularVelocity = ClampValue(SanitizeValue(_bike.AngularVelocity, 0, "Invalid angular velocity"),
-                                                -MaxAngularVelocity, MaxAngularVelocity);
-                _bike.Velocity = SanitizeVector(_bike.Velocity, new Vector(0, 0), "Invalid velocity");
+                _bike.AngularVelocity = ClampValue(
+                    SanitizeValue(_bike.AngularVelocity, 0, "Invalid angular velocity"),
+                    -MaxAngularVelocity,
+                    MaxAngularVelocity);
+
+                _bike.Velocity = SanitizeVector(_bike.Velocity, new(), "Invalid velocity");
 
                 if (_bike.Velocity.Length > MaxSafeVelocity)
                 {
-                    Warning("BikePhysics", $"Velocity exceeds max safe value: {_bike.Velocity.Length:F2} > {MaxSafeVelocity:F2}");
+                    Warning("BikePhysics",
+                        $"Velocity exceeds max safe value: {_bike.Velocity.Length:F2} > {MaxSafeVelocity:F2}");
                     _bike.Velocity = _bike.Velocity * (MaxSafeVelocity / _bike.Velocity.Length);
                 }
             });
-        }
 
-        private BikeProperties GetBikeProperties(BikeType bikeType) => bikeType switch
+        private static BikeProperties GetBikeProperties(BikeType bikeType) => bikeType switch
         {
             BikeType.Standard => Bike.Standard,
             BikeType.Sport => Bike.Sport,
@@ -993,7 +1038,7 @@ namespace GravityDefiedGame.Models
             _ => Bike.Standard
         };
 
-        private WheelProperties GetWheelProperties(BikeType bikeType) => bikeType switch
+        private static WheelProperties GetWheelProperties(BikeType bikeType) => bikeType switch
         {
             BikeType.Standard => Wheels.Standard,
             BikeType.Sport => Wheels.Sport,
@@ -1001,45 +1046,37 @@ namespace GravityDefiedGame.Models
             _ => Wheels.Standard
         };
 
+        /// <summary>
+        /// Компонент для управления состоянием мотоцикла
+        /// </summary>
         private class StateComponent
         {
             private readonly Motorcycle _bike;
             private readonly BikePhysics _physics;
-            private bool _wasInWheelie, _wasInStoppie;
-            private double _airTime, _brakeHoldTime;
+            private double _airTime;
 
-            public StateComponent(Motorcycle bike, BikePhysics physics)
-            {
-                _bike = bike;
-                _physics = physics;
-                _airTime = _brakeHoldTime = 0;
-            }
+            public StateComponent(Motorcycle bike, BikePhysics physics) =>
+                (_bike, _physics, _airTime) = (bike, physics, 0);
 
-            public void Reset()
-            {
+            public void Reset() =>
                 Log("StateComponent", "resetting state", () =>
                 {
                     _bike.Position = DefaultStartPosition;
-                    _bike.Velocity = new Vector(0, 0);
+                    _bike.Velocity = new();
                     _bike.Throttle = _bike.Brake = _bike.LeanAmount = 0;
                     _bike.State = BikeState.None;
-                    _bike.WasInAir = _wasInWheelie = _wasInStoppie = false;
+                    _bike.WasInAir = false;
                     _bike.Angle = _bike.AngularVelocity = 0;
                     _bike.WheelRotations = (0, 0);
                     _bike.SuspensionOffsets = (_physics.SuspensionRestLength, _physics.SuspensionRestLength);
-                    _brakeHoldTime = _airTime = _bike.WheelieTime = _bike.StoppieTime = 0;
+                    _airTime = _bike.WheelieTime = _bike.StoppieTime = 0;
                 });
-            }
 
             public bool ShouldSkipUpdate(CancellationToken token) =>
                 _bike.IsCrashed || token.IsCancellationRequested;
 
-            public void SavePreviousState()
-            {
+            public void SavePreviousState() =>
                 _bike.WasInAir = _bike.IsInAir;
-                _wasInWheelie = _bike.IsInWheelie;
-                _wasInStoppie = _bike.IsInStoppie;
-            }
 
             public void HandleUpdateException(Exception ex)
             {
@@ -1065,6 +1102,9 @@ namespace GravityDefiedGame.Models
             }
         }
 
+        /// <summary>
+        /// Компонент для обработки входных данных мотоцикла
+        /// </summary>
         private class InputComponent
         {
             private readonly Motorcycle _bike;
@@ -1081,19 +1121,21 @@ namespace GravityDefiedGame.Models
                 _bike.LeanAmount = ClampValue(direction, -1, 1);
         }
 
+        /// <summary>
+        /// Компонент для расчета кинематики мотоцикла
+        /// </summary>
         private class KinematicsComponent
         {
             private readonly Motorcycle _bike;
             private readonly BikePhysics _physics;
-            private Level _level;
+            private Level? _level;
 
             public KinematicsComponent(Motorcycle bike, BikePhysics physics) =>
                 (_bike, _physics) = (bike, physics);
 
             public void SetLevel(Level level) => _level = level;
 
-            public void UpdateKinematics(double deltaTime)
-            {
+            public void UpdateKinematics(double deltaTime) =>
                 Log("KinematicsComponent", "updating kinematics", () =>
                 {
                     UpdateAttachmentPoints();
@@ -1101,10 +1143,8 @@ namespace GravityDefiedGame.Models
                     UpdateWheelRotations(deltaTime);
                     _bike.Position += _bike.Velocity * deltaTime;
                 });
-            }
 
-            public void UpdateAttachmentPoints()
-            {
+            public void UpdateAttachmentPoints() =>
                 Log("KinematicsComponent", "updating attachment points", () =>
                 {
                     var (cosAngle, sinAngle) = GetTrigsFromAngle(_bike.Angle);
@@ -1121,13 +1161,11 @@ namespace GravityDefiedGame.Models
                         )
                     );
                 });
-            }
 
-            public void UpdateWheelPositions()
-            {
+            public void UpdateWheelPositions() =>
                 Log("KinematicsComponent", "updating wheel positions", () =>
                 {
-                    if (_level == null)
+                    if (_level is null)
                     {
                         UpdateWheelPositionsDefault();
                         return;
@@ -1160,12 +1198,14 @@ namespace GravityDefiedGame.Models
                     if (_bike.IsInWheelie && !_bike.IsInAir)
                     {
                         frontSuspOffset = _physics.SuspensionRestLength -
-                            (_physics.SuspensionRestLength - frontSuspOffset) * (1.0 - _bike.WheelieIntensity * WheelieIntensityDampingMultiplier);
+                            (_physics.SuspensionRestLength - frontSuspOffset) *
+                            (1.0 - _bike.WheelieIntensity * WheelieIntensityDampingMultiplier);
                     }
                     else if (_bike.IsInStoppie && !_bike.IsInAir)
                     {
                         rearSuspOffset = _physics.SuspensionRestLength -
-                            (_physics.SuspensionRestLength - rearSuspOffset) * (1.0 - _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
+                            (_physics.SuspensionRestLength - rearSuspOffset) *
+                            (1.0 - _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
                     }
 
                     _bike.WheelPositions = (
@@ -1179,10 +1219,8 @@ namespace GravityDefiedGame.Models
                         )
                     );
                 });
-            }
 
-            private void UpdateWheelPositionsDefault()
-            {
+            private void UpdateWheelPositionsDefault() =>
                 Log("KinematicsComponent", "updating wheel positions (default)", () =>
                 {
                     double maxAngle = _physics.MaxSuspensionAngle;
@@ -1206,12 +1244,14 @@ namespace GravityDefiedGame.Models
                     if (_bike.IsInWheelie && !_bike.IsInAir)
                     {
                         frontSuspOffset = _physics.SuspensionRestLength -
-                            (_physics.SuspensionRestLength - frontSuspOffset) * (1.0 - _bike.WheelieIntensity * WheelieIntensityDampingMultiplier);
+                            (_physics.SuspensionRestLength - frontSuspOffset) *
+                            (1.0 - _bike.WheelieIntensity * WheelieIntensityDampingMultiplier);
                     }
                     else if (_bike.IsInStoppie && !_bike.IsInAir)
                     {
                         rearSuspOffset = _physics.SuspensionRestLength -
-                            (_physics.SuspensionRestLength - rearSuspOffset) * (1.0 - _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
+                            (_physics.SuspensionRestLength - rearSuspOffset) *
+                            (1.0 - _bike.StoppieIntensity * WheelieIntensityDampingMultiplier);
                     }
 
                     var (cosSuspAngle, sinSuspAngle) = GetTrigsFromAngle(suspensionAngle);
@@ -1227,27 +1267,29 @@ namespace GravityDefiedGame.Models
                         )
                     );
                 });
-            }
 
-            private void UpdateWheelRotations(double deltaTime)
-            {
+            private void UpdateWheelRotations(double deltaTime) =>
                 Log("KinematicsComponent", "updating wheel rotations", () =>
                 {
                     var (cosAngle, sinAngle) = _physics.GetBikeTrigs();
                     double groundSpeed = Vector.Multiply(_bike.Velocity, new Vector(cosAngle, sinAngle));
                     double wheelCircumference = WheelCircumferenceFactor * _physics.WheelRadius;
 
-                    double frontRotation = UpdateSingleWheelRotation(_bike.WheelRotations.Front, groundSpeed, deltaTime, true, wheelCircumference);
-                    double rearRotation = UpdateSingleWheelRotation(_bike.WheelRotations.Rear, groundSpeed, deltaTime, false, wheelCircumference);
+                    double frontRotation = UpdateSingleWheelRotation(
+                        _bike.WheelRotations.Front, groundSpeed, deltaTime, true, wheelCircumference);
+                    double rearRotation = UpdateSingleWheelRotation(
+                        _bike.WheelRotations.Rear, groundSpeed, deltaTime, false, wheelCircumference);
 
                     _bike.WheelRotations = (frontRotation % FullRotation, rearRotation % FullRotation);
                 });
-            }
 
-            private double UpdateSingleWheelRotation(double currentRotation, double groundSpeed, double deltaTime,
-                                                 bool isFrontWheel, double wheelCircumference)
-            {
-                return Log("KinematicsComponent", $"updating {(isFrontWheel ? "front" : "rear")} wheel rotation", () =>
+            private double UpdateSingleWheelRotation(
+                double currentRotation,
+                double groundSpeed,
+                double deltaTime,
+                bool isFrontWheel,
+                double wheelCircumference) =>
+                Log("KinematicsComponent", $"updating {(isFrontWheel ? "front" : "rear")} wheel rotation", () =>
                 {
                     double rotationFactor = _bike.IsInAir ? AirRotationFactor : GroundRotationFactor;
                     double rotationDelta = SafeDivide(groundSpeed, wheelCircumference);
@@ -1264,11 +1306,9 @@ namespace GravityDefiedGame.Models
 
                     return currentRotation + rotationDelta * deltaTime * rotationFactor;
                 }, currentRotation);
-            }
 
-            private double CalculateWheelSlipFactor()
-            {
-                return Log("KinematicsComponent", "calculating wheel slip factor", () =>
+            private double CalculateWheelSlipFactor() =>
+                Log("KinematicsComponent", "calculating wheel slip factor", () =>
                 {
                     if (_bike.Throttle <= WheelSlipThreshold)
                         return 0;
@@ -1279,43 +1319,35 @@ namespace GravityDefiedGame.Models
 
                     return slipFactor;
                 }, 0.0);
-            }
         }
 
+        /// <summary>
+        /// Компонент для валидации и поддержания корректного физического состояния
+        /// </summary>
         private class ValidationComponent
         {
             private readonly Motorcycle _bike;
             private readonly BikePhysics _physics;
-            private double _lastHighSpeedTime, _lastExtremeTiltTime;
 
-            public ValidationComponent(Motorcycle bike, BikePhysics physics)
-            {
-                _bike = bike;
-                _physics = physics;
-                _lastHighSpeedTime = _lastExtremeTiltTime = 0;
-            }
+            public ValidationComponent(Motorcycle bike, BikePhysics physics) =>
+                (_bike, _physics) = (bike, physics);
 
-            public void ValidateAndSanitizeState(double deltaTime)
-            {
+            public void ValidateAndSanitizeState(double deltaTime) =>
                 Log("ValidationComponent", "validating and sanitizing state", () =>
                 {
                     SanitizePhysicalState();
                     _physics._stateComponent.UpdateAirTime(deltaTime);
-                    ValidateState(deltaTime);
+                    ValidateState();
                 });
-            }
 
-            private void SanitizePhysicalState()
-            {
+            private void SanitizePhysicalState() =>
                 Log("ValidationComponent", "sanitizing physical state", () =>
                 {
                     SanitizeSuspension();
                     _bike.Position = SanitizePosition(_bike.Position, DefaultStartPosition, "Invalid position detected");
                 });
-            }
 
-            private void SanitizeSuspension()
-            {
+            private void SanitizeSuspension() =>
                 Log("ValidationComponent", "sanitizing suspension", () =>
                 {
                     double restLength = _physics.SuspensionRestLength;
@@ -1327,9 +1359,8 @@ namespace GravityDefiedGame.Models
 
                     _bike.SuspensionOffsets = offsets;
                 });
-            }
 
-            private double GetValidOffset(double offset, double restLength, double minOffset, string wheel)
+            private static double GetValidOffset(double offset, double restLength, double minOffset, string wheel)
             {
                 if (double.IsNaN(offset) || double.IsInfinity(offset))
                 {
@@ -1352,18 +1383,13 @@ namespace GravityDefiedGame.Models
                 return offset;
             }
 
-            private void ValidateState(double deltaTime)
-            {
+            private void ValidateState() =>
                 Log("ValidationComponent", "validating state", () =>
                 {
-                    double speed = _bike.Velocity.Length;
-                    double absAngle = Abs(_bike.Angle);
                     CheckSuspensionCompression();
                 });
-            }
 
-            private void CheckSuspensionCompression()
-            {
+            private void CheckSuspensionCompression() =>
                 Log("ValidationComponent", "checking suspension compression", () =>
                 {
                     double restLength = _physics.SuspensionRestLength;
@@ -1383,7 +1409,6 @@ namespace GravityDefiedGame.Models
                         Warning("ValidationComponent", $"High rear suspension compression: {rearCompression:P0}");
                     }
                 });
-            }
         }
     }
 }
