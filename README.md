@@ -1,4 +1,3 @@
----
 
 # Gravity Defied Game
 
@@ -7,7 +6,7 @@ The gameplay is inspired by the classic Java version but features its **own phys
 
 Players ride through **procedurally generated levels**, performing tricks and avoiding falls.
 
----
+
 
 ## 🚀 Features
 
