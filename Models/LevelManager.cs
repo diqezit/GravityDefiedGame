@@ -12,43 +12,46 @@ using static GravityDefiedGame.Models.GeneratorConstants;
 
 namespace GravityDefiedGame.Models
 {
+    #region Constants
+
     public static class LevelConstants
     {
-        public const double
-            DefaultGroundY = 500.0,   // Базовая высота земли
-            FinishReachDistance = 50.0,    // Дистанция для достижения финиша
-            DefaultTerrainLength = 3000.0,  // Стандартная длина уровня
-            DeltaX = 0.1,     // Шаг для расчета наклона
-            DefaultSafeZoneLength = 300.0,   // Длина безопасной зоны
-            InterpolationFactor = 1.0;     // Фактор интерполяции
+        public const double DefaultGroundY = 500.0;           // Базовая высота земли
+        public const double FinishReachDistance = 50.0;       // Дистанция для достижения финиша
+        public const double DefaultTerrainLength = 3000.0;    // Стандартная длина уровня
+        public const double DeltaX = 0.1;                     // Шаг для расчета наклона
+        public const double DefaultSafeZoneLength = 300.0;    // Длина безопасной зоны
+        public const double InterpolationFactor = 1.0;        // Фактор интерполяции
 
-        public const int DefaultSeedMultiplier = 100;  // Множитель для генерации
+        public const int DefaultSeedMultiplier = 100;         // Множитель для генерации
     }
 
     public static class GeneratorConstants
     {
-        public const double
-            DefaultTerrainHeight = 500.0,   // Высота ландшафта
-            SpikeMaxHeight = 150.0,   // Максимальная высота пиков
-            DepressionMaxDepth = 100.0,   // Максимальная глубина впадин
-            SmoothingFactor = 0.7,     // Фактор сглаживания
-            PreviousPointWeight = 0.3,     // Вес предыдущей точки
-            StartZonePercent = 0.1,     // Процент начальной зоны
-            EndZonePercent = 0.9,     // Процент конечной зоны
-            PointOffset = 50.0,    // Смещение точек
-            StartPointXOffset = 100.0,   // Смещение старта по X
-            StartPointYOffset = -80.0,   // Смещение старта по Y
-            FinishPointXOffset = -100.0,  // Смещение финиша по X
-            FinishPointYOffset = -50.0,   // Смещение финиша по Y
-            GaussianFactor = 2.0;     // Фактор Гаусса для рельефа
+        public const double DefaultTerrainHeight = 500.0;     // Высота ландшафта
+        public const double SpikeMaxHeight = 150.0;           // Максимальная высота пиков
+        public const double DepressionMaxDepth = 100.0;       // Максимальная глубина впадин
+        public const double SmoothingFactor = 0.7;            // Фактор сглаживания
+        public const double PreviousPointWeight = 0.3;        // Вес предыдущей точки
+        public const double StartZonePercent = 0.1;           // Процент начальной зоны
+        public const double EndZonePercent = 0.9;             // Процент конечной зоны
+        public const double PointOffset = 50.0;               // Смещение точек
+        public const double StartPointXOffset = 100.0;        // Смещение старта по X
+        public const double StartPointYOffset = -80.0;        // Смещение старта по Y
+        public const double FinishPointXOffset = -100.0;      // Смещение финиша по X
+        public const double FinishPointYOffset = -50.0;       // Смещение финиша по Y
+        public const double GaussianFactor = 2.0;             // Фактор Гаусса для рельефа
 
-        public const int
-            DefaultPointCount = 60,      // Количество точек рельефа
-            SegmentCount = 5,       // Количество сегментов
-            MinSafeZonePointCount = 3,       // Мин. точек в безопасной зоне
-            TerrainTypeCount = 3,       // Количество типов местности
-            PointCountReductionFactor = 5;     // Фактор сокращения точек
+        public const int DefaultPointCount = 60;              // Количество точек рельефа
+        public const int SegmentCount = 5;                    // Количество сегментов
+        public const int MinSafeZonePointCount = 3;           // Мин. точек в безопасной зоне
+        public const int TerrainTypeCount = 3;                // Количество типов местности
+        public const int PointCountReductionFactor = 5;       // Фактор сокращения точек
     }
+
+    #endregion Constants
+
+    #region Types
 
     public record TerrainConfig(
         double Length = 3000.0,
@@ -59,11 +62,23 @@ namespace GravityDefiedGame.Models
         double SafeZoneEndLength = 300.0
     );
 
-    public enum TerrainStyle { Default, Flat }
-    public enum LevelTheme { Desert }
+    public enum TerrainStyle
+    {
+        Default,
+        Flat
+    }
+
+    public enum LevelTheme
+    {
+        Desert
+    }
+
+    #endregion Types
 
     public class Level : PhysicsComponent
     {
+        #region Structs
+
         public struct TerrainPoint
         {
             public double X { get; set; }
@@ -72,6 +87,10 @@ namespace GravityDefiedGame.Models
             public double YBottom { get; set; }
             public bool IsSafeZone { get; set; }
         }
+
+        #endregion Structs
+
+        #region Properties
 
         public int Id { get; internal set; }
         public string Name { get; internal set; } = string.Empty;
@@ -88,6 +107,10 @@ namespace GravityDefiedGame.Models
         public Color TerrainColor => ThemeConstants.TerrainColor;
         public Color SafeZoneColor => ThemeConstants.SafeZoneColor;
 
+        #endregion Properties
+
+        #region Constructors
+
         public Level(int id, string name, int? seed = null)
         {
             Log("Level", $"Creating level {id}", () => {
@@ -99,6 +122,34 @@ namespace GravityDefiedGame.Models
         }
 
         public Level() { }
+
+        #endregion Constructors
+
+        #region Public Methods
+
+        public double GetGroundYAtX(double x) =>
+            IsOutOfBounds(x) ? GetOutOfBoundsValue(x) : InterpolateGroundY(x);
+
+        public bool IsInSafeZone(double x) =>
+            !IsOutOfBounds(x) && (x <= SafeZoneStartLength || x >= Length - SafeZoneEndLength);
+
+        public double CalculateSlopeAngle(double x) =>
+            Atan2(GetGroundYAtX(x + DeltaX) - GetGroundYAtX(x - DeltaX), 2 * DeltaX);
+
+        public bool IsFinishReached(Point pos) =>
+            Log("Level", "Checking finish", () => {
+                double distance = CalculateDistance(pos, FinishPoint);
+                bool reached = distance <= FinishReachDistance;
+
+                if (reached)
+                    Info("Level", $"Finish reached at distance {distance:F1}");
+
+                return reached;
+            }, false);
+
+        #endregion Public Methods
+
+        #region Private Methods
 
         private void GenerateLevel(int seed) =>
             Log("Level", $"Generating with seed {seed}", () => {
@@ -117,12 +168,6 @@ namespace GravityDefiedGame.Models
 
                 Debug("Level", $"Generated terrain with {TerrainPoints.Count} points");
             });
-
-        public double GetGroundYAtX(double x) =>
-            IsOutOfBounds(x) ? GetOutOfBoundsValue(x) : InterpolateGroundY(x);
-
-        public bool IsInSafeZone(double x) =>
-            !IsOutOfBounds(x) && (x <= SafeZoneStartLength || x >= Length - SafeZoneEndLength);
 
         private bool IsOutOfBounds(double x) =>
             TerrainPoints.Count < 2 || x < TerrainPoints[0].X || x > TerrainPoints[^1].X;
@@ -162,27 +207,23 @@ namespace GravityDefiedGame.Models
         private double LinearInterpolate(double x, double x1, double y1, double x2, double y2) =>
             y1 + (y2 - y1) * ((x - x1) / (x2 - x1));
 
-        public double CalculateSlopeAngle(double x) =>
-            Atan2(GetGroundYAtX(x + DeltaX) - GetGroundYAtX(x - DeltaX), 2 * DeltaX);
+        #endregion Private Methods
 
-        public bool IsFinishReached(Point pos) =>
-            Log("Level", "Checking finish", () => {
-                double distance = CalculateDistance(pos, FinishPoint);
-                bool reached = distance <= FinishReachDistance;
-
-                if (reached)
-                    Info("Level", $"Finish reached at distance {distance:F1}");
-
-                return reached;
-            }, false);
+        #region LevelGenerator
 
         private class LevelGenerator
         {
+            #region Enums and Fields
+
             private enum TerrainSegmentType { Plateau, Spike, Depression }
 
             private readonly Random _rand;
             private readonly List<TerrainSegmentType> _segmentTypes = new();
             private readonly Dictionary<TerrainSegmentType, Func<double, double>> _variationStrategies;
+
+            #endregion Enums and Fields
+
+            #region Constructor
 
             public LevelGenerator(int seed)
             {
@@ -209,6 +250,10 @@ namespace GravityDefiedGame.Models
                 Debug("LevelGenerator", $"Initialized with {SegmentCount} segments, seed={seed}");
             }
 
+            #endregion Constructor
+
+            #region Public Methods
+
             public (List<TerrainPoint> Points, double Length, Point StartPoint, Point FinishPoint,
                     double SafeZoneStart, double SafeZoneEnd) GenerateTerrain(TerrainConfig config) =>
                 Log("LevelGenerator", "Generating terrain", () => {
@@ -225,6 +270,10 @@ namespace GravityDefiedGame.Models
                     Info("LevelGenerator", $"Generated {pts.Count} terrain points for style {config.Style}");
                     return (pts, length, sp, fp, config.SafeZoneStartLength, config.SafeZoneEndLength);
                 }, (new List<TerrainPoint>(), 0, new Point(), new Point(), 0, 0));
+
+            #endregion Public Methods
+
+            #region Private Methods
 
             private Point CreateStartPoint(List<TerrainPoint> pts, double baseY, TerrainConfig config)
             {
@@ -328,6 +377,10 @@ namespace GravityDefiedGame.Models
 
                 return y;
             }
+
+            #endregion Private Methods
         }
+
+        #endregion LevelGenerator
     }
 }
