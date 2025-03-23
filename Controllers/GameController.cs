@@ -42,7 +42,9 @@ namespace GravityDefiedGame.Controllers
         {
             Motorcycle = new Motorcycle();
             LoadLevels();
+#if DEBUG
             Info("GameController", "Game controller initialized");
+#endif
         }
 
         public void LoadLevels() =>
@@ -56,7 +58,9 @@ namespace GravityDefiedGame.Controllers
                     int seed = random.Next();
                     Levels.Add(new Level(i, $"Level {i}", seed));
                 }
+#if DEBUG
                 Info("GameController", $"Loaded {Levels.Count} levels");
+#endif
             });
 
         public void StartLevel(int levelId) =>
@@ -83,7 +87,9 @@ namespace GravityDefiedGame.Controllers
                 _gameStopwatch.Restart();
                 IsPaused = false;
                 OnGameEvent(GameEventType.LevelStart, $"Level {levelId} started");
+#if DEBUG
                 Info("GameController", $"Level {levelId} started");
+#endif
             });
 
         private void InitializeMotorcycle() =>
@@ -97,7 +103,9 @@ namespace GravityDefiedGame.Controllers
 
                 Motorcycle.Reset();
                 Motorcycle.SetPosition(CurrentLevel.StartPoint);
+#if DEBUG
                 Debug("GameController", $"Motorcycle initialized at position {CurrentLevel.StartPoint}");
+#endif
             });
 
         public void Update(double deltaTime, CancellationToken cancellationToken = default)
@@ -142,7 +150,9 @@ namespace GravityDefiedGame.Controllers
                 if (CurrentLevel?.IsFinishReached(Motorcycle.Position) != true)
                     return false;
 
+#if DEBUG
                 Info("GameController", "Finish line reached");
+#endif
                 OnLevelComplete();
                 return true;
             }, false);
@@ -175,7 +185,9 @@ namespace GravityDefiedGame.Controllers
                 string formattedTime = FormatGameTime();
                 string message = $"Level completed!\nTime: {formattedTime}";
                 OnGameEvent(GameEventType.LevelComplete, message);
+#if DEBUG
                 Info("GameController", $"Level {CurrentLevel?.Id} completed: Time={formattedTime}");
+#endif
             });
 
         private string FormatGameTime() =>
@@ -187,13 +199,17 @@ namespace GravityDefiedGame.Controllers
             Log("GameController", $"handling game over: {reason}", () =>
             {
                 OnGameEvent(GameEventType.GameOver, $"Game over: {reason}");
+#if DEBUG
                 Info("GameController", $"Game over: {reason}");
+#endif
             });
 
         private void OnGameEvent(GameEventType type, string message) =>
             Log("GameController", $"firing game event: {type}", () =>
             {
+#if DEBUG
                 Debug("GameController", $"Game event: {type} - {message}");
+#endif
                 GameEvent?.Invoke(this, new GameEventArgs(type, message));
             });
 
@@ -205,7 +221,9 @@ namespace GravityDefiedGame.Controllers
                 IsPaused = true;
                 _gameStopwatch.Stop();
                 OnGameEvent(GameEventType.GamePaused, "Game paused");
+#if DEBUG
                 Info("GameController", "Game paused");
+#endif
             });
 
         public void ResumeGame() =>
@@ -216,7 +234,9 @@ namespace GravityDefiedGame.Controllers
                 IsPaused = false;
                 _gameStopwatch.Start();
                 OnGameEvent(GameEventType.GameResumed, "Game resumed");
+#if DEBUG
                 Info("GameController", "Game resumed");
+#endif
             });
 
         public void RestartLevel() =>
@@ -230,7 +250,9 @@ namespace GravityDefiedGame.Controllers
 
                 StartLevel(CurrentLevel.Id);
                 OnGameEvent(GameEventType.LevelRestart, "Level restarted");
+#if DEBUG
                 Info("GameController", $"Level {CurrentLevel.Id} restarted");
+#endif
             });
 
         public void SetBikeType(BikeType bikeType) =>
@@ -238,7 +260,9 @@ namespace GravityDefiedGame.Controllers
             {
                 Motorcycle.SetBikeType(bikeType);
                 OnGameEvent(GameEventType.BikeChanged, $"Selected bike: {bikeType}");
+#if DEBUG
                 Info("GameController", $"Bike type changed to {bikeType}");
+#endif
             });
 
         public void SetBikeColor(Color color) =>
@@ -246,7 +270,9 @@ namespace GravityDefiedGame.Controllers
             {
                 Motorcycle.SetBikeColor(color);
                 OnGameEvent(GameEventType.BikeChanged, "Bike color changed");
+#if DEBUG
                 Info("GameController", $"Bike color changed to {color}");
+#endif
             });
 
         #region Input Handling
@@ -256,7 +282,9 @@ namespace GravityDefiedGame.Controllers
             {
                 _input.Reset();
                 ResetMotorcycleControls();
+#if DEBUG
                 Debug("GameController", "Input state reset");
+#endif
             });
 
         private void ResetMotorcycleControls() =>
@@ -275,27 +303,35 @@ namespace GravityDefiedGame.Controllers
                     case "W" when !_input.IsThrottlePressed:
                         _input.IsThrottlePressed = true;
                         Motorcycle.ApplyThrottle(Constants.FullThrottle);
+#if DEBUG
                         Debug("GameController", "Throttle applied");
+#endif
                         break;
 
                     case "S" when !_input.IsBrakePressed:
                         _input.IsBrakePressed = true;
                         Motorcycle.ApplyBrake(Constants.FullBrake);
+#if DEBUG
                         Debug("GameController", "Brake applied");
+#endif
                         break;
 
                     case "A" when !_input.IsLeaningLeft:
                         _input.IsLeaningLeft = true;
                         _input.IsLeaningRight = false;
                         Motorcycle.Lean(Constants.LeftLean);
+#if DEBUG
                         Debug("GameController", "Leaning left");
+#endif
                         break;
 
                     case "D" when !_input.IsLeaningRight:
                         _input.IsLeaningRight = true;
                         _input.IsLeaningLeft = false;
                         Motorcycle.Lean(Constants.RightLean);
+#if DEBUG
                         Debug("GameController", "Leaning right");
+#endif
                         break;
                 }
             });
@@ -308,25 +344,33 @@ namespace GravityDefiedGame.Controllers
                     case "W":
                         _input.IsThrottlePressed = false;
                         Motorcycle.ApplyThrottle(Constants.NoInput);
+#if DEBUG
                         Debug("GameController", "Throttle released");
+#endif
                         break;
 
                     case "S":
                         _input.IsBrakePressed = false;
                         Motorcycle.ApplyBrake(Constants.NoInput);
+#if DEBUG
                         Debug("GameController", "Brake released");
+#endif
                         break;
 
                     case "A":
                         _input.IsLeaningLeft = false;
                         UpdateLeanState();
+#if DEBUG
                         Debug("GameController", "Left lean released");
+#endif
                         break;
 
                     case "D":
                         _input.IsLeaningRight = false;
                         UpdateLeanState();
+#if DEBUG
                         Debug("GameController", "Right lean released");
+#endif
                         break;
                 }
             });

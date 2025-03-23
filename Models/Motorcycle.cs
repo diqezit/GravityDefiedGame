@@ -117,7 +117,9 @@ namespace GravityDefiedGame.Models
                 BikeType = bikeType;
                 InitializeBikeProperties();
                 Reset();
+#if DEBUG
                 Info("Motorcycle", $"Created {bikeType} motorcycle");
+#endif
             });
         }
 
@@ -129,7 +131,9 @@ namespace GravityDefiedGame.Models
                 _physics.InitializeProperties(BikeType);
                 BikeColor = DefaultBikeColor;
                 FrameHeight = _physics.WheelRadius * 1.5;
+#if DEBUG
                 Info("Motorcycle", $"Initialized {BikeType} motorcycle with wheel radius {_physics.WheelRadius:F2}");
+#endif
             });
         }
 
@@ -139,7 +143,9 @@ namespace GravityDefiedGame.Models
             Log("Motorcycle", "resetting motorcycle", () =>
             {
                 _physics.Reset();
+#if DEBUG
                 Debug("Motorcycle", "Motorcycle reset to initial state");
+#endif
             });
         }
 
@@ -148,7 +154,9 @@ namespace GravityDefiedGame.Models
             Log("Motorcycle", "setting position", () =>
             {
                 _physics.SetPosition(position);
+#if DEBUG
                 Debug("Motorcycle", $"Position set to {position}");
+#endif
             });
         }
 
@@ -158,7 +166,9 @@ namespace GravityDefiedGame.Models
             {
                 BikeType = bikeType;
                 _physics.SetBikeType(bikeType);
+#if DEBUG
                 Info("Motorcycle", $"Bike type changed to {bikeType}");
+#endif
             });
         }
 
@@ -167,7 +177,9 @@ namespace GravityDefiedGame.Models
             Log("Motorcycle", "setting bike color", () =>
             {
                 BikeColor = color;
+#if DEBUG
                 Debug("Motorcycle", $"Bike color set to {color}");
+#endif
             });
         }
 

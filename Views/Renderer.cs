@@ -59,7 +59,9 @@ namespace GravityDefiedGame.Views
 
             Log("Renderer", "Initializing renderer", () => {
                 InitializeVisuals();
+#if DEBUG
                 Info("Renderer", "Renderer initialized successfully");
+#endif
             });
         }
 
@@ -88,7 +90,9 @@ namespace GravityDefiedGame.Views
                 InitializeTerrain();
                 _shadowRenderer.Initialize();
                 _skeletonRenderer.InitializeSkeletonLines();
+#if DEBUG
                 Debug("Renderer", "Visuals initialized");
+#endif
             });
 
         private void InitializeTerrain() =>
@@ -107,7 +111,9 @@ namespace GravityDefiedGame.Views
                     StrokeThickness = VerticalLineStrokeThickness
                 };
                 _canvas.Children.Add(_verticalLinesPath);
+#if DEBUG
                 Debug("Renderer", "Terrain paths added to canvas");
+#endif
             });
 
         public void Render(CancellationToken cancellationToken = default) =>
@@ -196,8 +202,10 @@ namespace GravityDefiedGame.Views
                 double worldY = point.YTop;
                 var screenPoint = _camera.WorldToScreen(new Point(worldX, worldY));
 
+#if DEBUG
                 if (!IsValidPoint(screenPoint))
                     Debug("Renderer", $"Created potentially invalid point: ({screenPoint.X:F1}, {screenPoint.Y:F1})");
+#endif
 
                 return screenPoint;
             }, new Point());
@@ -218,7 +226,9 @@ namespace GravityDefiedGame.Views
                     var bottomPoint = _camera.WorldToScreen(new Point(point.X, point.YBottom));
                     if (!IsValidPoint(topPoint) || !IsValidPoint(bottomPoint))
                     {
+#if DEBUG
                         Debug("Renderer", $"Skipping invalid points at X={point.X}");
+#endif
                         continue;
                     }
 
@@ -299,7 +309,9 @@ namespace GravityDefiedGame.Views
                         }
                     };
                     _canvas.Children.Add(_shadowPath);
+#if DEBUG
                     Info("ShadowRenderer", "Shadow path initialized");
+#endif
                 });
 
             public void UpdateShadow(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines, CancellationToken cancellationToken) =>
@@ -313,28 +325,36 @@ namespace GravityDefiedGame.Views
                     var framePoints = GetValidFramePoints(skeletonPoints, skeletonLines);
                     if (framePoints.Count < 2)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Not enough frame points");
+#endif
                         return;
                     }
 
                     var (centerX, centerY, scale) = CalculateShadowParameters(framePoints);
                     if (scale == 0)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Invalid scale value");
+#endif
                         return;
                     }
 
                     var shadowPoints = GenerateShadowPoints(framePoints, centerX, centerY, scale, cancellationToken);
                     if (shadowPoints.Count < 2)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Not enough shadow points");
+#endif
                         return;
                     }
 
                     var shadowFigure = CreateShadowFigure(shadowPoints);
                     if (shadowFigure == null)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Shadow figure is null");
+#endif
                         return;
                     }
 
@@ -351,7 +371,9 @@ namespace GravityDefiedGame.Views
                 Log("ShadowRenderer", $"Calculating shadow point for ({framePoint.X:F1}, {framePoint.Y:F1})", () => {
                     if (!IsValidPoint(framePoint) || _gameController.CurrentLevel is null)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Invalid frame point or null level");
+#endif
                         return framePoint;
                     }
 
@@ -360,7 +382,9 @@ namespace GravityDefiedGame.Views
                         double groundY = _gameController.CurrentLevel.GetGroundYAtX(framePoint.X);
                         if (!double.IsFinite(groundY))
                         {
+#if DEBUG
                             Debug("ShadowRenderer", $"Invalid ground Y at X={framePoint.X:F1}");
+#endif
                             return framePoint;
                         }
 
@@ -371,7 +395,9 @@ namespace GravityDefiedGame.Views
                         double shadowX = framePoint.X + heightAboveGround * ShadowOffsetFactor;
                         if (!double.IsFinite(shadowX))
                         {
+#if DEBUG
                             Debug("ShadowRenderer", $"Invalid shadow X={shadowX:F1}");
+#endif
                             return framePoint;
                         }
 
@@ -400,7 +426,9 @@ namespace GravityDefiedGame.Views
                 Log("ShadowRenderer", "Calculating shadow parameters", () => {
                     if (_gameController.CurrentLevel is null || framePoints.Count < 2)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Invalid level or insufficient points");
+#endif
                         return (0, 0, 1);
                     }
 
@@ -421,14 +449,18 @@ namespace GravityDefiedGame.Views
                         }
                         catch (Exception ex)
                         {
+#if DEBUG
                             Debug("ShadowRenderer", $"Error calculating height: {ex.Message}");
+#endif
                             continue;
                         }
                     }
 
                     if (validPointsCount == 0)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "No valid points for height calculation");
+#endif
                         return (0, 0, 1);
                     }
 
@@ -446,7 +478,9 @@ namespace GravityDefiedGame.Views
                     }
                     catch (Exception ex)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", $"Error getting center Y: {ex.Message}");
+#endif
                     }
 
                     return (0, 0, 0);
@@ -462,7 +496,9 @@ namespace GravityDefiedGame.Views
                     var shadowPoints = new List<Point>();
                     if (!double.IsFinite(centerX) || !double.IsFinite(centerY) || !double.IsFinite(scale))
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Invalid shadow parameters");
+#endif
                         return shadowPoints;
                     }
 
@@ -513,7 +549,9 @@ namespace GravityDefiedGame.Views
                 Log("ShadowRenderer", "Creating shadow figure", () => {
                     if (shadowPoints.Count < 2)
                     {
+#if DEBUG
                         Debug("ShadowRenderer", "Not enough points for shadow figure");
+#endif
                         return null;
                     }
 
@@ -533,7 +571,9 @@ namespace GravityDefiedGame.Views
                         }
                         catch (Exception ex)
                         {
+#if DEBUG
                             Debug("ShadowRenderer", $"Error adding segment: {ex.Message}");
+#endif
                         }
                     }
 
@@ -564,7 +604,9 @@ namespace GravityDefiedGame.Views
                         _skeletonLines[lineType] = new List<Line>();
                         CreateLinesForType(lineType);
                     }
+#if DEBUG
                     Info("SkeletonRenderer", "Skeleton lines initialized");
+#endif
                 });
 
             private void CreateLinesForType(SkeletonLineType lineType) =>

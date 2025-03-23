@@ -66,7 +66,9 @@ namespace GravityDefiedGame
 
         public MainWindow()
         {
+#if DEBUG
             Info("MainWindow", "Application starting...");
+#endif
             InitializeComponent();
             _gameController = new();
             _gameController.GameEvent += GameController_GameEvent;
@@ -117,7 +119,9 @@ namespace GravityDefiedGame
                 string bikeName = GetBikeTypeName(bikeType);
                 _gameController.SetBikeType(bikeType);
                 ShowNotification($"Selected bike: {bikeName}");
+#if DEBUG
                 Info("MainWindow", $"Bike type changed to {bikeType}");
+#endif
 
                 BikeSelectOverlay.Visibility = Visibility.Collapsed;
 
@@ -136,7 +140,9 @@ namespace GravityDefiedGame
             Closing += (_, _) =>
             {
                 _gameLoopCts?.Cancel();
+#if DEBUG
                 Info("MainWindow", "Application closing");
+#endif
             };
         }
 
@@ -148,7 +154,9 @@ namespace GravityDefiedGame
                 InitializeTimers();
                 InitializeUI();
                 StartGame(1);
+#if DEBUG
                 Info("MainWindow", "Window loaded and game started");
+#endif
             });
 
         #region Initialization
@@ -299,7 +307,9 @@ namespace GravityDefiedGame
                 // Set focus for keyboard input
                 Focus();
 
+#if DEBUG
                 Info("MainWindow", $"Level {levelId} started");
+#endif
             });
 
         private void UpdateLevelNameDisplay() =>
@@ -330,7 +340,9 @@ namespace GravityDefiedGame
                 StopGameTimers();
                 _gameController.PauseGame();
                 ShowMenu("ПАУЗА");
+#if DEBUG
                 Info("MainWindow", "Game paused");
+#endif
             });
 
         private void ResumeGame() =>
@@ -343,7 +355,9 @@ namespace GravityDefiedGame
                 _gameController.ResumeGame();
                 _lastUpdateTime = _gameStopwatch.Elapsed;
                 Focus();
+#if DEBUG
                 Info("MainWindow", "Game resumed");
+#endif
             });
 
         private void RestartCurrentLevel()
@@ -363,7 +377,9 @@ namespace GravityDefiedGame
             else
             {
                 ShowLevelSelect();
+#if DEBUG
                 Info("MainWindow", "All levels completed");
+#endif
             }
         }
 
@@ -379,7 +395,9 @@ namespace GravityDefiedGame
                 _currentGameState = GameState.LevelComplete;
                 StopGameTimers();
                 ShowMenu("УРОВЕНЬ ПРОЙДЕН!");
+#if DEBUG
                 Info("MainWindow", "Level completed");
+#endif
             });
 
         private void GameOver() =>
@@ -388,7 +406,9 @@ namespace GravityDefiedGame
                 _currentGameState = GameState.GameOver;
                 StopGameTimers();
                 ShowMenu("ИГРА ОКОНЧЕНА");
+#if DEBUG
                 Info("MainWindow", "Game over");
+#endif
             });
 
         #endregion

@@ -406,6 +406,7 @@ namespace GravityDefiedGame.Models
                 _bike.WheelieTime = wheelieTime;
                 _bike.StoppieTime = stoppieTime;
 
+#if DEBUG
                 if (_bike.IsInWheelie && !wasInWheelie)
                     Info("TricksComponent", "Wheelie started");
                 else if (!_bike.IsInWheelie && wasInWheelie)
@@ -415,6 +416,7 @@ namespace GravityDefiedGame.Models
                     Info("TricksComponent", "Stoppie started");
                 else if (!_bike.IsInStoppie && wasInStoppie)
                     Info("TricksComponent", $"Stoppie ended, duration: {stoppieTime:F2}s");
+#endif
             });
 
         private static void UpdateTrickTime(bool wasActive, bool isActive, ref double trickTime)
@@ -505,6 +507,7 @@ namespace GravityDefiedGame.Models
                     ? _bike.State & ~BikeState.InAir
                     : _bike.State | BikeState.InAir;
 
+#if DEBUG
                 if (wasInAir && !_bike.IsInAir)
                 {
                     Info("SuspensionComponent", "Landed");
@@ -513,6 +516,7 @@ namespace GravityDefiedGame.Models
                 {
                     Info("SuspensionComponent", "Became airborne");
                 }
+#endif
             });
 
         public bool HandleWheelCollision(bool isFrontWheel, double groundY, Vector normal, Level level, double deltaTime) =>
@@ -611,10 +615,16 @@ namespace GravityDefiedGame.Models
                     Vector frictionForce = tangent * (-tangentialVelocity * _physics.GroundFriction * FrictionForceMultiplier);
                     bool isSlipping = frictionForce.Length > maxFriction;
 
+#if DEBUG
                     if (isSlipping)
                     {
                         string wheel = isFrontWheel ? "Front" : "Rear";
                         Info("SuspensionComponent", $"{wheel} wheel slipping");
+                    }
+#endif
+
+                    if (isSlipping)
+                    {
                         frictionForce = frictionForce * (maxFriction / frictionForce.Length);
                     }
 
@@ -686,7 +696,9 @@ namespace GravityDefiedGame.Models
                 if (collisionInfo.MaxPenetration > crashThreshold && (isHighSpeed || isBadAngle))
                 {
                     _bike.State |= BikeState.Crashed;
+#if DEBUG
                     Info("CollisionComponent", "Bike crashed due to frame collision");
+#endif
                 }
                 else
                 {
@@ -829,7 +841,9 @@ namespace GravityDefiedGame.Models
                 MinWheelDistance = NominalWheelBase * WheelDistanceMinRatio;
                 MaxWheelDistance = NominalWheelBase * WheelDistanceMaxRatio;
 
+#if DEBUG
                 Info("BikePhysics", $"Initialized {bikeType} bike with mass: {Mass}, power: {EnginePower}, brake: {BrakeForce}");
+#endif
             });
 
         public void Reset() =>
@@ -838,7 +852,9 @@ namespace GravityDefiedGame.Models
                 _stateComponent.Reset();
                 _kinematicsComponent.UpdateAttachmentPoints();
                 _kinematicsComponent.UpdateWheelPositions();
+#if DEBUG
                 Info("BikePhysics", "Bike reset to initial state");
+#endif
             });
 
         public void SetPosition(Point position) =>
@@ -937,11 +953,13 @@ namespace GravityDefiedGame.Models
                 CheckCrashConditions();
                 _tricksComponent.UpdateTrickStates(deltaTime);
 
+#if DEBUG
                 if (++_updateCounter >= StatusLogInterval)
                 {
                     Debug("BikePhysics", $"Status: vel={_bike.Velocity.Length:F2}, angle={_bike.Angle:F2}, inAir={_bike.IsInAir}");
                     _updateCounter = 0;
                 }
+#endif
 
                 SanitizePhysicalState();
             });
@@ -956,7 +974,9 @@ namespace GravityDefiedGame.Models
                 if (Abs(_bike.Angle) > CriticalLeanAngle)
                 {
                     _bike.State |= BikeState.Crashed;
+#if DEBUG
                     Info("BikePhysics", $"Bike crashed due to critical lean angle: {_bike.Angle:F2}");
+#endif
                     return;
                 }
 
@@ -964,7 +984,9 @@ namespace GravityDefiedGame.Models
                 if (currentDistance < MinWheelDistance || currentDistance > MaxWheelDistance)
                 {
                     _bike.State |= BikeState.Crashed;
+#if DEBUG
                     Info("BikePhysics", $"Bike crashed due to invalid wheel distance: {currentDistance:F2}");
+#endif
                 }
             });
 
@@ -1089,7 +1111,9 @@ namespace GravityDefiedGame.Models
                 if (_bike.IsInAir || !_bike.WasInAir || _airTime <= SignificantAirTimeThreshold)
                     return;
 
+#if DEBUG
                 Info("StateComponent", $"Air time: {_airTime:F2}s");
+#endif
                 _airTime = 0;
             }
 
