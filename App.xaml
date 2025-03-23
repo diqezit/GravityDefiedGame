@@ -112,26 +112,39 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Window}">
                         <Border x:Name="WindowBorder" 
-                                Background="{StaticResource BaseBrush}"
-                                CornerRadius="18"
-                                BorderBrush="{StaticResource MauveBrush}"
-                                BorderThickness="1">
+                        Background="{StaticResource BaseBrush}"
+                        BorderBrush="{StaticResource MauveBrush}"
+                        BorderThickness="1">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="18"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
+                                            <Setter Property="CornerRadius" Value="0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <Border.Effect>
                                 <DropShadowEffect ShadowDepth="0" 
-                                                  BlurRadius="20" 
-                                                  Color="#88000000" 
-                                                  Opacity="0.5"/>
+                                          BlurRadius="10" 
+                                          Color="#88000000" 
+                                          Opacity="0.3"/>
                             </Border.Effect>
-                            <Grid>
+                            <Border.Clip>
+                                <RectangleGeometry RadiusX="18" RadiusY="18" Rect="0,0,1000,700"/>
+                            </Border.Clip>
+                            <Grid Background="Transparent">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
+                                <!-- Заголовок окна -->
                                 <Border Grid.Row="0" 
-                                        Background="{StaticResource HeaderGradient}"
-                                        CornerRadius="18,18,0,0"
-                                        Height="42">
+                                Background="{StaticResource HeaderGradient}"
+                                CornerRadius="18,18,0,0"
+                                Height="42">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -140,44 +153,63 @@
                                         </Grid.ColumnDefinitions>
 
                                         <Border Grid.Column="0"
-                                                Background="{StaticResource MauveBrush}"
-                                                CornerRadius="12"
-                                                Width="24"
-                                                Height="24"
-                                                Margin="15,0,8,0">
+                                        Background="{StaticResource MauveBrush}"
+                                        CornerRadius="12"
+                                        Width="24"
+                                        Height="24"
+                                        Margin="15,0,8,0">
                                             <TextBlock Text="🏍️" 
-                                                       FontSize="14" 
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
+                                               FontSize="14" 
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
                                         </Border>
 
                                         <TextBlock Grid.Column="1" 
-                                                   Text="Gravity Defied"
-                                                   FontSize="16"
-                                                   FontWeight="Bold"
-                                                   Foreground="{StaticResource TextBrush}"
-                                                   VerticalAlignment="Center"
-                                                   HorizontalAlignment="Center"/>
+                                           Text="Gravity Defied"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource TextBrush}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"/>
 
                                         <StackPanel Grid.Column="2" 
-                                                    Orientation="Horizontal"
-                                                    HorizontalAlignment="Right"
-                                                    Margin="0,0,8,0">
+                                            Orientation="Horizontal"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,0,8,0">
                                             <Button x:Name="MinimizeButton" 
-                                                    Content="─"
-                                                    Width="34"
-                                                    Height="34"
-                                                    Style="{StaticResource WindowControlButton}"/>
+                                            Content="─"
+                                            Width="34"
+                                            Height="34"
+                                            Style="{StaticResource WindowControlButton}"/>
+                                            <Button x:Name="MaximizeButton" 
+                                            Content="□"
+                                            Width="34"
+                                            Height="34"
+                                            Style="{StaticResource WindowControlButton}"/>
                                             <Button x:Name="CloseButton" 
-                                                    Content="✕"
-                                                    Width="34"
-                                                    Height="34"
-                                                    Style="{StaticResource WindowControlButton}"/>
+                                            Content="✕"
+                                            Width="34"
+                                            Height="34"
+                                            Style="{StaticResource WindowControlButton}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
-                                <ContentPresenter Grid.Row="1"/>
+                                <!-- Контент окна и resize grip -->
+                                <Grid Grid.Row="1">
+                                    <ContentPresenter/>
+                                    <Canvas HorizontalAlignment="Right" 
+                                    VerticalAlignment="Bottom" 
+                                    Width="20" 
+                                    Height="20" 
+                                    Margin="0,0,15,15" 
+                                    Panel.ZIndex="100"
+                                    Background="Transparent">
+                                        <Path Data="M0,0 L10,10 M5,0 L15,10 M10,0 L20,10" 
+                                      Stroke="{StaticResource SubtextBrush}" 
+                                      StrokeThickness="1.5"/>
+                                    </Canvas>
+                                </Grid>
                             </Grid>
                         </Border>
                     </ControlTemplate>

@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Data;
 using static GravityDefiedGame.Utilities.Logger;
 using System.ComponentModel.DataAnnotations;
+using System.Windows.Interop;
 
 namespace GravityDefiedGame
 {
@@ -155,10 +156,23 @@ namespace GravityDefiedGame
         private void InitializeWindow()
         {
             var minimizeButton = Template.FindName("MinimizeButton", this) as Button;
+            var maximizeButton = Template.FindName("MaximizeButton", this) as Button;
             var closeButton = Template.FindName("CloseButton", this) as Button;
 
             if (minimizeButton != null)
                 minimizeButton.Click += (s, e) => WindowState = WindowState.Minimized;
+
+            if (maximizeButton != null)
+            {
+                maximizeButton.Click += (s, e) =>
+                {
+                    WindowState = WindowState == WindowState.Normal ? WindowState.Maximized : WindowState.Normal;
+                };
+                StateChanged += (s, e) =>
+                {
+                    maximizeButton.Content = WindowState == WindowState.Maximized ? "🗗" : "□";
+                };
+            }
 
             if (closeButton != null)
                 closeButton.Click += (s, e) => Application.Current.Shutdown();
@@ -168,6 +182,32 @@ namespace GravityDefiedGame
                 if (e.ButtonState == MouseButtonState.Pressed)
                     DragMove();
             };
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            HwndSource source = PresentationSource.FromVisual(this) as HwndSource;
+            if (source != null)
+            {
+                source.AddHook(WndProc);
+            }
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == 0x84) // WM_NCHITTEST
+            {
+                var mousePosScreen = new Point((int)lParam & 0xFFFF, (int)lParam >> 16);
+                var mousePosClient = PointFromScreen(mousePosScreen);
+                var gripSize = 20;
+                if (mousePosClient.X >= ActualWidth - gripSize && mousePosClient.Y >= ActualHeight - gripSize)
+                {
+                    handled = true;
+                    return new IntPtr(17); // HTBOTTOMRIGHT
+                }
+            }
+            return IntPtr.Zero;
         }
 
         private void InitializeGameComponents()
@@ -474,8 +514,8 @@ namespace GravityDefiedGame
         private void GameController_GameEvent(object? sender, GameEventArgs e) =>
             Dispatcher.InvokeAsync(() =>
             {
-            switch (e.Type)
-            {
+                switch (e.Type)
+                {
                     case GameEventType.LevelComplete:
                         ShowNotification("Уровень пройден!");
                         break;

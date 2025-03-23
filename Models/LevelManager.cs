@@ -204,7 +204,7 @@ namespace GravityDefiedGame.Models
         private void GenerateLevel(int seed) =>
             Log("Level", $"Generating with seed {seed}", () =>
             {
-                var gen = new LevelGenerator(seed, Difficulty, new DefaultSegmentSelectionStrategy());
+                var gen = new LevelGenerator(seed, Difficulty, new SegmentSelection());
 
                 double terrainLength = Min(BaseTerrainLength + TerrainLengthIncreasePerLevel * Difficulty, MaxTerrainLength);
 
@@ -290,17 +290,17 @@ namespace GravityDefiedGame.Models
             private readonly int _segmentCount;
             private readonly int _pointCount;
             private readonly int _terrainTypeCount;
-            private readonly ISegmentSelectionStrategy _segmentStrategy;
+            private readonly ISegmentSelection _segment;
 
             #endregion Enums and Fields
 
             #region Constructor
 
-            public LevelGenerator(int seed, int difficulty, ISegmentSelectionStrategy segmentStrategy)
+            public LevelGenerator(int seed, int difficulty, ISegmentSelection segment)
             {
                 _rand = new Random(seed);
                 _difficulty = Max(1, difficulty);
-                _segmentStrategy = segmentStrategy ?? throw new ArgumentNullException(nameof(segmentStrategy));
+                _segment = segment ?? throw new ArgumentNullException(nameof(segment));
 
                 _spikeHeight = Min(BaseSpikeHeight + SpikeHeightIncreasePerLevel * _difficulty, MaxSpikeHeight);
                 _depressionDepth = Min(BaseDepressionDepth + DepressionDepthIncreasePerLevel * _difficulty, MaxDepressionDepth);
@@ -348,7 +348,7 @@ namespace GravityDefiedGame.Models
                 _segmentTypes.Add(TerrainSegmentType.Plateau);
                 for (int i = 1; i < _segmentCount; i++)
                 {
-                    TerrainSegmentType nextType = _segmentStrategy.SelectSegment(_segmentTypes, i, _terrainTypeCount, _rand, _difficulty);
+                    TerrainSegmentType nextType = _segment.SelectSegment(_segmentTypes, i, _terrainTypeCount, _rand, _difficulty);
                     _segmentTypes.Add(nextType);
                 }
 
@@ -495,9 +495,9 @@ namespace GravityDefiedGame.Models
         #endregion LevelGenerator
     }
 
-    #region Segment Selection Strategy
+    #region Segment Selection
 
-    public interface ISegmentSelectionStrategy
+    public interface ISegmentSelection
     {
         TerrainSegmentType SelectSegment(
             List<TerrainSegmentType> previousSegments,
@@ -507,7 +507,7 @@ namespace GravityDefiedGame.Models
             int difficulty);
     }
 
-    public class DefaultSegmentSelectionStrategy : ISegmentSelectionStrategy
+    public class SegmentSelection : ISegmentSelection
     {
         public TerrainSegmentType SelectSegment(
             List<TerrainSegmentType> previousSegments,
