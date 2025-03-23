@@ -51,7 +51,7 @@ namespace GravityDefiedGame.Controllers
                 Levels.Clear();
                 var random = new Random();
 
-                for (int i = 1; i <= 10; i++)  // Количество доступных уровней
+                for (int i = 1; i <= 25; i++)  // Количество доступных уровней (25)
                 {
                     int seed = random.Next();
                     Levels.Add(new Level(i, $"Level {i}", seed));
