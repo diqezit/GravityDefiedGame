@@ -78,7 +78,7 @@ namespace GravityDefiedGame.Models
 
         public const int
             MinTerrainTypeCount = 3,
-            MaxTerrainTypeCount = 7, // Увеличено до 7 для новых типов
+            MaxTerrainTypeCount = 7,
             TerrainTypeUnlockLevel = 5;
 
         public const double
@@ -155,7 +155,7 @@ namespace GravityDefiedGame.Models
         public Color TerrainColor => ThemeConstants.TerrainColor;
         public Color SafeZoneColor => ThemeConstants.SafeZoneColor;
 
-        private int _currentSegmentIndex = 0; // Кэшированный индекс текущего сегмента
+        private int _currentSegmentIndex = 0;
 
         #endregion Properties
 
@@ -171,7 +171,9 @@ namespace GravityDefiedGame.Models
                 Name = name;
                 Difficulty = difficulty ?? id;
                 Theme = GetThemeForLevel(id);
-                GenerateLevel(seed ?? id * DefaultSeedMultiplier);
+
+                int levelSeed = seed ?? (id * DefaultSeedMultiplier + DateTime.Now.Millisecond);
+                GenerateLevel(levelSeed);
 #if DEBUG
                 Info("Level", $"Level {id} created: Length={Length:F0}, Difficulty={Difficulty}");
             });
@@ -187,7 +189,7 @@ namespace GravityDefiedGame.Models
         public double GetGroundYAtX(double x)
         {
             if (IsOutOfBounds(x)) return GetOutOfBoundsValue(x);
-            UpdateSegmentIndex(x); // Обновляем индекс сегмента при необходимости
+            UpdateSegmentIndex(x);
             return InterpolateGroundY(x);
         }
 
@@ -265,7 +267,7 @@ namespace GravityDefiedGame.Models
                 var p1 = TerrainPoints[_currentSegmentIndex];
                 var p2 = TerrainPoints[_currentSegmentIndex + 1];
                 if (x >= p1.X && x < p2.X)
-                    return; // Всё ещё в текущем сегменте
+                    return;
             }
 
             if (_currentSegmentIndex < TerrainPoints.Count - 2)
@@ -350,8 +352,7 @@ namespace GravityDefiedGame.Models
             }
 
             private readonly Random _rand;
-            private readonly List<TerrainSegmentType> _segmentTypes = new();
-            private readonly Dictionary<TerrainSegmentType, Func<double, double>> _variationStrategies;
+            private readonly List<(TerrainSegmentType Type, object? Parameters)> _segments = new();
             private readonly int _difficulty;
             private readonly double _spikeHeight;
             private readonly double _depressionDepth;
@@ -376,7 +377,7 @@ namespace GravityDefiedGame.Models
                 _previousPointWeight = Max(BasePreviousPointWeight - PreviousPointWeightDecreasePerLevel * _difficulty, MinPreviousPointWeight);
 
                 int baseSegments = BaseSegmentCount + SegmentCountIncreasePerLevel * _difficulty;
-                int variation = _rand.Next(-2, 3); // Случайная вариация от -2 до +2
+                int variation = _rand.Next(-2, 3);
                 _segmentCount = Max(1, Min(baseSegments + variation, MaxSegmentCount));
 
                 _pointCount = Min(BasePointCount + PointCountIncreasePerLevel * _difficulty, MaxPointCount);
@@ -386,59 +387,46 @@ namespace GravityDefiedGame.Models
 
                 _terrainTypeCount = Min(MinTerrainTypeCount + (_difficulty / TerrainTypeUnlockLevel), MaxTerrainTypeCount);
 
-                _variationStrategies = new Dictionary<TerrainSegmentType, Func<double, double>>
-                {
-                    [TerrainSegmentType.Plateau] = _ => 0,
-                    [TerrainSegmentType.Spike] = prog =>
-                    {
-                        double spike = (_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _spikeHeight;
-                        double pos = _rand.NextDouble();
-                        return spike * Exp(-GaussianFactor * Pow(prog - pos, 2));
-                    },
-                    [TerrainSegmentType.Depression] = prog =>
-                    {
-                        double dep = (_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _depressionDepth;
-                        double pos = _rand.NextDouble();
-                        return -dep * Exp(-GaussianFactor * Pow(prog - pos, 2));
-                    },
-                    [TerrainSegmentType.StepUp] = prog =>
-                    {
-                        double height = _rand.NextDouble() * _spikeHeight * SpikeMidFactor;
-                        return height * Min(1.0, prog * 2);
-                    },
-                    [TerrainSegmentType.StepDown] = prog =>
-                    {
-                        double depth = _rand.NextDouble() * _depressionDepth * SpikeMidFactor;
-                        return -depth * Min(1.0, prog * 2);
-                    },
-                    [TerrainSegmentType.Wave] = prog =>
-                    {
-                        double amplitude = _rand.NextDouble() * _spikeHeight * 0.5;
-                        double frequency = 2 + _rand.NextDouble() * 2;
-                        return amplitude * Sin(frequency * prog * PI);
-                    },
-                    [TerrainSegmentType.Jump] = prog =>
-                    {
-                        double height = _rand.NextDouble() * _spikeHeight;
-                        double jumpPos = 0.5; // Прыжок в середине сегмента
-                        return prog > jumpPos ? height : 0;
-                    }
-                };
-
                 GenerateSegmentTypes();
             }
 
             private void GenerateSegmentTypes()
             {
-                _segmentTypes.Add(TerrainSegmentType.Plateau);
+                _segments.Clear();
+                _segments.Add((TerrainSegmentType.Plateau, null));
+
                 for (int i = 1; i < _segmentCount; i++)
                 {
-                    TerrainSegmentType nextType = _segment.SelectSegment(_segmentTypes, i, _terrainTypeCount, _rand, _difficulty);
-                    _segmentTypes.Add(nextType);
+                    TerrainSegmentType nextType = _segment.SelectSegment(_segments.Select(s => s.Type).ToList(), i, _terrainTypeCount, _rand, _difficulty);
+                    object parameters = GenerateParameters(nextType);
+                    _segments.Add((nextType, parameters));
                 }
 
-                if (_segmentTypes.Count > 2 && _rand.NextDouble() < FinalPlateauChance)
-                    _segmentTypes[_segmentTypes.Count - 1] = TerrainSegmentType.Plateau;
+                if (_segments.Count > 2 && _rand.NextDouble() < FinalPlateauChance)
+                    _segments[_segments.Count - 1] = (TerrainSegmentType.Plateau, null);
+            }
+
+            private object? GenerateParameters(TerrainSegmentType type)
+            {
+                switch (type)
+                {
+                    case TerrainSegmentType.Plateau:
+                        return null;
+                    case TerrainSegmentType.Spike:
+                        return new { Height = (_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _spikeHeight, Pos = _rand.NextDouble() };
+                    case TerrainSegmentType.Depression:
+                        return new { Depth = (_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _depressionDepth, Pos = _rand.NextDouble() };
+                    case TerrainSegmentType.StepUp:
+                        return new { Height = _rand.NextDouble() * _spikeHeight * SpikeMidFactor };
+                    case TerrainSegmentType.StepDown:
+                        return new { Depth = _rand.NextDouble() * _depressionDepth * SpikeMidFactor };
+                    case TerrainSegmentType.Wave:
+                        return new { Amplitude = _rand.NextDouble() * _spikeHeight * 0.5, Frequency = 2 + _rand.NextDouble() * 2 };
+                    case TerrainSegmentType.Jump:
+                        return new { Height = _rand.NextDouble() * _spikeHeight, JumpPos = 0.3 + _rand.NextDouble() * 0.4 };
+                    default:
+                        throw new ArgumentException("Неизвестный тип сегмента");
+                }
             }
 
             #endregion Constructor
@@ -562,9 +550,48 @@ namespace GravityDefiedGame.Models
             private double GetRawTerrainHeight(double baseY, double progress)
             {
                 int segmentIndex = Min((int)(progress * _segmentCount), _segmentCount - 1);
+
                 double segmentProgress = progress * _segmentCount - segmentIndex;
-                TerrainSegmentType segmentType = _segmentTypes[segmentIndex];
-                return baseY + _variationStrategies[segmentType](segmentProgress);
+
+                segmentProgress = (segmentProgress + (_rand.NextDouble() * 0.3)) % 1.0;
+
+                var (type, parameters) = _segments[segmentIndex];
+                return baseY + ApplyVariation(type, parameters, segmentProgress);
+            }
+
+            private double ApplyVariation(TerrainSegmentType type, object? parameters, double progress)
+            {
+                switch (type)
+                {
+                    case TerrainSegmentType.Plateau:
+                        return 0;
+                    case TerrainSegmentType.Spike:
+                        if (parameters == null) throw new InvalidOperationException("Parameters for Spike cannot be null");
+                        var spikeParams = (dynamic)parameters;
+                        return spikeParams.Height * Math.Exp(-GaussianFactor * Math.Pow(progress - spikeParams.Pos, 2));
+                    case TerrainSegmentType.Depression:
+                        if (parameters == null) throw new InvalidOperationException("Parameters for Depression cannot be null");
+                        var depParams = (dynamic)parameters;
+                        return -depParams.Depth * Math.Exp(-GaussianFactor * Math.Pow(progress - depParams.Pos, 2));
+                    case TerrainSegmentType.StepUp:
+                        if (parameters == null) throw new InvalidOperationException("Parameters for StepUp cannot be null");
+                        var stepUpParams = (dynamic)parameters;
+                        return stepUpParams.Height * Math.Min(1.0, progress * 2);
+                    case TerrainSegmentType.StepDown:
+                        if (parameters == null) throw new InvalidOperationException("Parameters for StepDown cannot be null");
+                        var stepDownParams = (dynamic)parameters;
+                        return -stepDownParams.Depth * Math.Min(1.0, progress * 2);
+                    case TerrainSegmentType.Wave:
+                        if (parameters == null) throw new InvalidOperationException("Parameters for Wave cannot be null");
+                        var waveParams = (dynamic)parameters;
+                        return waveParams.Amplitude * Math.Sin((waveParams.Frequency * progress + _rand.NextDouble()) * Math.PI);
+                    case TerrainSegmentType.Jump:
+                        if (parameters == null) throw new InvalidOperationException("Parameters for Jump cannot be null");
+                        var jumpParams = (dynamic)parameters;
+                        return progress > jumpParams.JumpPos ? jumpParams.Height : 0;
+                    default:
+                        throw new ArgumentException("Неизвестный тип сегмента");
+                }
             }
 
             private double ApplyTransitions(double y, double baseY, double progress)
@@ -610,7 +637,8 @@ namespace GravityDefiedGame.Models
 
             if (currentIndex > 0 && nextType == previousSegments[currentIndex - 1])
             {
-                nextType = (TerrainSegmentType)((rand.Next(terrainTypeCount - 1) + (int)nextType + 1) % terrainTypeCount);
+                int offset = rand.Next(1, terrainTypeCount);
+                nextType = (TerrainSegmentType)(((int)nextType + offset) % terrainTypeCount);
             }
             if (difficulty > SegmentDifficultyThreshold &&
                 rand.NextDouble() < SegmentDifficultyChance * (difficulty / SegmentDifficultyDivisor))
