@@ -4,13 +4,13 @@
              xmlns:local="clr-namespace:GravityDefiedGame"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <Color x:Key="BaseColor">#FF1E1E2E</Color>
-        <Color x:Key="MantelColor">#FF181825</Color>
-        <Color x:Key="CrustColor">#FF11111B</Color>
+        <Color x:Key="BaseColor">#FF363646</Color>
+        <Color x:Key="MantelColor">#FF30303D</Color>
+        <Color x:Key="CrustColor">#FF292933</Color>
 
         <Color x:Key="TextColor">#FFCDD6F4</Color>
         <Color x:Key="SubtextColor">#FFBAC2DE</Color>
-        <Color x:Key="OverlayColor">#DD11111B</Color>
+        <Color x:Key="OverlayColor">#DD393943</Color>
 
         <Color x:Key="BlueColor">#FF89DCFF</Color>
         <Color x:Key="SapphireColor">#FF74C7EC</Color>
@@ -72,8 +72,8 @@
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#FF313244" Offset="0"/>
-            <GradientStop Color="#FF1E1E2E" Offset="1"/>
+            <GradientStop Color="#FF5A5A6A" Offset="0"/>
+            <GradientStop Color="#FF464656" Offset="1"/>
         </LinearGradientBrush>
 
         <Style x:Key="WindowControlButton" TargetType="Button">
@@ -278,7 +278,7 @@
                             <Border x:Name="ButtonBorder" 
                                     Background="{TemplateBinding Background}"
                                     CornerRadius="16"
-BorderThickness="1"
+                                    BorderThickness="1"
                                     BorderBrush="#66FFFFFF">
                                 <Border.Effect>
                                     <DropShadowEffect ShadowDepth="0" 

@@ -46,7 +46,7 @@ namespace GravityDefiedGame.Utilities
                 leanSpeed: 6.0,             // Скорость изменения наклона
                 friction: 1.0,              // Базовый коэффициент трения
                 suspensionStrength: 8000.0, // Жесткость подвески
-                suspensionDamping: 800.0,   // Демпфирование подвески
+                suspensionDamping: 1000.0,  // Демпфирование подвески
                 suspensionRestLength: 25.0, // Длина подвески в покое
                 maxSuspensionAngle: Math.PI / 12 // Максимальный угол отклонения подвески
             );
@@ -178,14 +178,14 @@ namespace GravityDefiedGame.Utilities
                 ProgressiveFactorMultiplier = 2.0,     // Множитель прогрессивного фактора
                 WheelRadiusHalfFactor = 0.5,           // Половина радиуса колеса для расчетов
                 WheelieReducedSuspensionFactor = 0.3,  // Уменьшение подвески при вилли
-                CompressionSmoothingFactor = 0.3,      // Фактор сглаживания сжатия подвески
+                CompressionSmoothingFactor = 0.5,      // Фактор сглаживания сжатия подвески
                 LargeSuspensionChangeThreshold = 0.2,  // Порог большого изменения подвески
                 LargeSuspensionChangeSmoothingFactor = 0.4, // Фактор сглаживания при большом изменении
                 CompressionRatioBase = 1.0,            // Базовое соотношение сжатия
                 ProgressiveFactorForceMultiplier = 2.0,// Множитель силы прогрессивного фактора
-                VelocityDampingFactor = 0.5,           // Фактор демпфирования скорости
+                VelocityDampingFactor = 1.0,           // Фактор демпфирования скорости
                 FrictionForceMultiplier = 0.8,         // Множитель силы трения
-                ReactionForceSmoothingFactor = 0.5,    // Фактор сглаживания силы реакции
+                ReactionForceSmoothingFactor = 0.7,    // Фактор сглаживания силы реакции
                 LandingSmoothingFactor = 0.6,          // Фактор сглаживания при приземлении
                 WheelieIntensityDampingMax = 0.7,      // Максимальное демпфирование интенсивности вилли
                 WheelieIntensityDampingMultiplier = 0.8;// Множитель демпфирования интенсивности вилли

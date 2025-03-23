@@ -14,6 +14,15 @@ using static GravityDefiedGame.Utilities.Logger;
 
 namespace GravityDefiedGame.Views
 {
+    // Класс для хранения цветов уровней 
+    public static class ThemeConstants
+    {
+        public static readonly Color BackgroundColor = Color.FromRgb(255, 204, 102);
+        public static readonly Color TerrainColor = Color.FromRgb(204, 153, 102);
+        public static readonly Color SafeZoneColor = Color.FromRgb(152, 251, 152);
+        public static readonly Color VerticalLineColor = Color.FromRgb(204, 153, 102); // цвет для вертикальных линий
+    }
+
     public class Renderer
     {
         #region Constants
@@ -69,7 +78,7 @@ namespace GravityDefiedGame.Views
             WheelStroke: new(Colors.Black),
             SpokeStroke: new(Colors.Black),
             TerrainFill: null,
-            TerrainStroke: new(Colors.Green),
+            TerrainStroke: new(ThemeConstants.TerrainColor),
             SuspensionStroke: new(Colors.DarkGray),
             SuspensionFill: new(Color.FromRgb(180, 180, 180)),
             ShadowStroke: new(Color.FromArgb((byte)(255 * ShadowOpacity), 0, 0, 0))
@@ -224,7 +233,14 @@ namespace GravityDefiedGame.Views
                 }
 
                 if (_verticalLinesPath != null)
+                {
+                    var currentLevel = _gameController.CurrentLevel;
+                    if (currentLevel != null)
+                    {
+                        _verticalLinesPath.Stroke = new SolidColorBrush(currentLevel.VerticalLineColor);
+                    }
                     _verticalLinesPath.Data = verticalGeometry;
+                }
             });
 
         private void UpdateMotorcycleVisual(CancellationToken cancellationToken) =>

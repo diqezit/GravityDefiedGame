@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using GravityDefiedGame.Utilities;
+using GravityDefiedGame.Views;
 using static System.Math;
 using static GravityDefiedGame.Utilities.Logger;
 using static GravityDefiedGame.Models.LevelConstants;
@@ -22,12 +23,6 @@ namespace GravityDefiedGame.Models
             InterpolationFactor = 1.0;     // Фактор интерполяции
 
         public const int DefaultSeedMultiplier = 100;  // Множитель для генерации
-
-        public static readonly LevelThemeColors DesertTheme = new(
-            Background: Color.FromRgb(255, 204, 102),
-            Terrain: Color.FromRgb(204, 153, 102),
-            SafeZone: Color.FromRgb(152, 251, 152)
-        );
     }
 
     public static class GeneratorConstants
@@ -64,7 +59,6 @@ namespace GravityDefiedGame.Models
         double SafeZoneEndLength = 300.0
     );
 
-    public record LevelThemeColors(Color Background, Color Terrain, Color SafeZone);
     public enum TerrainStyle { Default, Flat }
     public enum LevelTheme { Desert }
 
@@ -89,9 +83,10 @@ namespace GravityDefiedGame.Models
         public double SafeZoneStartLength { get; private set; }
         public double SafeZoneEndLength { get; private set; }
 
-        public Color BackgroundColor => DesertTheme.Background;
-        public Color TerrainColor => DesertTheme.Terrain;
-        public Color SafeZoneColor => DesertTheme.SafeZone;
+        public Color VerticalLineColor => ThemeConstants.VerticalLineColor;
+        public Color BackgroundColor => ThemeConstants.BackgroundColor;
+        public Color TerrainColor => ThemeConstants.TerrainColor;
+        public Color SafeZoneColor => ThemeConstants.SafeZoneColor;
 
         public Level(int id, string name, int? seed = null)
         {
