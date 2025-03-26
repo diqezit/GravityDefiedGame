@@ -483,10 +483,10 @@ namespace GravityDefiedGame.Models
                 return normal;
             }, new Vector2(0, 1));
 
-        private float CalculateGripFactor(float slopeAngle) =>
+        private float CalculateGripFactor(float slopeAngle, float groundFriction) =>
             Log("SuspensionComponent", "calculating grip factor", () =>
             {
-                float grip = _physics.GroundFriction * (1.0f - (float)Abs(Sin(slopeAngle)) * SlopeGripReductionFactor);
+                float grip = groundFriction * (1.0f - (float)Abs(Sin(slopeAngle)) * SlopeGripReductionFactor);
                 return MathHelper.Max(grip, MinGripThreshold);
             }, MinGripThreshold);
 
@@ -538,7 +538,12 @@ namespace GravityDefiedGame.Models
         private void ProcessWheelPenetration(bool isFrontWheel, Vector2 wheelPos, float penetration, Vector2 normal, Level _, float deltaTime) =>
             Log("SuspensionComponent", $"processing {(isFrontWheel ? "front" : "rear")} wheel penetration", () =>
             {
-                // Обновляем состояние проникновения сразу
+                // Выбор параметров в зависимости от колеса
+                float suspensionStrength = isFrontWheel ? _physics.FrontSuspensionStrength : _physics.RearSuspensionStrength;
+                float suspensionDamping = isFrontWheel ? _physics.FrontSuspensionDamping : _physics.RearSuspensionDamping;
+                float groundFriction = isFrontWheel ? _physics.FrontGroundFriction : _physics.RearGroundFriction;
+
+                // Обновляем состояние проникновения
                 float prevPenetration = isFrontWheel ? _state.FrontPenetration : _state.RearPenetration;
                 float penetrationVelocity = (penetration - prevPenetration) / deltaTime;
                 float relativeVelocity = Vector2.Dot(_bike.Velocity, normal);
@@ -553,6 +558,10 @@ namespace GravityDefiedGame.Models
                     SetSuspensionOffset(isFrontWheel, _physics.SuspensionRestLength);
                     return;
                 }
+
+                // Расчет сцепления с учетом трения колеса
+                float slopeAngle = (float)Atan2(normal.Y, normal.X) - MathHelper.Pi;
+                float gripFactor = CalculateGripFactor(slopeAngle, groundFriction);
 
                 // Функция для расчета компрессии
                 float CalculateCompression()
@@ -598,21 +607,19 @@ namespace GravityDefiedGame.Models
                     float compressionRatio = CompressionRatioBase - newOffset / _physics.SuspensionRestLength;
                     float progressiveFactorForce = ProgressiveFactorBase +
                         (float)Pow(compressionRatio, 2) * ProgressiveFactorForceMultiplier;
-                    float adjustedSuspensionStrength = _physics.SuspensionStrength * progressiveFactorForce;
+                    float adjustedSuspensionStrength = suspensionStrength * progressiveFactorForce;
 
-                    float penetrationDamping = -_physics.SuspensionDamping * penetrationVelocity;
-                    float velocityDamping = -_physics.SuspensionDamping * relativeVelocity * VelocityDampingFactor;
+                    float penetrationDamping = -suspensionDamping * penetrationVelocity;
+                    float velocityDamping = -suspensionDamping * relativeVelocity * VelocityDampingFactor;
 
                     Vector2 suspensionForce = normal * (-adjustedSuspensionStrength * penetration);
                     Vector2 dampingForce = normal * (penetrationDamping + velocityDamping);
 
                     Vector2 tangent = new(-normal.Y, normal.X);
                     float tangentialVelocity = Vector2.Dot(_bike.Velocity, tangent);
-                    float slopeAngle = (float)Atan2(normal.Y, normal.X) - MathHelper.Pi;
-                    float gripFactor = CalculateGripFactor(slopeAngle);
                     float maxFriction = gripFactor * suspensionForce.Length();
 
-                    Vector2 frictionForce = tangent * (-tangentialVelocity * _physics.GroundFriction * FrictionForceMultiplier);
+                    Vector2 frictionForce = tangent * (-tangentialVelocity * groundFriction * FrictionForceMultiplier);
                     bool isSlipping = frictionForce.Length() > maxFriction;
 
 #if DEBUG
@@ -649,7 +656,6 @@ namespace GravityDefiedGame.Models
                     _bike.AngularVelocity += torque / _physics.MomentOfInertia * deltaTime;
                 }
 
-                // Основной код метода, вызывающий все локальные функции
                 float compression = CalculateCompression();
                 float newOffset = CalculateSuspensionOffset(compression);
                 Vector2 reactionForce = CalculateReactionForce(newOffset);
@@ -783,7 +789,8 @@ namespace GravityDefiedGame.Models
         public float DragCoefficient { get; private set; }
         public float EnginePower { get; private set; }
         public float Gravity { get; private set; }
-        public float GroundFriction { get; private set; }
+        public float FrontGroundFriction { get; private set; } // Трение переднего колеса
+        public float RearGroundFriction { get; private set; }  // Трение заднего колеса
         public float LeanSpeed { get; private set; }
         public float Mass { get; private set; }
         public float MaxLeanAngle { get; private set; }
@@ -791,13 +798,21 @@ namespace GravityDefiedGame.Models
         public float MinWheelDistance { get; private set; }
         public float MomentOfInertia { get; private set; }
         public float NominalWheelBase { get; private set; }
-        public float SuspensionDamping { get; private set; }
+        public float FrontSuspensionDamping { get; private set; } // Демпфирование передней подвески
+        public float RearSuspensionDamping { get; private set; }  // Демпфирование задней подвески
         public float SuspensionRestLength { get; private set; }
-        public float SuspensionStrength { get; private set; }
+        public float FrontSuspensionStrength { get; private set; } // Жесткость передней подвески
+        public float RearSuspensionStrength { get; private set; }  // Жесткость задней подвески
         public float WheelRadius { get; private set; } = DefaultWheelRadius;
         public float WheelieBalance { get; set; }
         public float StoppieBalance { get; set; }
         public float MaxSuspensionAngle { get; private set; }
+
+        // Устаревшее свойство GroundFriction (оставлено для совместимости, но не используется)
+        public float GroundFriction { get; private set; }
+        // Устаревшие свойства SuspensionStrength и SuspensionDamping (оставлены для совместимости)
+        public float SuspensionStrength { get; private set; }
+        public float SuspensionDamping { get; private set; }
 
         public (double cos, double sin) GetBikeTrigs() => (_trigCache.Cos, _trigCache.Sin);
 
@@ -828,18 +843,30 @@ namespace GravityDefiedGame.Models
                 var props = GetBikeProperties(bikeType);
                 var wheelProps = GetWheelProperties(bikeType);
 
-                (Mass, EnginePower, BrakeForce, DragCoefficient) = (props.mass, props.power, props.brakeForce, props.drag);
-                (MaxLeanAngle, LeanSpeed) = (props.maxLeanAngle, props.leanSpeed);
-                GroundFriction = props.friction * wheelProps.friction;
-                SuspensionStrength = props.suspensionStrength * wheelProps.suspensionStrength;
-                SuspensionDamping = props.suspensionDamping * wheelProps.suspensionDamping;
+                Mass = props.mass;
+                EnginePower = props.power;
+                BrakeForce = props.brakeForce;
+                DragCoefficient = props.drag;
+                MaxLeanAngle = props.maxLeanAngle;
+                LeanSpeed = props.leanSpeed;
+                FrontGroundFriction = props.friction * wheelProps.Front.friction;
+                RearGroundFriction = props.friction * wheelProps.Rear.friction;
+                FrontSuspensionStrength = props.suspensionStrength * wheelProps.Front.suspensionStrength;
+                RearSuspensionStrength = props.suspensionStrength * wheelProps.Rear.suspensionStrength;
+                FrontSuspensionDamping = props.suspensionDamping * wheelProps.Front.suspensionDamping;
+                RearSuspensionDamping = props.suspensionDamping * wheelProps.Rear.suspensionDamping;
                 SuspensionRestLength = props.suspensionRestLength;
                 MaxSuspensionAngle = props.maxSuspensionAngle;
-                WheelRadius = wheelProps.radius;
+                WheelRadius = wheelProps.Front.radius; // Предполагаем одинаковый радиус для обоих колес
                 MomentOfInertia = Mass * (float)Pow(_bike.WheelBase / 2, 2) * MomentOfInertiaMultiplier;
                 NominalWheelBase = _bike.WheelBase;
                 MinWheelDistance = NominalWheelBase * WheelDistanceMinRatio;
                 MaxWheelDistance = NominalWheelBase * WheelDistanceMaxRatio;
+
+                // Установка устаревших свойств для совместимости (если используются где-то еще)
+                GroundFriction = FrontGroundFriction; // Используем переднее трение как базовое
+                SuspensionStrength = FrontSuspensionStrength; // Используем переднюю жесткость как базовую
+                SuspensionDamping = FrontSuspensionDamping;   // Используем переднее демпфирование как базовое
 
 #if DEBUG
                 Info("BikePhysics", $"Initialized {bikeType} bike with mass: {Mass}, power: {EnginePower}, brake: {BrakeForce}");
@@ -922,9 +949,9 @@ namespace GravityDefiedGame.Models
                 _bike.AngularVelocity += totalTorque / MomentOfInertia * deltaTime;
 
                 UpdateLean(deltaTime, level);
-                _bike.Angle = MathHelper.WrapAngle(_bike.Angle + _bike.AngularVelocity * deltaTime); // Используем WrapAngle из MonoGame
+                _bike.Angle = MathHelper.WrapAngle(_bike.Angle + _bike.AngularVelocity * deltaTime);
 
-                float speed = _bike.Velocity.Length(); // Кэшируем скорость
+                float speed = _bike.Velocity.Length();
                 float groundY = level.GetGroundYAtX(_bike.Position.X);
                 if (_bike.Position.Y > groundY + MaxAllowedPenetration)
                 {
@@ -1062,7 +1089,8 @@ namespace GravityDefiedGame.Models
             _ => Bike.Standard
         };
 
-        private static WheelProperties GetWheelProperties(BikeType bikeType) => bikeType switch
+        private static (WheelProperties Front, WheelProperties Rear) 
+            GetWheelProperties(BikeType bikeType) => bikeType switch
         {
             BikeType.Standard => Wheels.Standard,
             BikeType.Sport => Wheels.Sport,

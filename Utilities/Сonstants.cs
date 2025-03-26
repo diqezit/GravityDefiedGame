@@ -350,25 +350,49 @@ namespace GravityDefiedGame.Utilities
 
         public static class Wheels
         {
-            public static readonly WheelProperties Standard = new(
-                radius: 15.0f,               // Радиус стандартного колеса
-                friction: 1.0f,              // Коэффициент трения колеса
-                suspensionStrength: 1.2f,    // Множитель жесткости подвески
-                suspensionDamping: 1.2f      // Множитель демпфирования подвески
+            public static readonly (WheelProperties Front, WheelProperties Rear) Standard = (
+                Front: new WheelProperties(
+                    radius: 15.0f,               // Радиус переднего колеса
+                    friction: 1.0f,              // Коэффициент трения переднего колеса
+                    suspensionStrength: 1.2f,    // Множитель жесткости подвески переднего колеса
+                    suspensionDamping: 1.2f      // Множитель демпфирования подвески переднего колеса
+                ),
+                Rear: new WheelProperties(
+                    radius: 15.0f,               // Радиус заднего колеса
+                    friction: 1.0f,              // Коэффициент трения заднего колеса
+                    suspensionStrength: 1.2f,    // Множитель жесткости подвески заднего колеса
+                    suspensionDamping: 1.2f      // Множитель демпфирования подвески заднего колеса
+                )
             );
 
-            public static readonly WheelProperties Sport = new(
-                radius: 14.0f,               // Радиус спортивного колеса
-                friction: 1.0f,              // Коэффициент трения колеса
-                suspensionStrength: 0.9f,    // Множитель жесткости подвески
-                suspensionDamping: 0.8f      // Множитель демпфирования подвески
+            public static readonly (WheelProperties Front, WheelProperties Rear) Sport = (
+                Front: new WheelProperties(
+                    radius: 14.0f,               // Радиус переднего колеса
+                    friction: 1.0f,              // Коэффициент трения переднего колеса
+                    suspensionStrength: 0.9f,    // Множитель жесткости подвески переднего колеса
+                    suspensionDamping: 0.8f      // Множитель демпфирования подвески переднего колеса
+                ),
+                Rear: new WheelProperties(
+                    radius: 14.0f,               // Радиус заднего колеса
+                    friction: 1.0f,              // Коэффициент трения заднего колеса
+                    suspensionStrength: 0.9f,    // Множитель жесткости подвески заднего колеса
+                    suspensionDamping: 0.8f      // Множитель демпфирования подвески заднего колеса
+                )
             );
 
-            public static readonly WheelProperties OffRoad = new(
-                radius: 18.0f,               // Радиус внедорожного колеса
-                friction: 1.0f,              // Коэффициент трения колеса
-                suspensionStrength: 1.3f,    // Множитель жесткости подвески
-                suspensionDamping: 1.2f      // Множитель демпфирования подвески
+            public static readonly (WheelProperties Front, WheelProperties Rear) OffRoad = (
+                Front: new WheelProperties(
+                    radius: 18.0f,               // Радиус переднего колеса
+                    friction: 1.0f,              // Коэффициент трения переднего колеса
+                    suspensionStrength: 1.2f,    // Множитель жесткости подвески переднего колеса
+                    suspensionDamping: 1.1f      // Множитель демпфирования подвески переднего колеса
+                ),
+                Rear: new WheelProperties(
+                    radius: 18.0f,               // Радиус заднего колеса
+                    friction: 1.0f,              // Коэффициент трения заднего колеса
+                    suspensionStrength: 1.4f,    // Множитель жесткости подвески заднего колеса (более жесткая)
+                    suspensionDamping: 1.3f      // Множитель демпфирования подвески заднего колеса (более сильное)
+                )
             );
         }
     }
