@@ -460,14 +460,16 @@ namespace GravityDefiedGame.Controllers
                 {
                     case "W" when !_input.IsThrottlePressed:
                         _input.IsThrottlePressed = true;
+                        Motorcycle.SetDirection(1); 
                         Motorcycle.ApplyThrottle(Constants.FullThrottle);
-                        Debug("GameController", "Throttle applied");
+                        Debug("GameController", "Throttle applied forward");
                         break;
 
                     case "S" when !_input.IsBrakePressed:
                         _input.IsBrakePressed = true;
-                        Motorcycle.ApplyBrake(Constants.FullBrake);
-                        Debug("GameController", "Brake applied");
+                        Motorcycle.SetDirection(-1); 
+                        Motorcycle.ApplyThrottle(Constants.FullThrottle); 
+                        Debug("GameController", "Throttle applied backward");
                         break;
 
                     case "A" when !_input.IsLeaningLeft:
@@ -482,6 +484,12 @@ namespace GravityDefiedGame.Controllers
                         _input.IsLeaningLeft = false;
                         Motorcycle.Lean(Constants.RightLean);
                         Debug("GameController", "Leaning right");
+                        break;
+
+                    case "Space" when !_input.IsBrakePressed:
+                        _input.IsBrakePressed = true;
+                        Motorcycle.ApplyBrake(Constants.FullBrake);
+                        Debug("GameController", "Brake applied");
                         break;
                 }
             });
@@ -501,8 +509,8 @@ namespace GravityDefiedGame.Controllers
 
                     case "S":
                         _input.IsBrakePressed = false;
-                        Motorcycle.ApplyBrake(Constants.NoInput);
-                        Debug("GameController", "Brake released");
+                        Motorcycle.ApplyThrottle(Constants.NoInput);
+                        Debug("GameController", "Backward throttle released");
                         break;
 
                     case "A":
@@ -515,6 +523,12 @@ namespace GravityDefiedGame.Controllers
                         _input.IsLeaningRight = false;
                         UpdateLeanState();
                         Debug("GameController", "Right lean released");
+                        break;
+
+                    case "Space":
+                        _input.IsBrakePressed = false;
+                        Motorcycle.ApplyBrake(Constants.NoInput);
+                        Debug("GameController", "Brake released");
                         break;
                 }
             });

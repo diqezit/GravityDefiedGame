@@ -85,18 +85,12 @@ namespace GravityDefiedGame.Models
 
         public float WheelieIntensity
         {
-            get
-            {
-                return IsInWheelie ? MathHelper.Min(1.0f, WheelieTime / 1.0f) : 0;
-            }
+            get => IsInWheelie ? MathHelper.Min(1.0f, WheelieTime / 1.0f) : 0;
         }
 
         public float StoppieIntensity
         {
-            get
-            {
-                return IsInStoppie ? MathHelper.Min(1.0f, StoppieTime / 0.5f) : 0;
-            }
+            get => IsInStoppie ? MathHelper.Min(1.0f, StoppieTime / 0.5f) : 0;
         }
 
         public Vector2 FrontAttachmentPoint { get; set; }
@@ -114,6 +108,8 @@ namespace GravityDefiedGame.Models
             get => (FrontSuspensionOffset, RearSuspensionOffset);
             internal set => (FrontSuspensionOffset, RearSuspensionOffset) = value;
         }
+
+        public int Direction { get; private set; } = 1;
 
         public Motorcycle(BikeType bikeType = BikeType.Standard)
         {
@@ -140,12 +136,12 @@ namespace GravityDefiedGame.Models
             });
         }
 
-        // Основные методы (делегирующие вызовы к BikePhysics)
         public void Reset()
         {
             Log("Motorcycle", "resetting motorcycle", () =>
             {
                 _physics.Reset();
+                Direction = 1; 
                 Debug("Motorcycle", "Motorcycle reset to initial state");
             });
         }
@@ -186,12 +182,21 @@ namespace GravityDefiedGame.Models
             });
         }
 
-        // Методы управления
         public void ApplyThrottle(float amount)
         {
             Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
             {
-                _physics.ApplyThrottle(amount);
+                Throttle = MathHelper.Clamp(amount, 0f, 1f);
+                if (Direction == -1)
+                {
+                    IsMovingBackward = true;
+                    _physics.ApplyThrottle(amount * Direction); 
+                }
+                else
+                {
+                    IsMovingBackward = false;
+                    _physics.ApplyThrottle(amount); 
+                }
             });
         }
 
@@ -199,7 +204,8 @@ namespace GravityDefiedGame.Models
         {
             Log("Motorcycle", $"applying brake: {amount:F2}", () =>
             {
-                _physics.ApplyBrake(amount);
+                Brake = MathHelper.Clamp(amount, 0f, 1f);
+                _physics.ApplyBrake(amount); 
             });
         }
 
@@ -211,7 +217,17 @@ namespace GravityDefiedGame.Models
             });
         }
 
-        // Геометрия и визуализация
+        public void SetDirection(int direction)
+        {
+            Log("Motorcycle", $"setting direction: {direction}", () =>
+            {
+                if (direction != 1 && direction != -1)
+                    throw new ArgumentException("Direction must be 1 or -1", nameof(direction));
+                Direction = direction;
+                Debug("Motorcycle", $"Direction set to {direction}");
+            });
+        }
+
         public float GetWheelRadius()
         {
             return _physics.WheelRadius;

@@ -516,15 +516,17 @@ namespace GravityDefiedGame
         {
             string levelName = _gameController.CurrentLevel?.Name ?? "Level";
             string timeText = $"Time: {_gameController.GameTime.Minutes:00}:{_gameController.GameTime.Seconds:00}";
+            string directionText = _gameController.Motorcycle.Direction == 1 ? "Forward" : "Backward";
 
-            Rectangle infoPanelRect = new Rectangle(10, 10, 300, 60);
+            Rectangle infoPanelRect = new Rectangle(10, 10, 300, 80);
             _spriteBatch.Draw(_pixelTexture, infoPanelRect, new Color(0, 0, 0, 128));
             DrawRectangleBorder(infoPanelRect, new Color(150, 150, 150), 1);
 
             _spriteBatch.DrawString(_font, levelName, new Vector2(20, 20), Color.White);
             _spriteBatch.DrawString(_font, timeText, new Vector2(20, 45), Color.White);
+            _spriteBatch.DrawString(_font, $"Direction: {directionText}", new Vector2(20, 70), Color.White);
 
-            string controlsText = "Controls: W/S/A/D, R to restart, ESC to pause";
+            string controlsText = "Controls: W - Forward, S - Backward, Space - Brake, A/D - Lean, R - Restart, ESC - Pause";
             Vector2 controlsSize = _font.MeasureString(controlsText);
             _spriteBatch.DrawString(_font, controlsText,
                 new Vector2((SCREEN_WIDTH - controlsSize.X) / 2, SCREEN_HEIGHT - 35),
