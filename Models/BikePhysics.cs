@@ -922,14 +922,15 @@ namespace GravityDefiedGame.Models
                 _bike.AngularVelocity += totalTorque / MomentOfInertia * deltaTime;
 
                 UpdateLean(deltaTime, level);
-                _bike.Angle = (float)NormalizeAngle(_bike.Angle + _bike.AngularVelocity * deltaTime);
+                _bike.Angle = MathHelper.WrapAngle(_bike.Angle + _bike.AngularVelocity * deltaTime); // Используем WrapAngle из MonoGame
 
+                float speed = _bike.Velocity.Length(); // Кэшируем скорость
                 float groundY = level.GetGroundYAtX(_bike.Position.X);
                 if (_bike.Position.Y > groundY + MaxAllowedPenetration)
                 {
                     Warning("BikePhysics", $"Excessive ground penetration: {_bike.Position.Y - groundY}");
-                    _bike.Position = new(_bike.Position.X, groundY);
-                    _bike.Velocity = new(_bike.Velocity.X, 0);
+                    _bike.Position = new Vector2(_bike.Position.X, groundY);
+                    _bike.Velocity = new Vector2(_bike.Velocity.X, 0);
                 }
 
                 _kinematicsComponent.UpdateAttachmentPoints();
@@ -937,14 +938,15 @@ namespace GravityDefiedGame.Models
 
                 float frontGroundY = level.GetGroundYAtX(_bike.WheelPositions.Front.X);
                 float rearGroundY = level.GetGroundYAtX(_bike.WheelPositions.Rear.X);
+                float wheelThreshold = WheelRadius + MaxAllowedPenetration;
 
-                if (_bike.WheelPositions.Front.Y > frontGroundY + WheelRadius + MaxAllowedPenetration ||
-                    _bike.WheelPositions.Rear.Y > rearGroundY + WheelRadius + MaxAllowedPenetration)
+                if (_bike.WheelPositions.Front.Y > frontGroundY + wheelThreshold ||
+                    _bike.WheelPositions.Rear.Y > rearGroundY + wheelThreshold)
                 {
                     Warning("BikePhysics", "Wheel penetration exceeded maximum allowed value");
                     float centerGroundY = level.GetGroundYAtX(_bike.Position.X);
-                    _bike.Position = new(_bike.Position.X, centerGroundY - WheelRadius);
-                    _bike.Velocity = new(_bike.Velocity.X, 0);
+                    _bike.Position = new Vector2(_bike.Position.X, centerGroundY - WheelRadius);
+                    _bike.Velocity = new Vector2(_bike.Velocity.X, 0);
                     _kinematicsComponent.UpdateAttachmentPoints();
                     _kinematicsComponent.UpdateWheelPositions();
                 }
@@ -956,7 +958,7 @@ namespace GravityDefiedGame.Models
 #if DEBUG
                 if (++_updateCounter >= StatusLogInterval)
                 {
-                    Debug("BikePhysics", $"Status: vel={_bike.Velocity.Length():F2}, angle={_bike.Angle:F2}, inAir={_bike.IsInAir}");
+                    Debug("BikePhysics", $"Status: vel={speed:F2}, angle={_bike.Angle:F2}, inAir={_bike.IsInAir}");
                     _updateCounter = 0;
                 }
 #endif
@@ -996,39 +998,41 @@ namespace GravityDefiedGame.Models
                 if (_bike.IsInAir)
                 {
                     float desiredAngularVelocity = _bike.LeanAmount * MaxAirAngularVelocity;
-                    _bike.AngularVelocity += (desiredAngularVelocity - _bike.AngularVelocity) * AirDampingFactor * deltaTime;
+                    _bike.AngularVelocity = MathHelper.Lerp(_bike.AngularVelocity, desiredAngularVelocity, AirDampingFactor * deltaTime);
                     return;
                 }
 
                 float currentSlopeAngle = level.CalculateSlopeAngle(_bike.Position.X);
-                float smoothedSlopeAngle = (float)Abs(currentSlopeAngle - _prevSlopeAngle) > SlopeAngleSmoothingThreshold
-                    ? _prevSlopeAngle + (currentSlopeAngle - _prevSlopeAngle) * MathHelper.Min(1.0f, SlopeTransitionRate * deltaTime)
+                float angleDifference = Math.Abs(currentSlopeAngle - _prevSlopeAngle);
+                float smoothedSlopeAngle = angleDifference > SlopeAngleSmoothingThreshold
+                    ? MathHelper.Lerp(_prevSlopeAngle, currentSlopeAngle, SlopeTransitionRate * deltaTime)
                     : _prevSlopeAngle;
                 _prevSlopeAngle = smoothedSlopeAngle;
 
-                float speedFactor = MathHelper.Min(1.0f, _bike.Velocity.Length() / LeanSpeedFactorDenominator);
+                float speed = _bike.Velocity.Length();
+                float speedFactor = MathHelper.Min(1.0f, speed / LeanSpeedFactorDenominator);
                 float adaptiveLeanSpeed = LeanSpeed * (LeanSpeedBaseMultiplier + LeanSpeedFactorMultiplier * speedFactor);
-                float terrainAdaptationFactor = MathHelper.Min(1.0f, _bike.Velocity.Length() / TerrainAdaptationSpeedThreshold);
+                float terrainAdaptationFactor = MathHelper.Min(1.0f, speed / TerrainAdaptationSpeedThreshold);
                 float slopeInfluence = smoothedSlopeAngle * terrainAdaptationFactor;
 
                 float targetLean = _bike.LeanAmount * MaxLeanAngle + slopeInfluence + _bike.Throttle * ThrottleLeanInfluence;
                 float leanError = targetLean - _bike.Angle;
                 float angularVelocityDamping = AngularVelocityDampingBase + AngularVelocityDampingFactor * speedFactor;
 
-                float controlTorque = LeanControlTorqueMultiplier * leanError * adaptiveLeanSpeed +
-                                     angularVelocityDamping * (-_bike.AngularVelocity);
+                float controlTorque = LeanControlTorqueMultiplier * leanError * adaptiveLeanSpeed -
+                                     angularVelocityDamping * _bike.AngularVelocity;
 
                 if (_bike.Throttle < InputIdleThreshold && _bike.Brake < InputIdleThreshold &&
-                    Abs(_bike.AngularVelocity) > AngularVelocityIdleThreshold)
+                    Math.Abs(_bike.AngularVelocity) > AngularVelocityIdleThreshold)
                 {
                     float stabilizationFactor = StabilizationFactorBase +
-                        StabilizationFactorSpeedMultiplier * MathHelper.Min(1.0f, _bike.Velocity.Length() / StabilizationSpeedThreshold);
-                    controlTorque += -_bike.AngularVelocity * stabilizationFactor * StabilizationTorqueMultiplier;
+                        StabilizationFactorSpeedMultiplier * MathHelper.Min(1.0f, speed / StabilizationSpeedThreshold);
+                    controlTorque -= _bike.AngularVelocity * stabilizationFactor * StabilizationTorqueMultiplier;
                 }
 
                 _bike.AngularVelocity += controlTorque / MomentOfInertia * deltaTime;
                 float maxAngularVel = MaxAngularVelocity * GroundAngularVelocityFactor;
-                _bike.AngularVelocity = ClampValue(_bike.AngularVelocity, -maxAngularVel, maxAngularVel);
+                _bike.AngularVelocity = MathHelper.Clamp(_bike.AngularVelocity, -maxAngularVel, maxAngularVel);
             });
 
         private void SanitizePhysicalState() =>

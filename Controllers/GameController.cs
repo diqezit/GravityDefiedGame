@@ -1,4 +1,5 @@
 ﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +11,17 @@ using static GravityDefiedGame.Utilities.Logger;
 
 namespace GravityDefiedGame.Controllers
 {
+    public enum GameState
+    {
+        MainMenu,
+        BikeSelection,
+        LevelSelection,
+        Playing,
+        Paused,
+        GameOver,
+        LevelComplete
+    }
+
     public class GameController
     {
         private static class Constants
@@ -31,14 +43,25 @@ namespace GravityDefiedGame.Controllers
         public bool IsPaused { get; private set; }
         public Level? CurrentLevel { get; private set; }
         public List<Level> Levels { get; } = new();
+        public List<BikeType> AvailableBikes { get; } = new();
+        public BikeType CurrentBikeType { get; private set; } = BikeType.Standard;
         public TimeSpan GameTime { get; private set; }
+        public GameState CurrentGameState { get; set; } = GameState.MainMenu;
         public event EventHandler<GameEventArgs>? GameEvent;
 
         public GameController()
         {
             Motorcycle = new Motorcycle();
+            InitializeAvailableBikes();
             LoadLevels();
             Info("GameController", "Game controller initialized");
+        }
+
+        private void InitializeAvailableBikes()
+        {
+            AvailableBikes.Clear();
+            AvailableBikes.AddRange(new[] { BikeType.Standard, BikeType.Sport, BikeType.OffRoad });
+            Info("GameController", $"Initialized {AvailableBikes.Count} available bike types");
         }
 
         public void LoadLevels()
@@ -47,13 +70,11 @@ namespace GravityDefiedGame.Controllers
             {
                 Levels.Clear();
                 var random = new Random();
-
                 for (int i = 1; i <= 25; i++)
                 {
                     int seed = random.Next();
                     Levels.Add(new Level(i, $"Level {i}", seed));
                 }
-
                 Info("GameController", $"Loaded {Levels.Count} levels");
             });
         }
@@ -71,9 +92,111 @@ namespace GravityDefiedGame.Controllers
 
                 CurrentLevel = level;
                 IsLevelComplete = false;
+                CurrentGameState = GameState.Playing;
                 InitializeGameState(levelId);
                 ResetInputState();
                 InitializeMotorcycle();
+            });
+        }
+
+        public void StartNextLevel()
+        {
+            Log("GameController", "starting next level", () =>
+            {
+                int nextLevelId = (CurrentLevel?.Id ?? 0) + 1;
+                if (nextLevelId <= Levels.Count)
+                {
+                    StartLevel(nextLevelId);
+                    OnGameEvent(GameEventType.LevelStart, $"Level {nextLevelId} started");
+                }
+                else
+                {
+                    CurrentGameState = GameState.MainMenu;
+                    OnGameEvent(GameEventType.GameComplete, "Congratulations! All levels completed!");
+                }
+            });
+        }
+
+        public void EnterMainMenu()
+        {
+            CurrentGameState = GameState.MainMenu;
+            OnGameEvent(GameEventType.MenuChanged, "Entered Main Menu");
+        }
+
+        public void EnterBikeSelection()
+        {
+            CurrentGameState = GameState.BikeSelection;
+            OnGameEvent(GameEventType.MenuChanged, "Entered Bike Selection");
+        }
+
+        public void EnterLevelSelection()
+        {
+            CurrentGameState = GameState.LevelSelection;
+            OnGameEvent(GameEventType.MenuChanged, "Entered Level Selection");
+        }
+
+        public void HandleInput(KeyboardState keyboardState, KeyboardState previousKeyboardState)
+        {
+            Log("GameController", "handling input", () =>
+            {
+                if (CurrentGameState == GameState.Playing)
+                {
+                    HandleGameplayInput(keyboardState, previousKeyboardState);
+                }
+
+                foreach (Keys key in new[] { Keys.Escape, Keys.C, Keys.R })
+                {
+                    if (keyboardState.IsKeyDown(key) && previousKeyboardState.IsKeyUp(key))
+                        HandleKeyPress(key, true);
+                }
+            });
+        }
+
+        private void HandleGameplayInput(KeyboardState keyboardState, KeyboardState previousKeyboardState)
+        {
+            if (keyboardState.IsKeyDown(Keys.W) && !previousKeyboardState.IsKeyDown(Keys.W))
+                HandleKeyDown("W");
+            else if (!keyboardState.IsKeyDown(Keys.W) && previousKeyboardState.IsKeyDown(Keys.W))
+                HandleKeyUp("W");
+
+            if (keyboardState.IsKeyDown(Keys.S) && !previousKeyboardState.IsKeyDown(Keys.S))
+                HandleKeyDown("S");
+            else if (!keyboardState.IsKeyDown(Keys.S) && previousKeyboardState.IsKeyDown(Keys.S))
+                HandleKeyUp("S");
+
+            if (keyboardState.IsKeyDown(Keys.A) && !previousKeyboardState.IsKeyDown(Keys.A))
+                HandleKeyDown("A");
+            else if (!keyboardState.IsKeyDown(Keys.A) && previousKeyboardState.IsKeyDown(Keys.A))
+                HandleKeyUp("A");
+
+            if (keyboardState.IsKeyDown(Keys.D) && !previousKeyboardState.IsKeyDown(Keys.D))
+                HandleKeyDown("D");
+            else if (!keyboardState.IsKeyDown(Keys.D) && previousKeyboardState.IsKeyDown(Keys.D))
+                HandleKeyDown("D");
+        }
+
+        public void HandleKeyPress(Keys key, bool isKeyDown)
+        {
+            Log("GameController", $"handling key press: {key}, isDown: {isKeyDown}", () =>
+            {
+                if (isKeyDown)
+                {
+                    switch (key)
+                    {
+                        case Keys.Escape:
+                            if (CurrentGameState == GameState.Playing) PauseGame();
+                            else if (CurrentGameState == GameState.Paused) ResumeGame();
+                            break;
+                        case Keys.C:
+                            if (CurrentGameState == GameState.LevelComplete)
+                                StartNextLevel();
+                            break;
+                        case Keys.R:
+                            if (CurrentGameState == GameState.GameOver || CurrentGameState == GameState.LevelComplete)
+                                RestartLevel();
+                            break;
+                    }
+                }
             });
         }
 
@@ -85,7 +208,6 @@ namespace GravityDefiedGame.Controllers
                 _gameStopwatch.Restart();
                 IsPaused = false;
                 OnGameEvent(GameEventType.LevelStart, $"Level {levelId} started");
-
                 Info("GameController", $"Level {levelId} started");
             });
         }
@@ -102,14 +224,16 @@ namespace GravityDefiedGame.Controllers
 
                 Motorcycle.Reset();
                 Motorcycle.SetPosition(CurrentLevel.StartPoint);
-
-                Debug("GameController", $"Motorcycle initialized at position {CurrentLevel.StartPoint}");
+                Motorcycle.SetBikeType(CurrentBikeType);
+                Debug("GameController", $"Motorcycle initialized at position {CurrentLevel.StartPoint} with bike type {CurrentBikeType}");
             });
         }
 
         public void Update(float deltaTime, CancellationToken cancellationToken = default)
         {
-            if (IsGameOver || IsLevelComplete || IsPaused || cancellationToken.IsCancellationRequested)
+            if (cancellationToken.IsCancellationRequested ||
+                CurrentGameState != GameState.Playing ||
+                IsPaused)
                 return;
 
             Log("GameController", "updating game", () =>
@@ -144,6 +268,12 @@ namespace GravityDefiedGame.Controllers
                 if (CheckFinishReached()) return;
                 if (CheckFallOutOfBounds()) return;
                 CheckMotorcycleCrash();
+
+                if (IsLevelComplete && CurrentGameState == GameState.Playing)
+                    CurrentGameState = GameState.LevelComplete;
+
+                if (IsGameOver && CurrentGameState == GameState.Playing)
+                    CurrentGameState = GameState.GameOver;
             });
         }
 
@@ -158,7 +288,6 @@ namespace GravityDefiedGame.Controllers
                 OnLevelComplete();
                 return true;
             }, false);
-
             return false;
         }
 
@@ -173,7 +302,6 @@ namespace GravityDefiedGame.Controllers
                 OnGameOver("Fell out of level boundaries");
                 return true;
             }, false);
-
             return false;
         }
 
@@ -194,10 +322,10 @@ namespace GravityDefiedGame.Controllers
             Log("GameController", "handling level complete", () =>
             {
                 IsLevelComplete = true;
+                CurrentGameState = GameState.LevelComplete;
                 string formattedTime = FormatGameTime();
                 string message = $"Level completed!\nTime: {formattedTime}";
                 OnGameEvent(GameEventType.LevelComplete, message);
-
                 Info("GameController", $"Level {CurrentLevel?.Id} completed: Time={formattedTime}");
             });
         }
@@ -211,8 +339,8 @@ namespace GravityDefiedGame.Controllers
         {
             Log("GameController", $"handling game over: {reason}", () =>
             {
+                CurrentGameState = GameState.GameOver;
                 OnGameEvent(GameEventType.GameOver, $"Game over: {reason}");
-
                 Info("GameController", $"Game over: {reason}");
             });
         }
@@ -233,9 +361,9 @@ namespace GravityDefiedGame.Controllers
                 if (IsPaused) return;
 
                 IsPaused = true;
+                CurrentGameState = GameState.Paused;
                 _gameStopwatch.Stop();
                 OnGameEvent(GameEventType.GamePaused, "Game paused");
-
                 Info("GameController", "Game paused");
             });
         }
@@ -247,9 +375,9 @@ namespace GravityDefiedGame.Controllers
                 if (!IsPaused) return;
 
                 IsPaused = false;
+                CurrentGameState = GameState.Playing;
                 _gameStopwatch.Start();
                 OnGameEvent(GameEventType.GameResumed, "Game resumed");
-
                 Info("GameController", "Game resumed");
             });
         }
@@ -266,7 +394,6 @@ namespace GravityDefiedGame.Controllers
 
                 StartLevel(CurrentLevel.Id);
                 OnGameEvent(GameEventType.LevelRestart, "Level restarted");
-
                 Info("GameController", $"Level {CurrentLevel.Id} restarted");
             });
         }
@@ -275,9 +402,9 @@ namespace GravityDefiedGame.Controllers
         {
             Log("GameController", $"setting bike type to {bikeType}", () =>
             {
+                CurrentBikeType = bikeType;
                 Motorcycle.SetBikeType(bikeType);
                 OnGameEvent(GameEventType.BikeChanged, $"Selected bike: {bikeType}");
-
                 Info("GameController", $"Bike type changed to {bikeType}");
             });
         }
@@ -288,9 +415,19 @@ namespace GravityDefiedGame.Controllers
             {
                 Motorcycle.SetBikeColor(color);
                 OnGameEvent(GameEventType.BikeChanged, "Bike color changed");
-
                 Info("GameController", $"Bike color changed");
             });
+        }
+
+        public void SelectLevel(int levelId)
+        {
+            if (levelId < 1 || levelId > Levels.Count)
+            {
+                Warning("GameController", $"Level {levelId} is out of range");
+                return;
+            }
+            OnGameEvent(GameEventType.LevelSelected, $"Selected level: {levelId}");
+            Info("GameController", $"Selected level: {levelId}");
         }
 
         #region Input Handling
@@ -301,7 +438,6 @@ namespace GravityDefiedGame.Controllers
             {
                 _input.Reset();
                 ResetMotorcycleControls();
-
                 Debug("GameController", "Input state reset");
             });
         }
@@ -325,14 +461,12 @@ namespace GravityDefiedGame.Controllers
                     case "W" when !_input.IsThrottlePressed:
                         _input.IsThrottlePressed = true;
                         Motorcycle.ApplyThrottle(Constants.FullThrottle);
-
                         Debug("GameController", "Throttle applied");
                         break;
 
                     case "S" when !_input.IsBrakePressed:
                         _input.IsBrakePressed = true;
                         Motorcycle.ApplyBrake(Constants.FullBrake);
-
                         Debug("GameController", "Brake applied");
                         break;
 
@@ -340,7 +474,6 @@ namespace GravityDefiedGame.Controllers
                         _input.IsLeaningLeft = true;
                         _input.IsLeaningRight = false;
                         Motorcycle.Lean(Constants.LeftLean);
-
                         Debug("GameController", "Leaning left");
                         break;
 
@@ -348,7 +481,6 @@ namespace GravityDefiedGame.Controllers
                         _input.IsLeaningRight = true;
                         _input.IsLeaningLeft = false;
                         Motorcycle.Lean(Constants.RightLean);
-
                         Debug("GameController", "Leaning right");
                         break;
                 }
@@ -364,28 +496,24 @@ namespace GravityDefiedGame.Controllers
                     case "W":
                         _input.IsThrottlePressed = false;
                         Motorcycle.ApplyThrottle(Constants.NoInput);
-
                         Debug("GameController", "Throttle released");
                         break;
 
                     case "S":
                         _input.IsBrakePressed = false;
                         Motorcycle.ApplyBrake(Constants.NoInput);
-
                         Debug("GameController", "Brake released");
                         break;
 
                     case "A":
                         _input.IsLeaningLeft = false;
                         UpdateLeanState();
-
                         Debug("GameController", "Left lean released");
                         break;
 
                     case "D":
                         _input.IsLeaningRight = false;
                         UpdateLeanState();
-
                         Debug("GameController", "Right lean released");
                         break;
                 }
@@ -409,10 +537,13 @@ namespace GravityDefiedGame.Controllers
                     (true, false) => Constants.LeftLean,
                     (false, true) => Constants.RightLean,
                     _ => Constants.NoInput
-                }
-            , Constants.NoInput);
-
-            return Constants.NoInput;
+                }, Constants.NoInput);
+            return (_input.IsLeaningLeft, _input.IsLeaningRight) switch
+            {
+                (true, false) => Constants.LeftLean,
+                (false, true) => Constants.RightLean,
+                _ => Constants.NoInput
+            };
         }
 
         #endregion
@@ -429,9 +560,11 @@ namespace GravityDefiedGame.Controllers
         GamePaused,
         GameResumed,
         BikeChanged,
+        LevelSelected,
         ProgressSaved,
         ProgressLoaded,
         GameComplete,
+        MenuChanged,
         Error
     }
 

@@ -14,29 +14,26 @@ namespace GravityDefiedGame.Views
 {
     public static class ThemeConstants
     {
-        public static readonly Color BackgroundColor = new Color((byte)255, (byte)204, (byte)102);
-        public static readonly Color TerrainColor = new Color((byte)204, (byte)153, (byte)102);
-        public static readonly Color SafeZoneColor = new Color((byte)152, (byte)251, (byte)152);
-        public static readonly Color VerticalLineColor = new Color((byte)204, (byte)153, (byte)102);
+        public static readonly Color
+            BackgroundColor = new(255, 204, 102),
+            TerrainColor = new(204, 153, 102),
+            SafeZoneColor = new(152, 251, 152),
+            VerticalLineColor = new(204, 153, 102);
     }
 
     public class Renderer
     {
-        #region Constants
         private const float
             Perspective = 0.2f,
             TerrainStrokeThickness = 3.0f,
             VerticalLineStrokeThickness = 0.5f,
             BikeStrokeThickness = 3.0f,
-            ShadowBlurRadius = 5.0f,
             ShadowOpacity = 0.5f,
             ShadowOffsetFactor = 0.2f,
             ShadowScaleFactor = 0.01f;
 
         private const int
-            InitialSkeletonLinesCount = 30,
             ShadowInterpolationSteps = 5;
-        #endregion
 
         private readonly SpriteBatch _spriteBatch;
         private readonly GraphicsDevice _graphicsDevice;
@@ -62,7 +59,8 @@ namespace GravityDefiedGame.Views
             _shadowRenderer = new ShadowRenderer(_spriteBatch, _pixelTexture, _camera, _gameController);
 
             Log("Renderer", "Initializing renderer", () => {
-                InitializeVisuals();
+                _shadowRenderer.Initialize();
+                _skeletonRenderer.InitializeSkeletonLines();
                 Info("Renderer", "Renderer initialized successfully");
             });
         }
@@ -70,151 +68,101 @@ namespace GravityDefiedGame.Views
         private ColorSet CreateColorSet() => new(
             LineTypeColors: new Dictionary<SkeletonLineType, Color>
             {
-                [SkeletonLineType.MainFrame] = new Color((byte)150, (byte)150, (byte)150),
+                [SkeletonLineType.MainFrame] = new Color(150, 150, 150),
                 [SkeletonLineType.Suspension] = Color.Black,
                 [SkeletonLineType.Wheel] = Color.Black,
-                [SkeletonLineType.Seat] = new Color((byte)200, (byte)200, (byte)200),
-                [SkeletonLineType.Handlebar] = new Color((byte)150, (byte)150, (byte)150),
-                [SkeletonLineType.Exhaust] = new Color((byte)100, (byte)100, (byte)100)
+                [SkeletonLineType.Seat] = new Color(200, 200, 200),
+                [SkeletonLineType.Handlebar] = new Color(150, 150, 150),
+                [SkeletonLineType.Exhaust] = new Color(100, 100, 100)
             },
-            WheelFill: new Color((byte)200, (byte)200, (byte)200),
+            WheelFill: new Color(200, 200, 200),
             WheelStroke: Color.Black,
             SpokeStroke: Color.Black,
             TerrainFill: null,
             TerrainStroke: ThemeConstants.TerrainColor,
             SuspensionStroke: Color.DarkGray,
-            SuspensionFill: new Color((byte)180, (byte)180, (byte)180),
-            ShadowStroke: new Color((byte)0, (byte)0, (byte)0, (byte)(255 * ShadowOpacity))
+            SuspensionFill: new Color(180, 180, 180),
+            ShadowStroke: new Color((byte)0, (byte)0, (byte)0, (255 * ShadowOpacity))
         );
-
-        private void InitializeVisuals() =>
-            Log("Renderer", "Initializing visuals", () => {
-                _shadowRenderer.Initialize();
-                _skeletonRenderer.InitializeSkeletonLines();
-                Debug("Renderer", "Visuals initialized");
-            });
 
         public void Render(CancellationToken cancellationToken = default) =>
             Log("Renderer", "Rendering frame", () => {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    Warning("Renderer", "Render cancelled due to cancellation token");
-                    return;
-                }
+                if (cancellationToken.IsCancellationRequested) return;
 
                 UpdateTerrainVisual(cancellationToken);
-
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    Warning("Renderer", "Render cancelled after terrain update");
-                    return;
-                }
+                if (cancellationToken.IsCancellationRequested) return;
 
                 UpdateMotorcycleVisual(cancellationToken);
             });
 
-        private void UpdateTerrainVisual(CancellationToken cancellationToken) =>
-            Log("Renderer", "Updating terrain visual", () => {
-                var terrainPoints = _gameController.CurrentLevel?.TerrainPoints ?? new List<Level.TerrainPoint>();
-                if (terrainPoints.Count == 0)
+        private void UpdateTerrainVisual(CancellationToken cancellationToken)
+        {
+            var terrainPoints = _gameController.CurrentLevel?.TerrainPoints ?? new List<Level.TerrainPoint>();
+            if (terrainPoints.Count == 0) return;
+
+            for (int i = 0; i < terrainPoints.Count - 1; i++)
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+
+                var point1 = terrainPoints[i];
+                var point2 = terrainPoints[i + 1];
+
+                RenderTerrainSegment(point1, point2);
+            }
+
+            UpdateVerticalLines(terrainPoints, cancellationToken);
+        }
+
+        private void RenderTerrainSegment(Level.TerrainPoint point1, Level.TerrainPoint point2)
+        {
+            var topPoint1 = GetTopPointWithOffset(point1);
+            var topPoint2 = GetTopPointWithOffset(point2);
+
+            if (IsValidPoint(topPoint1) && IsValidPoint(topPoint2))
+            {
+                DrawLine(
+                    topPoint1,
+                    topPoint2,
+                    point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
+                    TerrainStrokeThickness
+                );
+            }
+
+            var bottomPoint1 = new Vector2((float)point1.X, (float)point1.YBottom); // Мировые координаты
+            var bottomPoint2 = new Vector2((float)point2.X, (float)point2.YBottom); // Мировые координаты
+
+            if (IsValidPoint(bottomPoint1) && IsValidPoint(bottomPoint2))
+            {
+                DrawLine(
+                    bottomPoint1,
+                    bottomPoint2,
+                    point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
+                    TerrainStrokeThickness
+                );
+            }
+        }
+
+        private Vector2 GetTopPointWithOffset(Level.TerrainPoint point)
+        {
+            float bikeX = _gameController.Motorcycle.Position.X;
+            float dx = (float)(point.X - bikeX);
+            float offsetX = -Perspective * dx;
+            float worldX = (float)point.X + offsetX;
+            float worldY = (float)point.YTop;
+            return new Vector2(worldX, worldY); // Возвращаем мировые координаты
+        }
+
+        private void UpdateVerticalLines(List<Level.TerrainPoint> terrainPoints, CancellationToken cancellationToken)
+        {
+            foreach (var point in terrainPoints)
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+
+                var topPoint = GetTopPointWithOffset(point);
+                var bottomPoint = new Vector2((float)point.X, (float)point.YBottom); // Мировые координаты
+
+                if (IsValidPoint(topPoint) && IsValidPoint(bottomPoint))
                 {
-                    Warning("Renderer", "No terrain points available");
-                    return;
-                }
-
-                for (int i = 0; i < terrainPoints.Count - 1; i++)
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        Warning("Renderer", "Terrain update cancelled");
-                        return;
-                    }
-
-                    var point1 = terrainPoints[i];
-                    var point2 = terrainPoints[i + 1];
-
-                    var topPoint1 = GetTopPointWithOffset(point1);
-                    var topPoint2 = GetTopPointWithOffset(point2);
-
-                    if (IsValidPoint(topPoint1) && IsValidPoint(topPoint2))
-                    {
-                        DrawLine(
-                            topPoint1,
-                            topPoint2,
-                            point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
-                            TerrainStrokeThickness
-                        );
-                    }
-
-                    var middlePoint1 = _camera.WorldToScreen(new Vector2((float)point1.X, (float)point1.YMiddle));
-                    var middlePoint2 = _camera.WorldToScreen(new Vector2((float)point2.X, (float)point2.YMiddle));
-
-                    if (IsValidPoint(middlePoint1) && IsValidPoint(middlePoint2))
-                    {
-                        DrawLine(
-                            middlePoint1,
-                            middlePoint2,
-                            point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
-                            TerrainStrokeThickness
-                        );
-                    }
-
-                    var bottomPoint1 = _camera.WorldToScreen(new Vector2((float)point1.X, (float)point1.YBottom));
-                    var bottomPoint2 = _camera.WorldToScreen(new Vector2((float)point2.X, (float)point2.YBottom));
-
-                    if (IsValidPoint(bottomPoint1) && IsValidPoint(bottomPoint2))
-                    {
-                        DrawLine(
-                            bottomPoint1,
-                            bottomPoint2,
-                            point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
-                            TerrainStrokeThickness
-                        );
-                    }
-                }
-
-                UpdateVerticalLines(terrainPoints, cancellationToken);
-            });
-
-        private bool IsValidPoint(Vector2 point) =>
-            Log("Renderer", $"Checking point validity: ({point.X:F1}, {point.Y:F1})", () =>
-                !float.IsNaN(point.X) && !float.IsNaN(point.Y) &&
-                !float.IsInfinity(point.X) && !float.IsInfinity(point.Y), false);
-
-        private Vector2 GetTopPointWithOffset(Level.TerrainPoint point) =>
-            Log("Renderer", $"Getting top point for X={point.X:F1}", () => {
-                float bikeX = _gameController.Motorcycle.Position.X;
-                float dx = (float)(point.X - bikeX);
-                float offsetX = -Perspective * dx;
-                float worldX = (float)point.X + offsetX;
-                float worldY = (float)point.YTop;
-                var screenPoint = _camera.WorldToScreen(new Vector2(worldX, worldY));
-
-                if (!IsValidPoint(screenPoint))
-                    Debug("Renderer", $"Created potentially invalid point: ({screenPoint.X:F1}, {screenPoint.Y:F1})");
-
-                return screenPoint;
-            }, Vector2.Zero);
-
-        private void UpdateVerticalLines(List<Level.TerrainPoint> terrainPoints, CancellationToken cancellationToken) =>
-            Log("Renderer", "Updating vertical lines", () => {
-                foreach (var point in terrainPoints)
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        Warning("Renderer", "Vertical lines update cancelled");
-                        return;
-                    }
-
-                    var topPoint = GetTopPointWithOffset(point);
-                    var bottomPoint = _camera.WorldToScreen(new Vector2((float)point.X, (float)point.YBottom));
-
-                    if (!IsValidPoint(topPoint) || !IsValidPoint(bottomPoint))
-                    {
-                        Debug("Renderer", $"Skipping invalid points at X={point.X}");
-                        continue;
-                    }
-
                     DrawLine(
                         topPoint,
                         bottomPoint,
@@ -222,30 +170,29 @@ namespace GravityDefiedGame.Views
                         VerticalLineStrokeThickness
                     );
                 }
-            });
+            }
+        }
 
-        private void UpdateMotorcycleVisual(CancellationToken cancellationToken) =>
-            Log("Renderer", "Updating motorcycle visual", () => {
-                var motorcycle = _gameController.Motorcycle;
-                if (motorcycle is null)
-                {
-                    Warning("Renderer", "Motorcycle is null");
-                    return;
-                }
+        private void UpdateMotorcycleVisual(CancellationToken cancellationToken)
+        {
+            var motorcycle = _gameController.Motorcycle;
+            if (motorcycle is null) return;
 
-                var (skeletonPoints, skeletonLines) = motorcycle.GetSkeleton();
-                _skeletonRenderer.UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
-                _shadowRenderer.UpdateShadow(skeletonPoints, skeletonLines, cancellationToken);
-            });
+            var (skeletonPoints, skeletonLines) = motorcycle.GetSkeleton();
+            _skeletonRenderer.UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
+            _shadowRenderer.UpdateShadow(skeletonPoints, skeletonLines, cancellationToken);
+        }
+
+        private bool IsValidPoint(Vector2 point) =>
+            !float.IsNaN(point.X) && !float.IsNaN(point.Y) &&
+            !float.IsInfinity(point.X) && !float.IsInfinity(point.Y);
 
         private void DrawLine(Vector2 start, Vector2 end, Color color, float thickness)
         {
-            if (!IsValidPoint(start) || !IsValidPoint(end))
-                return;
+            if (!IsValidPoint(start) || !IsValidPoint(end)) return;
 
             float length = Vector2.Distance(start, end);
-            if (length < 0.001f)
-                return;
+            if (length < 0.001f) return;
 
             float rotation = (float)Math.Atan2(end.Y - start.Y, end.X - start.X);
 
@@ -334,20 +281,20 @@ namespace GravityDefiedGame.Views
 
                 for (int i = 0; i < shadowPoints.Count - 1; i++)
                 {
-                    var screenPoint1 = _camera.WorldToScreen(shadowPoints[i]);
-                    var screenPoint2 = _camera.WorldToScreen(shadowPoints[i + 1]);
+                    var worldPoint1 = shadowPoints[i];     
+                    var worldPoint2 = shadowPoints[i + 1];
 
-                    if (IsValidPoint(screenPoint1) && IsValidPoint(screenPoint2))
+                    if (IsValidPoint(worldPoint1) && IsValidPoint(worldPoint2))
                     {
-                        float length = Vector2.Distance(screenPoint1, screenPoint2);
+                        float length = Vector2.Distance(worldPoint1, worldPoint2);
                         if (length < 0.001f)
                             continue;
 
-                        float rotation = (float)Math.Atan2(screenPoint2.Y - screenPoint1.Y, screenPoint2.X - screenPoint1.X);
+                        float rotation = (float)Math.Atan2(worldPoint2.Y - worldPoint1.Y, worldPoint2.X - worldPoint1.X);
 
                         _spriteBatch.Draw(
                             _pixelTexture,
-                            screenPoint1,
+                            worldPoint1,
                             null,
                             new Color((byte)0, (byte)0, (byte)0, (byte)(255 * ShadowOpacity)),
                             rotation,
@@ -554,25 +501,22 @@ namespace GravityDefiedGame.Views
                 });
 
             public void UpdateSkeletonVisuals(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines) =>
-                Log("SkeletonRenderer", "Updating skeleton visuals", () => {
-                    foreach (var line in skeletonLines)
-                    {
-                        if (line.StartPointIndex >= 0 && line.StartPointIndex < skeletonPoints.Count &&
-                            line.EndPointIndex >= 0 && line.EndPointIndex < skeletonPoints.Count)
+                    Log("SkeletonRenderer", "Updating skeleton visuals", () => {
+                        foreach (var line in skeletonLines)
                         {
-                            var startPoint = skeletonPoints[line.StartPointIndex].Position;
-                            var endPoint = skeletonPoints[line.EndPointIndex].Position;
-
-                            var screenStartPoint = _camera.WorldToScreen(startPoint);
-                            var screenEndPoint = _camera.WorldToScreen(endPoint);
-
-                            if (IsValidPoint(screenStartPoint) && IsValidPoint(screenEndPoint))
+                            if (line.StartPointIndex >= 0 && line.StartPointIndex < skeletonPoints.Count &&
+                                line.EndPointIndex >= 0 && line.EndPointIndex < skeletonPoints.Count)
                             {
-                                DrawLine(screenStartPoint, screenEndPoint, GetColorForLineType(line.Type), BikeStrokeThickness);
+                                var startPoint = skeletonPoints[line.StartPointIndex].Position; 
+                                var endPoint = skeletonPoints[line.EndPointIndex].Position;     
+
+                                if (IsValidPoint(startPoint) && IsValidPoint(endPoint))
+                                {
+                                    DrawLine(startPoint, endPoint, GetColorForLineType(line.Type), BikeStrokeThickness);
+                                }
                             }
                         }
-                    }
-                });
+                    });
 
             public void DrawSkeleton(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines)
             {

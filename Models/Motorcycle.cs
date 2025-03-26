@@ -217,6 +217,16 @@ namespace GravityDefiedGame.Models
             return _physics.WheelRadius;
         }
 
+        public Vector2 GetVisualCenter()
+        {
+            Log("Motorcycle", "Calculating visual center", () =>
+            {
+                Vector2 center = (WheelPositions.Front + WheelPositions.Rear) / 2f;
+                return center;
+            }, Position);
+            return (WheelPositions.Front + WheelPositions.Rear) / 2f;
+        }
+
         public List<Vector2> GetFramePoints()
         {
             return _physics.GetFramePoints();

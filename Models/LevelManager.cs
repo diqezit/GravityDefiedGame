@@ -273,25 +273,19 @@ namespace GravityDefiedGame.Models
                     return;
             }
 
-            if (_currentSegmentIndex < TerrainPoints.Count - 2)
-            {
-                var p1 = TerrainPoints[_currentSegmentIndex + 1];
-                var p2 = TerrainPoints[_currentSegmentIndex + 2];
-                if (x >= p1.X && x < p2.X)
-                {
-                    _currentSegmentIndex++;
-                    return;
-                }
-            }
+            int[] segmentsToCheck = new[] { _currentSegmentIndex + 1, _currentSegmentIndex - 1 };
 
-            if (_currentSegmentIndex > 0)
+            foreach (int idx in segmentsToCheck)
             {
-                var p1 = TerrainPoints[_currentSegmentIndex - 1];
-                var p2 = TerrainPoints[_currentSegmentIndex];
-                if (x >= p1.X && x < p2.X)
+                if (idx >= 0 && idx < TerrainPoints.Count - 1)
                 {
-                    _currentSegmentIndex--;
-                    return;
+                    var p1 = TerrainPoints[idx];
+                    var p2 = TerrainPoints[idx + 1];
+                    if (x >= p1.X && x < p2.X)
+                    {
+                        _currentSegmentIndex = idx;
+                        return;
+                    }
                 }
             }
 
@@ -616,16 +610,10 @@ namespace GravityDefiedGame.Models
 
         #region Level Manager Functionality
 
-        // Статическая коллекция всех уровней
         private static List<Level> _allLevels = new List<Level>();
-
-        // Текущий загруженный уровень
         private static Level _currentLevel;
-
-        // Событие изменения уровня
         public static event EventHandler<LevelEventArgs> LevelChanged;
 
-        // Инициализация уровней
         public static void InitializeLevels(int count = 25)
         {
             _allLevels.Clear();
@@ -640,7 +628,6 @@ namespace GravityDefiedGame.Models
             Info("LevelManager", $"Initialized {_allLevels.Count} levels");
         }
 
-        // Загрузка уровня по ID
         public static bool LoadLevel(int levelId)
         {
             var level = _allLevels.FirstOrDefault(l => l.Id == levelId);
@@ -657,19 +644,16 @@ namespace GravityDefiedGame.Models
             return true;
         }
 
-        // Получение текущего уровня
         public static Level GetCurrentLevel()
         {
             return _currentLevel;
         }
 
-        // Получение списка всех уровней
         public static List<Level> GetAllLevels()
         {
             return _allLevels;
         }
 
-        // Перезагрузка текущего уровня
         public static bool ReloadCurrentLevel()
         {
             if (_currentLevel == null)
@@ -678,7 +662,6 @@ namespace GravityDefiedGame.Models
             return LoadLevel(_currentLevel.Id);
         }
 
-        // Загрузка следующего уровня
         public static bool LoadNextLevel()
         {
             if (_currentLevel == null)
@@ -691,7 +674,6 @@ namespace GravityDefiedGame.Models
             return LoadLevel(nextId);
         }
 
-        // Загрузка предыдущего уровня
         public static bool LoadPreviousLevel()
         {
             if (_currentLevel == null)

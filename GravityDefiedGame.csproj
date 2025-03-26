@@ -18,4 +18,10 @@
 		<PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.2.1105" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="Content\Arial.xnb">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>
