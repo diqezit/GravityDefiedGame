@@ -1,48 +1,71 @@
-﻿using System;
-using System.Windows;
-using System.Windows.Controls;
+﻿using Microsoft.Xna.Framework;
+using System;
 
 namespace GravityDefiedGame.Utilities
 {
     public class Camera
     {
-        private readonly Canvas _canvas;
-        public Vector Offset { get; private set; }
-        public double Zoom { get; private set; } = 1.0;
-        private readonly double _followSpeed = 5.0;
-        private Point _targetPosition;
+        public Vector2 Position { get; private set; }
+        public Vector2 Offset { get; private set; }
+        public float Zoom { get; private set; } = 1.0f;
 
-        public Camera(Canvas canvas)
+        private readonly float _followSpeed = 5.0f;
+        private int _screenWidth;
+        private int _screenHeight;
+        private Vector2 _targetPosition;
+
+        public Matrix TransformMatrix =>
+            Matrix.CreateTranslation(new Vector3(-Position.X, -Position.Y, 0)) *
+            Matrix.CreateScale(Zoom) *
+            Matrix.CreateTranslation(new Vector3(Offset.X, Offset.Y, 0));
+
+        public Camera(int screenWidth, int screenHeight)
         {
-            _canvas = canvas ?? throw new ArgumentNullException(nameof(canvas));
+            _screenWidth = screenWidth;
+            _screenHeight = screenHeight;
             Reset();
         }
 
-        public void Reset() =>
-            Offset = new(_canvas.ActualWidth / 2, _canvas.ActualHeight / 2);
-
-        public void CenterOn(Point position)
+        public void Reset()
         {
-            Offset = new(
-                _canvas.ActualWidth / 2 - position.X * Zoom,
-                _canvas.ActualHeight / 2 - position.Y * Zoom);
+            Offset = new Vector2(_screenWidth / 2, _screenHeight / 2);
+            Position = Vector2.Zero;
+            _targetPosition = Vector2.Zero;
+        }
+
+        public void CenterOn(Vector2 position)
+        {
+            Offset = new Vector2(
+                _screenWidth / 2,
+                _screenHeight / 2);
+
+            Position = position;
             _targetPosition = position;
         }
 
-        public void Update(Point targetPosition)
+        public void Update(Vector2 targetPosition)
         {
             _targetPosition = targetPosition;
-            Vector targetOffset = new(
-                _canvas.ActualWidth / 2 - targetPosition.X * Zoom,
-                _canvas.ActualHeight / 2 - targetPosition.Y * Zoom);
 
-            Offset = Vector.Add(Offset, Vector.Multiply((targetOffset - Offset), _followSpeed * 0.016));
+            Vector2 desiredPosition = targetPosition;
+            Position = Vector2.Lerp(Position, desiredPosition, _followSpeed * 0.016f);
         }
 
-        public Point WorldToScreen(Point worldPoint) =>
-            new(worldPoint.X * Zoom + Offset.X, worldPoint.Y * Zoom + Offset.Y);
+        public Vector2 WorldToScreen(Vector2 worldPoint)
+        {
+            return Vector2.Transform(worldPoint, TransformMatrix);
+        }
 
-        public Point ScreenToWorld(Point screenPoint) =>
-            new((screenPoint.X - Offset.X) / Zoom, (screenPoint.Y - Offset.Y) / Zoom);
+        public Vector2 ScreenToWorld(Vector2 screenPoint)
+        {
+            return Vector2.Transform(screenPoint, Matrix.Invert(TransformMatrix));
+        }
+
+        public void UpdateScreenSize(int screenWidth, int screenHeight)
+        {
+            _screenWidth = screenWidth;
+            _screenHeight = screenHeight;
+            Offset = new Vector2(_screenWidth / 2, _screenHeight / 2);
+        }
     }
 }

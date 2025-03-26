@@ -1,9 +1,8 @@
 ﻿using GravityDefiedGame.Utilities;
+using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Windows;
-using System.Windows.Media;
 using static GravityDefiedGame.Utilities.GameConstants.Motorcycle;
 using static GravityDefiedGame.Utilities.GameConstants.Physics;
 using static GravityDefiedGame.Utilities.GameConstants.Validation;
@@ -17,34 +16,34 @@ namespace GravityDefiedGame.Models
         private readonly BikePhysics _physics;
 
         // Свойства состояния мотоцикла
-        public double SuspensionRealMaxAngle { get; internal set; }
+        public float SuspensionRealMaxAngle { get; internal set; }
         public bool EnforceSuspensionAngleLimits { get; set; } = true;
-        public Point Position { get; internal set; }
-        public Vector Velocity { get; internal set; }
-        public double Angle { get; internal set; }
-        public double AngularVelocity { get; internal set; }
-        public double FrameHeight { get; private set; }
+        public Vector2 Position { get; internal set; }
+        public Vector2 Velocity { get; internal set; }
+        public float Angle { get; internal set; }
+        public float AngularVelocity { get; internal set; }
+        public float FrameHeight { get; private set; }
 
-        public Point FrontWheelPosition { get; internal set; }
-        public Point RearWheelPosition { get; internal set; }
-        public (Point Front, Point Rear) WheelPositions
+        public Vector2 FrontWheelPosition { get; internal set; }
+        public Vector2 RearWheelPosition { get; internal set; }
+        public (Vector2 Front, Vector2 Rear) WheelPositions
         {
             get => (FrontWheelPosition, RearWheelPosition);
             internal set => (FrontWheelPosition, RearWheelPosition) = value;
         }
 
-        public double WheelBase { get; internal set; } = DefaultWheelBase;
-        public double FrontWheelRotation { get; internal set; }
-        public double RearWheelRotation { get; internal set; }
-        public (double Front, double Rear) WheelRotations
+        public float WheelBase { get; internal set; } = DefaultWheelBase;
+        public float FrontWheelRotation { get; internal set; }
+        public float RearWheelRotation { get; internal set; }
+        public (float Front, float Rear) WheelRotations
         {
             get => (FrontWheelRotation, RearWheelRotation);
             internal set => (FrontWheelRotation, RearWheelRotation) = value;
         }
 
-        public double Throttle { get; internal set; }
-        public double Brake { get; internal set; }
-        public double LeanAmount { get; internal set; }
+        public float Throttle { get; internal set; }
+        public float Brake { get; internal set; }
+        public float LeanAmount { get; internal set; }
         public BikeType BikeType { get; private set; }
         public Color BikeColor { get; private set; }
         public BikeState State { get; internal set; }
@@ -81,28 +80,36 @@ namespace GravityDefiedGame.Models
             internal set => State = value ? State | BikeState.MovingBackward : State & ~BikeState.MovingBackward;
         }
 
-        public double WheelieTime { get; internal set; }
-        public double StoppieTime { get; internal set; }
+        public float WheelieTime { get; internal set; }
+        public float StoppieTime { get; internal set; }
 
-        public double WheelieIntensity =>
-            Log("Motorcycle", "calculating wheelie intensity", () =>
-                IsInWheelie ? Math.Min(1.0, WheelieTime / 1.0) : 0, 0.0);
+        public float WheelieIntensity
+        {
+            get
+            {
+                return IsInWheelie ? MathHelper.Min(1.0f, WheelieTime / 1.0f) : 0;
+            }
+        }
 
-        public double StoppieIntensity =>
-            Log("Motorcycle", "calculating stoppie intensity", () =>
-                IsInStoppie ? Math.Min(1.0, StoppieTime / 0.5) : 0, 0.0);
+        public float StoppieIntensity
+        {
+            get
+            {
+                return IsInStoppie ? MathHelper.Min(1.0f, StoppieTime / 0.5f) : 0;
+            }
+        }
 
-        public Point FrontAttachmentPoint { get; set; }
-        public Point RearAttachmentPoint { get; set; }
-        public (Point Front, Point Rear) AttachmentPoints
+        public Vector2 FrontAttachmentPoint { get; set; }
+        public Vector2 RearAttachmentPoint { get; set; }
+        public (Vector2 Front, Vector2 Rear) AttachmentPoints
         {
             get => (FrontAttachmentPoint, RearAttachmentPoint);
             internal set => (FrontAttachmentPoint, RearAttachmentPoint) = value;
         }
 
-        public double FrontSuspensionOffset { get; set; }
-        public double RearSuspensionOffset { get; set; }
-        public (double Front, double Rear) SuspensionOffsets
+        public float FrontSuspensionOffset { get; set; }
+        public float RearSuspensionOffset { get; set; }
+        public (float Front, float Rear) SuspensionOffsets
         {
             get => (FrontSuspensionOffset, RearSuspensionOffset);
             internal set => (FrontSuspensionOffset, RearSuspensionOffset) = value;
@@ -117,9 +124,7 @@ namespace GravityDefiedGame.Models
                 BikeType = bikeType;
                 InitializeBikeProperties();
                 Reset();
-#if DEBUG
                 Info("Motorcycle", $"Created {bikeType} motorcycle");
-#endif
             });
         }
 
@@ -129,11 +134,9 @@ namespace GravityDefiedGame.Models
             {
                 SuspensionRealMaxAngle = _physics.MaxSuspensionAngle;
                 _physics.InitializeProperties(BikeType);
-                BikeColor = DefaultBikeColor;
-                FrameHeight = _physics.WheelRadius * 1.5;
-#if DEBUG
+                BikeColor = new Color(200, 200, 200); // Серый цвет по умолчанию
+                FrameHeight = _physics.WheelRadius * 1.5f;
                 Info("Motorcycle", $"Initialized {BikeType} motorcycle with wheel radius {_physics.WheelRadius:F2}");
-#endif
             });
         }
 
@@ -143,20 +146,16 @@ namespace GravityDefiedGame.Models
             Log("Motorcycle", "resetting motorcycle", () =>
             {
                 _physics.Reset();
-#if DEBUG
                 Debug("Motorcycle", "Motorcycle reset to initial state");
-#endif
             });
         }
 
-        public void SetPosition(Point position)
+        public void SetPosition(Vector2 position)
         {
             Log("Motorcycle", "setting position", () =>
             {
                 _physics.SetPosition(position);
-#if DEBUG
                 Debug("Motorcycle", $"Position set to {position}");
-#endif
             });
         }
 
@@ -166,9 +165,7 @@ namespace GravityDefiedGame.Models
             {
                 BikeType = bikeType;
                 _physics.SetBikeType(bikeType);
-#if DEBUG
                 Info("Motorcycle", $"Bike type changed to {bikeType}");
-#endif
             });
         }
 
@@ -177,13 +174,11 @@ namespace GravityDefiedGame.Models
             Log("Motorcycle", "setting bike color", () =>
             {
                 BikeColor = color;
-#if DEBUG
                 Debug("Motorcycle", $"Bike color set to {color}");
-#endif
             });
         }
 
-        public void Update(double deltaTime, Level level, CancellationToken cancellationToken = default)
+        public void Update(float deltaTime, Level level, CancellationToken cancellationToken = default)
         {
             Log("Motorcycle", "updating motorcycle", () =>
             {
@@ -192,7 +187,7 @@ namespace GravityDefiedGame.Models
         }
 
         // Методы управления
-        public void ApplyThrottle(double amount)
+        public void ApplyThrottle(float amount)
         {
             Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
             {
@@ -200,7 +195,7 @@ namespace GravityDefiedGame.Models
             });
         }
 
-        public void ApplyBrake(double amount)
+        public void ApplyBrake(float amount)
         {
             Log("Motorcycle", $"applying brake: {amount:F2}", () =>
             {
@@ -208,7 +203,7 @@ namespace GravityDefiedGame.Models
             });
         }
 
-        public void Lean(double direction)
+        public void Lean(float direction)
         {
             Log("Motorcycle", $"leaning: {direction:F2}", () =>
             {
@@ -217,14 +212,19 @@ namespace GravityDefiedGame.Models
         }
 
         // Геометрия и визуализация
-        public double GetWheelRadius() =>
-            Log("Motorcycle", "getting wheel radius", () => _physics.WheelRadius, DefaultWheelRadius);
+        public float GetWheelRadius()
+        {
+            return _physics.WheelRadius;
+        }
 
-        public List<Point> GetFramePoints() =>
-            Log("Motorcycle", "getting frame points", () => _physics.GetFramePoints(), new List<Point>());
+        public List<Vector2> GetFramePoints()
+        {
+            return _physics.GetFramePoints();
+        }
 
-        public (List<BikeGeom.SkeletonPoint> Points, List<BikeGeom.SkeletonLine> Lines) GetSkeleton() =>
-            Log("Motorcycle", "getting skeleton", () => _physics.GetSkeleton(),
-                (new List<BikeGeom.SkeletonPoint>(), new List<BikeGeom.SkeletonLine>()));
+        public (List<BikeGeom.SkeletonPoint> Points, List<BikeGeom.SkeletonLine> Lines) GetSkeleton()
+        {
+            return _physics.GetSkeleton();
+        }
     }
 }
