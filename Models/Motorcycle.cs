@@ -1,4 +1,6 @@
-﻿using GravityDefiedGame.Utilities;
+﻿#nullable enable
+
+using GravityDefiedGame.Utilities;
 using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
