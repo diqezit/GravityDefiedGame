@@ -8,8 +8,4 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Aether.Physics2D" Version="2.2.0" />
-  </ItemGroup>
-
 </Project>
