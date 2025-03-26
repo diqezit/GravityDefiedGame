@@ -41,30 +41,5 @@ namespace GravityDefiedGame.Utilities
         {
             _position = Vector2.Lerp(_position, targetPosition, 0.1f); // Плавное движение
         }
-
-        public Vector2 WorldToScreen(Vector2 worldPoint)
-        {
-            Vector2 relativeToCamera = worldPoint - _position;
-            Vector2 scaled = relativeToCamera * Zoom;
-            return scaled + new Vector2(_screenWidth / 2, _screenHeight / 2);
-        }
-
-        public Vector2 ScreenToWorld(Vector2 screenPoint)
-        {
-            Vector2 centered = screenPoint - new Vector2(_screenWidth / 2, _screenHeight / 2);
-            Vector2 scaled = centered / Zoom;
-            return scaled + _position;
-        }
-
-        public Vector2 GetPosition()
-        {
-            return _position;
-        }
-
-        public void UpdateScreenSize(int screenWidth, int screenHeight)
-        {
-            _screenWidth = screenWidth;
-            _screenHeight = screenHeight;
-        }
     }
 }
