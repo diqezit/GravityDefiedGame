@@ -10,6 +10,7 @@ using GravityDefiedGame.Models;
 using GravityDefiedGame.Utilities;
 using GravityDefiedGame.Views;
 using static GravityDefiedGame.Utilities.Logger;
+using System.Xml.Linq;
 
 namespace GravityDefiedGame
 {
@@ -30,18 +31,10 @@ namespace GravityDefiedGame
         private Renderer _renderer;
         private float _elapsedTime;
         private SpriteFont _font;
-        private readonly Dictionary<string, UIButton> _buttons = new();
-        private KeyboardState _previousKeyboardState;
-        private MouseState _previousMouseState;
+        private SpriteFont _titleFont; // Шрифт для заголовков
+        private SpriteFont _unicodeFont; // Шрифт с поддержкой Unicode
+        private UIController _uiController;
         private CancellationTokenSource _renderCancellationTokenSource;
-
-        private int _selectedBikeIndex = 0;
-        private int _selectedLevelIndex = 0;
-        private readonly List<Color> _availableBikeColors = new()
-        {
-            Color.Red, Color.Blue, Color.Green, Color.Yellow, Color.Purple, Color.Orange
-        };
-        private int _selectedColorIndex = 0;
         #endregion
 
         public Game()
@@ -70,12 +63,14 @@ namespace GravityDefiedGame
             _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             _pixelTexture.SetData(new[] { Color.White });
 
-            _font = Content.Load<SpriteFont>("Arial");
+            _font = Content.Load<SpriteFont>("Arial"); // all
+            _titleFont = Content.Load<SpriteFont>("TitleFont"); // title
+            _unicodeFont = Content.Load<SpriteFont>("Arial"); // symbols
 
             _renderer = new Renderer(_spriteBatch, GraphicsDevice, _gameController, _camera);
-            InitializeUI();
+            _uiController = new UIController(this, _gameController, _spriteBatch, _font, _titleFont, _unicodeFont, _pixelTexture, SCREEN_WIDTH, SCREEN_HEIGHT);
             _gameController.LoadLevels();
-            ShowMainMenu();
+            _uiController.ShowMainMenu();
             Log("Game", "Content loaded", () => Info("Game", "LoadContent completed"));
         }
 
@@ -85,7 +80,7 @@ namespace GravityDefiedGame
             {
                 _elapsedTime = Math.Min((float)gameTime.ElapsedGameTime.TotalSeconds, MAX_DELTA_TIME);
 
-                HandleInput();
+                _uiController.HandleInput(_gameController);
 
                 if (_gameController.CurrentGameState == GameState.Playing)
                 {
@@ -93,7 +88,6 @@ namespace GravityDefiedGame
                     UpdateCamera();
                 }
 
-                UpdateUI(_elapsedTime);
                 base.Update(gameTime);
             }
             catch (OperationCanceledException) { Debug("Game", "Update cancelled"); }
@@ -113,8 +107,8 @@ namespace GravityDefiedGame
                 }
                 _spriteBatch.End();
 
-                _spriteBatch.Begin();
-                DrawUI();
+                _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+                _uiController.DrawUI(_gameController);
                 _spriteBatch.End();
 
                 base.Draw(gameTime);
@@ -123,65 +117,180 @@ namespace GravityDefiedGame
             catch (Exception ex) { Error("Game", $"Draw error: {ex.Message}"); }
         }
 
-        private void ShowMainMenu()
+        private void UpdateCamera()
         {
-            _gameController.EnterMainMenu();
-            Log("Game", "Main menu displayed", () => Info("Game", "ShowMainMenu completed"));
-        }
-
-        private void ShowBikeSelection()
-        {
-            _gameController.EnterBikeSelection();
-            var availableBikes = Enum.GetValues(typeof(BikeType)).Cast<BikeType>().ToList();
-            _gameController.SetBikeType(availableBikes[_selectedBikeIndex]);
-            _gameController.SetBikeColor(_availableBikeColors[_selectedColorIndex]);
-            Log("Game", "Bike selection menu displayed", () => Info("Game", "ShowBikeSelection completed"));
-        }
-
-        private void ShowLevelSelection()
-        {
-            _gameController.EnterLevelSelection();
-            _gameController.SelectLevel(_selectedLevelIndex + 1);
-            Log("Game", "Level selection menu displayed", () => Info("Game", "ShowLevelSelection completed"));
-        }
-
-        private void StartGame(int levelId)
-        {
-            _renderCancellationTokenSource?.Cancel();
-            _renderCancellationTokenSource = new CancellationTokenSource();
-            _gameController.StartLevel(levelId);
-
             if (_gameController.Motorcycle != null)
             {
-                _camera.Reset();
-                _camera.CenterOn(_gameController.Motorcycle.GetVisualCenter());
+                Vector2 visualCenter = _gameController.Motorcycle.GetVisualCenter();
+                _camera.Update(visualCenter);
             }
-
-            Log("Game", $"Level {levelId} started", () => Info("Game", "StartGame completed"));
         }
 
-        private void HandleInput()
+        private void GameController_GameEvent(object sender, GameEventArgs e)
+        {
+            switch (e.Type)
+            {
+                case GameEventType.LevelComplete:
+                case GameEventType.GameOver:
+                case GameEventType.BikeChanged:
+                case GameEventType.CheckpointReached:
+                case GameEventType.Error:
+                    _uiController.ShowMessage(e.Message);
+                    break;
+            }
+        }
+
+        protected override void UnloadContent()
+        {
+            _renderCancellationTokenSource?.Cancel();
+            _renderCancellationTokenSource?.Dispose();
+            _pixelTexture?.Dispose();
+            base.UnloadContent();
+            Log("Game", "Content unloaded", () => Info("Game", "UnloadContent completed"));
+        }
+    }
+
+    public class UIController
+    {
+        private readonly Game _game;
+        private readonly SpriteBatch _spriteBatch;
+        private readonly SpriteFont _font;
+        private readonly SpriteFont _titleFont;
+        private readonly SpriteFont _unicodeFont;
+        private readonly Texture2D _pixelTexture;
+        private readonly int _screenWidth;
+        private readonly int _screenHeight;
+        private readonly Dictionary<string, UIButton> _buttons = new();
+        private KeyboardState _previousKeyboardState;
+        private MouseState _previousMouseState;
+        private int _selectedBikeIndex = 0;
+        private int _selectedLevelIndex = 0;
+        private readonly List<Color> _availableBikeColors = new()
+        {
+            Color.Red, Color.Blue, Color.Green, Color.Yellow, Color.Purple, Color.Orange
+        };
+        private int _selectedColorIndex = 0;
+        private float _buttonHoverScale = 1f;
+
+        public UIController(
+            Game game, 
+            GameController gameController, 
+            SpriteBatch spriteBatch, 
+            SpriteFont font, 
+            SpriteFont titleFont, 
+            SpriteFont unicodeFont, 
+            Texture2D pixelTexture, 
+            int screenWidth, 
+            int screenHeight)
+        {
+            _game = game;
+            _gameController = gameController;
+            _spriteBatch = spriteBatch;
+            _font = font;
+            _titleFont = titleFont;
+            _unicodeFont = unicodeFont;
+            _pixelTexture = pixelTexture;
+            _screenWidth = screenWidth;
+            _screenHeight = screenHeight;
+            InitializeUI();
+        }
+
+        private void InitializeUI()
+        {
+            _buttons["restart"] = new UIButton
+            {
+                Bounds = new Rectangle(10, 10, 120, 50),
+                Text = "Restart",
+                IsVisible = false,
+                OnClick = () => _gameController.RestartLevel(),
+                HoverColor = Color.DarkGray
+            };
+
+            _buttons["continue"] = new UIButton
+            {
+                Bounds = new Rectangle(_screenWidth / 2 - 60, _screenHeight / 2 + 20, 120, 50),
+                Text = "Continue",
+                IsVisible = false,
+                OnClick = () => _gameController.StartNextLevel(),
+                HoverColor = Color.DarkGreen
+            };
+
+            _buttons["pause"] = new UIButton
+            {
+                Bounds = new Rectangle(_screenWidth - 130, 10, 120, 50),
+                Text = "Pause",
+                IsVisible = false,
+                OnClick = () => _gameController.PauseGame(),
+                HoverColor = Color.DarkBlue
+            };
+
+            _buttons["play"] = new UIButton
+            {
+                Bounds = new Rectangle(_screenWidth / 2 - 150, 250, 300, 60),
+                Text = "Play Game",
+                IsVisible = true,
+                OnClick = () => ShowBikeSelection(),
+                HoverColor = Color.DarkGreen
+            };
+
+            _buttons["exit"] = new UIButton
+            {
+                Bounds = new Rectangle(_screenWidth / 2 - 150, 320, 300, 60),
+                Text = "Exit",
+                IsVisible = true,
+                OnClick = () => _game.Exit(),
+                HoverColor = Color.DarkRed
+            };
+
+            _buttons["selectBike"] = new UIButton
+            {
+                Bounds = new Rectangle(_screenWidth / 2 - 100, 450, 200, 50),
+                Text = "Select Bike",
+                IsVisible = false,
+                OnClick = () => ShowLevelSelection(),
+                HoverColor = Color.DarkOrange
+            };
+
+            _buttons["startLevel"] = new UIButton
+            {
+                Bounds = new Rectangle(_screenWidth / 2 - 100, 450, 200, 50),
+                Text = "Start Level",
+                IsVisible = false,
+                OnClick = () => StartGame(_selectedLevelIndex + 1),
+                HoverColor = Color.DarkCyan
+            };
+
+            Log("UIController", "UI initialized", () => Info("UIController", "InitializeUI completed"));
+        }
+
+        public void HandleInput(GameController gameController)
         {
             var keyboardState = Keyboard.GetState();
             var mouseState = Mouse.GetState();
+            _gameController = gameController;
 
-            if (_gameController.CurrentGameState == GameState.MainMenu ||
-                _gameController.CurrentGameState == GameState.BikeSelection ||
-                _gameController.CurrentGameState == GameState.LevelSelection)
+            if (gameController.CurrentGameState == GameState.MainMenu ||
+                gameController.CurrentGameState == GameState.BikeSelection ||
+                gameController.CurrentGameState == GameState.LevelSelection)
             {
                 HandleMenuInput(keyboardState);
             }
             else
             {
-                _gameController.HandleInput(keyboardState, _previousKeyboardState);
+                gameController.HandleInput(keyboardState, _previousKeyboardState);
             }
 
-            if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
+            foreach (var button in _buttons.Values)
             {
-                foreach (var button in _buttons.Values)
+                if (button.IsVisible && button.Bounds.Contains(mouseState.X, mouseState.Y))
                 {
-                    if (button.IsVisible && button.Bounds.Contains(mouseState.X, mouseState.Y))
+                    _buttonHoverScale = 1.05f;
+                    if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
                         button.OnClick?.Invoke();
+                }
+                else
+                {
+                    _buttonHoverScale = 1f;
                 }
             }
 
@@ -249,84 +358,17 @@ namespace GravityDefiedGame
             }
         }
 
-        private void InitializeUI()
+        public void DrawUI(GameController gameController)
         {
-            _buttons["restart"] = new UIButton
-            {
-                Bounds = new Rectangle(10, 10, 100, 40),
-                Text = "Restart",
-                IsVisible = false,
-                OnClick = () => _gameController.RestartLevel()
-            };
+            _buttons["restart"].IsVisible = gameController.CurrentGameState == GameState.GameOver;
+            _buttons["continue"].IsVisible = gameController.CurrentGameState == GameState.LevelComplete;
+            _buttons["pause"].IsVisible = gameController.CurrentGameState == GameState.Playing;
+            _buttons["play"].IsVisible = gameController.CurrentGameState == GameState.MainMenu;
+            _buttons["exit"].IsVisible = gameController.CurrentGameState == GameState.MainMenu;
+            _buttons["selectBike"].IsVisible = gameController.CurrentGameState == GameState.BikeSelection;
+            _buttons["startLevel"].IsVisible = gameController.CurrentGameState == GameState.LevelSelection;
 
-            _buttons["continue"] = new UIButton
-            {
-                Bounds = new Rectangle(450, 350, 100, 40),
-                Text = "Continue",
-                IsVisible = false,
-                OnClick = () => _gameController.StartNextLevel()
-            };
-
-            _buttons["pause"] = new UIButton
-            {
-                Bounds = new Rectangle(SCREEN_WIDTH - 110, 10, 100, 40),
-                Text = "Pause",
-                IsVisible = false,
-                OnClick = () => _gameController.PauseGame()
-            };
-
-            _buttons["play"] = new UIButton
-            {
-                Bounds = new Rectangle(SCREEN_WIDTH / 2 - 150, 250, 300, 50),
-                Text = "Play Game",
-                IsVisible = true,
-                OnClick = () => ShowBikeSelection()
-            };
-
-            _buttons["exit"] = new UIButton
-            {
-                Bounds = new Rectangle(SCREEN_WIDTH / 2 - 150, 320, 300, 50),
-                Text = "Exit",
-                IsVisible = true,
-                OnClick = () => Exit()
-            };
-
-            _buttons["selectBike"] = new UIButton
-            {
-                Bounds = new Rectangle(SCREEN_WIDTH / 2 - 100, 400, 200, 50),
-                Text = "Select This Bike",
-                IsVisible = false,
-                OnClick = () => ShowLevelSelection()
-            };
-
-            _buttons["startLevel"] = new UIButton
-            {
-                Bounds = new Rectangle(SCREEN_WIDTH / 2 - 100, 400, 200, 50),
-                Text = "Start Level",
-                IsVisible = false,
-                OnClick = () => StartGame(_selectedLevelIndex + 1)
-            };
-
-            Log("Game", "UI initialized", () => Info("Game", "InitializeUI completed"));
-        }
-
-        private void UpdateUI(float deltaTime)
-        {
-            _buttons["restart"].IsVisible = _gameController.CurrentGameState == GameState.GameOver;
-            _buttons["continue"].IsVisible = _gameController.CurrentGameState == GameState.LevelComplete;
-            _buttons["pause"].IsVisible = _gameController.CurrentGameState == GameState.Playing;
-
-            _buttons["play"].IsVisible = _gameController.CurrentGameState == GameState.MainMenu;
-            _buttons["exit"].IsVisible = _gameController.CurrentGameState == GameState.MainMenu;
-
-            _buttons["selectBike"].IsVisible = _gameController.CurrentGameState == GameState.BikeSelection;
-
-            _buttons["startLevel"].IsVisible = _gameController.CurrentGameState == GameState.LevelSelection;
-        }
-
-        private void DrawUI()
-        {
-            switch (_gameController.CurrentGameState)
+            switch (gameController.CurrentGameState)
             {
                 case GameState.MainMenu:
                     DrawMainMenu();
@@ -338,16 +380,16 @@ namespace GravityDefiedGame
                     DrawLevelSelectionMenu();
                     break;
                 case GameState.Playing:
-                    DrawInfoPanel();
+                    DrawInfoPanel(gameController);
                     break;
                 case GameState.Paused:
-                    DrawPauseMenu();
+                    DrawPauseMenu(gameController);
                     break;
                 case GameState.GameOver:
-                    DrawGameOverMenu();
+                    DrawGameOverMenu(gameController);
                     break;
                 case GameState.LevelComplete:
-                    DrawLevelCompleteMenu();
+                    DrawLevelCompleteMenu(gameController);
                     break;
             }
 
@@ -360,75 +402,75 @@ namespace GravityDefiedGame
 
         private void DrawMainMenu()
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), new Color(0, 0, 0, 100));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, _screenWidth, _screenHeight), new Color(0, 0, 0, 150));
 
-            Rectangle menuRect = new Rectangle(SCREEN_WIDTH / 2 - 250, SCREEN_HEIGHT / 2 - 200, 500, 400);
-            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(40, 40, 40, 230));
-            DrawRectangleBorder(menuRect, new Color(150, 150, 150), 2);
+            Rectangle menuRect = new Rectangle(_screenWidth / 2 - 300, _screenHeight / 2 - 250, 600, 500);
+            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(30, 30, 30, 240));
+            DrawRectangleBorder(menuRect, Color.Goldenrod, 3);
 
             string titleText = "GRAVITY DEFIED";
-            Vector2 titleSize = _font.MeasureString(titleText);
-            _spriteBatch.DrawString(_font, titleText,
-                new Vector2((SCREEN_WIDTH - titleSize.X) / 2, menuRect.Y + 50),
-                Color.White);
+            Vector2 titleSize = _titleFont.MeasureString(titleText);
+            _spriteBatch.DrawString(_titleFont, titleText,
+                new Vector2((_screenWidth - titleSize.X) / 2, menuRect.Y + 50),
+                Color.Gold);
 
-            string subtitleText = "A Motorcycle Physics Game";
+            string subtitleText = "A Motorcycle Physics Adventure";
             Vector2 subtitleSize = _font.MeasureString(subtitleText);
             _spriteBatch.DrawString(_font, subtitleText,
-                new Vector2((SCREEN_WIDTH - subtitleSize.X) / 2, menuRect.Y + 100),
-                Color.LightGray);
+                new Vector2((_screenWidth - subtitleSize.X) / 2, menuRect.Y + 120),
+                Color.LightGoldenrodYellow);
         }
 
         private void DrawBikeSelectionMenu()
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), new Color(0, 0, 0, 100));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, _screenWidth, _screenHeight), new Color(0, 0, 0, 150));
 
-            Rectangle menuRect = new Rectangle(SCREEN_WIDTH / 2 - 300, SCREEN_HEIGHT / 2 - 200, 600, 400);
-            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(40, 40, 40, 230));
-            DrawRectangleBorder(menuRect, new Color(150, 150, 150), 2);
+            Rectangle menuRect = new Rectangle(_screenWidth / 2 - 350, _screenHeight / 2 - 250, 700, 500);
+            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(30, 30, 30, 240));
+            DrawRectangleBorder(menuRect, Color.Cyan, 3);
 
             string titleText = "SELECT YOUR BIKE";
-            Vector2 titleSize = _font.MeasureString(titleText);
-            _spriteBatch.DrawString(_font, titleText,
-                new Vector2((SCREEN_WIDTH - titleSize.X) / 2, menuRect.Y + 30),
-                Color.White);
+            Vector2 titleSize = _titleFont.MeasureString(titleText);
+            _spriteBatch.DrawString(_titleFont, titleText,
+                new Vector2((_screenWidth - titleSize.X) / 2, menuRect.Y + 30),
+                Color.Cyan);
 
             var availableBikes = Enum.GetValues(typeof(BikeType)).Cast<BikeType>().ToList();
             string bikeTypeText = availableBikes[_selectedBikeIndex].ToString();
             Vector2 bikeTypeSize = _font.MeasureString(bikeTypeText);
             _spriteBatch.DrawString(_font, bikeTypeText,
-                new Vector2((SCREEN_WIDTH - bikeTypeSize.X) / 2, menuRect.Y + 100),
+                new Vector2((_screenWidth - bikeTypeSize.X) / 2, menuRect.Y + 100),
                 _availableBikeColors[_selectedColorIndex]);
 
-            string instructionText = "< Left/Right: Change Bike | Up/Down: Change Color | Enter: Confirm >";
+            string instructionText = "← Left/Right: Change Bike | ↑/↓: Change Color | Enter: Confirm";
             Vector2 instructionSize = _font.MeasureString(instructionText);
             _spriteBatch.DrawString(_font, instructionText,
-                new Vector2((SCREEN_WIDTH - instructionSize.X) / 2, menuRect.Y + 300),
-                Color.LightGray);
+                new Vector2((_screenWidth - instructionSize.X) / 2, menuRect.Y + 400),
+                Color.LightCyan);
 
             DrawBikePreview(menuRect);
         }
 
         private void DrawBikePreview(Rectangle menuRect)
         {
-            int previewX = menuRect.X + 150;
+            int previewX = menuRect.X + 200;
             int previewY = menuRect.Y + 150;
             int previewWidth = 300;
-            int previewHeight = 120;
+            int previewHeight = 150;
 
             Rectangle previewRect = new Rectangle(previewX, previewY, previewWidth, previewHeight);
-            _spriteBatch.Draw(_pixelTexture, previewRect, new Color(20, 20, 20, 150));
-            DrawRectangleBorder(previewRect, new Color(100, 100, 100), 1);
+            _spriteBatch.Draw(_pixelTexture, previewRect, new Color(20, 20, 20, 200));
+            DrawRectangleBorder(previewRect, Color.LightGray, 2);
 
             string previewText = "Bike Preview";
             Vector2 previewTextSize = _font.MeasureString(previewText);
             _spriteBatch.DrawString(_font, previewText,
                 new Vector2(previewX + (previewWidth - previewTextSize.X) / 2, previewY + 10),
-                Color.Gray);
+                Color.LightGray);
 
             string statsText = GetBikeStats(Enum.GetValues(typeof(BikeType)).Cast<BikeType>().ToList()[_selectedBikeIndex]);
-            Vector2 statsSize = _font.MeasureString(statsText);
-            _spriteBatch.DrawString(_font, statsText,
+            Vector2 statsSize = _unicodeFont.MeasureString(statsText);
+            _spriteBatch.DrawString(_unicodeFont, statsText,
                 new Vector2(previewX + 20, previewY + 50),
                 Color.White);
         }
@@ -438,67 +480,76 @@ namespace GravityDefiedGame
             switch (bikeType)
             {
                 case BikeType.Standard:
-                    return "Speed: 3/5\nHandling: 3/5\nStability: 3/5";
+                    return "Speed: ***--\nHandling: ***--\nStability: ***--";
                 case BikeType.Sport:
-                    return "Speed: 5/5\nHandling: 2/5\nStability: 2/5";
+                    return "Speed: *****\nHandling: **---\nStability: **---";
                 case BikeType.OffRoad:
-                    return "Speed: 2/5\nHandling: 4/5\nStability: 5/5";
+                    return "Speed: **---\nHandling: ****-\nStability: *****";
                 default:
-                    return "Speed: 3/5\nHandling: 3/5\nStability: 3/5";
+                    return "Speed: ***--\nHandling: ***--\nStability: ***--";
             }
         }
 
         private void DrawLevelSelectionMenu()
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), new Color(0, 0, 0, 100));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, _screenWidth, _screenHeight), new Color(0, 0, 0, 150));
 
-            Rectangle menuRect = new Rectangle(SCREEN_WIDTH / 2 - 300, SCREEN_HEIGHT / 2 - 200, 600, 400);
-            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(40, 40, 40, 230));
-            DrawRectangleBorder(menuRect, new Color(150, 150, 150), 2);
+            Rectangle menuRect = new Rectangle(_screenWidth / 2 - 350, _screenHeight / 2 - 250, 700, 500);
+            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(30, 30, 30, 240));
+            DrawRectangleBorder(menuRect, Color.Magenta, 3);
 
             string titleText = "SELECT LEVEL";
-            Vector2 titleSize = _font.MeasureString(titleText);
-            _spriteBatch.DrawString(_font, titleText,
-                new Vector2((SCREEN_WIDTH - titleSize.X) / 2, menuRect.Y + 30),
-                Color.White);
+            Vector2 titleSize = _titleFont.MeasureString(titleText);
+            _spriteBatch.DrawString(_titleFont, titleText,
+                new Vector2((_screenWidth - titleSize.X) / 2, menuRect.Y + 30),
+                Color.Magenta);
 
             string levelText = $"Level {_selectedLevelIndex + 1}: {_gameController.Levels[_selectedLevelIndex].Name}";
             Vector2 levelSize = _font.MeasureString(levelText);
             _spriteBatch.DrawString(_font, levelText,
-                new Vector2((SCREEN_WIDTH - levelSize.X) / 2, menuRect.Y + 100),
+                new Vector2((_screenWidth - levelSize.X) / 2, menuRect.Y + 100),
                 Color.Yellow);
 
             string difficultyText = $"Difficulty: {GetLevelDifficulty(_selectedLevelIndex + 1)}";
-            Vector2 difficultySize = _font.MeasureString(difficultyText);
-            _spriteBatch.DrawString(_font, difficultyText,
-                new Vector2((SCREEN_WIDTH - difficultySize.X) / 2, menuRect.Y + 150),
+            Vector2 difficultySize = _unicodeFont.MeasureString(difficultyText);
+            _spriteBatch.DrawString(_unicodeFont, difficultyText,
+                new Vector2((_screenWidth - difficultySize.X) / 2, menuRect.Y + 150),
                 Color.White);
 
-            string instructionText = "< Left/Right: Change Level | Enter: Start Game >";
+            string instructionText = "← Left/Right: Change Level | Enter: Start";
             Vector2 instructionSize = _font.MeasureString(instructionText);
             _spriteBatch.DrawString(_font, instructionText,
-                new Vector2((SCREEN_WIDTH - instructionSize.X) / 2, menuRect.Y + 300),
-                Color.LightGray);
+                new Vector2((_screenWidth - instructionSize.X) / 2, menuRect.Y + 400),
+                Color.LightPink);
         }
 
         private string GetLevelDifficulty(int levelId)
         {
-            if (levelId <= 5) return "Easy";
-            if (levelId <= 15) return "Medium";
-            return "Hard";
+            if (levelId <= 5) return "Easy ★☆☆";
+            if (levelId <= 15) return "Medium ★★☆";
+            return "Hard ★★★";
         }
 
         private void DrawButton(UIButton button)
         {
-            _spriteBatch.Draw(_pixelTexture, button.Bounds, new Color(64, 64, 64));
-            DrawRectangleBorder(button.Bounds, Color.White, 2);
+            var mouseState = Mouse.GetState();
+            Color buttonColor = button.Bounds.Contains(mouseState.X, mouseState.Y) ? button.HoverColor : new Color(50, 50, 50);
+            Rectangle scaledBounds = new Rectangle(
+                (int)(button.Bounds.X - button.Bounds.Width * (_buttonHoverScale - 1) / 2),
+                (int)(button.Bounds.Y - button.Bounds.Height * (_buttonHoverScale - 1) / 2),
+                (int)(button.Bounds.Width * _buttonHoverScale),
+                (int)(button.Bounds.Height * _buttonHoverScale)
+            );
+
+            _spriteBatch.Draw(_pixelTexture, scaledBounds, buttonColor);
+            DrawRectangleBorder(scaledBounds, Color.White, 2);
 
             if (!string.IsNullOrEmpty(button.Text))
             {
                 Vector2 textSize = _font.MeasureString(button.Text);
                 Vector2 textPosition = new Vector2(
-                    button.Bounds.X + (button.Bounds.Width - textSize.X) / 2,
-                    button.Bounds.Y + (button.Bounds.Height - textSize.Y) / 2
+                    scaledBounds.X + (scaledBounds.Width - textSize.X) / 2,
+                    scaledBounds.Y + (scaledBounds.Height - textSize.Y) / 2
                 );
                 _spriteBatch.DrawString(_font, button.Text, textPosition, Color.White);
             }
@@ -512,166 +563,170 @@ namespace GravityDefiedGame
             _spriteBatch.Draw(_pixelTexture, new Rectangle(rectangle.X + rectangle.Width - thickness, rectangle.Y, thickness, rectangle.Height), color);
         }
 
-        private void DrawInfoPanel()
+        private void DrawInfoPanel(GameController gameController)
         {
-            string levelName = _gameController.CurrentLevel?.Name ?? "Level";
-            string timeText = $"Time: {_gameController.GameTime.Minutes:00}:{_gameController.GameTime.Seconds:00}";
-            string directionText = _gameController.Motorcycle.Direction == 1 ? "Forward" : "Backward";
+            string levelName = gameController.CurrentLevel?.Name ?? "Level";
+            string timeText = $"Time: {gameController.GameTime.Minutes:00}:{gameController.GameTime.Seconds:00}";
+            string directionText = gameController.Motorcycle.Direction == 1 ? "Forward" : "Backward";
 
-            Rectangle infoPanelRect = new Rectangle(10, 10, 300, 80);
-            _spriteBatch.Draw(_pixelTexture, infoPanelRect, new Color(0, 0, 0, 128));
-            DrawRectangleBorder(infoPanelRect, new Color(150, 150, 150), 1);
+            Rectangle infoPanelRect = new Rectangle(10, 10, 350, 100);
+            _spriteBatch.Draw(_pixelTexture, infoPanelRect, new Color(0, 0, 0, 150));
+            DrawRectangleBorder(infoPanelRect, Color.LightBlue, 2);
 
-            _spriteBatch.DrawString(_font, levelName, new Vector2(20, 20), Color.White);
+            _spriteBatch.DrawString(_font, $"Level: {levelName}", new Vector2(20, 20), Color.White);
             _spriteBatch.DrawString(_font, timeText, new Vector2(20, 45), Color.White);
             _spriteBatch.DrawString(_font, $"Direction: {directionText}", new Vector2(20, 70), Color.White);
 
-            string controlsText = "Controls: W - Forward, S - Backward, Space - Brake, A/D - Lean, R - Restart, ESC - Pause";
+            string controlsText = "W: Forward | S: Backward | Space: Brake | A/D: Lean | R: Restart | ESC: Pause";
             Vector2 controlsSize = _font.MeasureString(controlsText);
             _spriteBatch.DrawString(_font, controlsText,
-                new Vector2((SCREEN_WIDTH - controlsSize.X) / 2, SCREEN_HEIGHT - 35),
-                Color.White);
+                new Vector2((_screenWidth - controlsSize.X) / 2, _screenHeight - 40),
+                Color.LightBlue);
         }
 
-        private void DrawPauseMenu()
+        private void DrawPauseMenu(GameController gameController)
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), new Color(0, 0, 0, 180));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, _screenWidth, _screenHeight), new Color(0, 0, 0, 200));
 
-            Rectangle menuRect = new Rectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 150, 400, 300);
-            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(40, 40, 40, 230));
-            DrawRectangleBorder(menuRect, new Color(150, 150, 150), 2);
+            Rectangle menuRect = new Rectangle(_screenWidth / 2 - 250, _screenHeight / 2 - 200, 500, 400);
+            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(30, 30, 30, 240));
+            DrawRectangleBorder(menuRect, Color.LightBlue, 3);
 
             string pauseText = "GAME PAUSED";
-            Vector2 textSize = _font.MeasureString(pauseText);
-            _spriteBatch.DrawString(_font, pauseText,
-                new Vector2((SCREEN_WIDTH - textSize.X) / 2, menuRect.Y + 30),
-                Color.White);
+            Vector2 textSize = _titleFont.MeasureString(pauseText);
+            _spriteBatch.DrawString(_titleFont, pauseText,
+                new Vector2((_screenWidth - textSize.X) / 2, menuRect.Y + 30),
+                Color.LightBlue);
 
-            string resumeText = "Press ESC to resume";
+            string resumeText = "Press ESC to Resume";
             Vector2 resumeSize = _font.MeasureString(resumeText);
             _spriteBatch.DrawString(_font, resumeText,
-                new Vector2((SCREEN_WIDTH - resumeSize.X) / 2, menuRect.Y + 100),
+                new Vector2((_screenWidth - resumeSize.X) / 2, menuRect.Y + 120),
                 Color.White);
 
-            string restartText = "Press R to restart level";
+            string restartText = "Press R to Restart";
             Vector2 restartSize = _font.MeasureString(restartText);
             _spriteBatch.DrawString(_font, restartText,
-                new Vector2((SCREEN_WIDTH - restartSize.X) / 2, menuRect.Y + 140),
+                new Vector2((_screenWidth - restartSize.X) / 2, menuRect.Y + 160),
                 Color.White);
 
-            string levelText = $"Level: {_gameController.CurrentLevel?.Name ?? "Unknown"}";
-            string timeText = $"Current time: {_gameController.GameTime.Minutes:00}:{_gameController.GameTime.Seconds:00}";
+            string levelText = $"Level: {gameController.CurrentLevel?.Name ?? "Unknown"}";
+            string timeText = $"Time: {gameController.GameTime.Minutes:00}:{gameController.GameTime.Seconds:00}";
             _spriteBatch.DrawString(_font, levelText,
-                new Vector2(menuRect.X + 30, menuRect.Y + 200),
+                new Vector2(menuRect.X + 30, menuRect.Y + 300),
                 Color.LightGray);
             _spriteBatch.DrawString(_font, timeText,
-                new Vector2(menuRect.X + 30, menuRect.Y + 230),
+                new Vector2(menuRect.X + 30, menuRect.Y + 330),
                 Color.LightGray);
         }
 
-        private void DrawGameOverMenu()
+        private void DrawGameOverMenu(GameController gameController)
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), new Color(0, 0, 0, 180));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, _screenWidth, _screenHeight), new Color(0, 0, 0, 200));
 
-            Rectangle menuRect = new Rectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 150, 400, 300);
-            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(40, 40, 40, 230));
-            DrawRectangleBorder(menuRect, new Color(150, 0, 0), 2);
+            Rectangle menuRect = new Rectangle(_screenWidth / 2 - 250, _screenHeight / 2 - 200, 500, 400);
+            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(30, 30, 30, 240));
+            DrawRectangleBorder(menuRect, Color.Red, 3);
 
             string gameOverText = "GAME OVER";
-            Vector2 textSize = _font.MeasureString(gameOverText);
-            _spriteBatch.DrawString(_font, gameOverText,
-                new Vector2((SCREEN_WIDTH - textSize.X) / 2, menuRect.Y + 30),
+            Vector2 textSize = _titleFont.MeasureString(gameOverText);
+            _spriteBatch.DrawString(_titleFont, gameOverText,
+                new Vector2((_screenWidth - textSize.X) / 2, menuRect.Y + 30),
                 Color.Red);
 
-            string restartText = "Press R to restart level";
+            string restartText = "Press R to Restart";
             Vector2 restartSize = _font.MeasureString(restartText);
             _spriteBatch.DrawString(_font, restartText,
-                new Vector2((SCREEN_WIDTH - restartSize.X) / 2, menuRect.Y + 100),
+                new Vector2((_screenWidth - restartSize.X) / 2, menuRect.Y + 120),
                 Color.White);
 
-            string levelText = $"Level: {_gameController.CurrentLevel?.Name ?? "Unknown"}";
-            string timeText = $"Time: {_gameController.GameTime.Minutes:00}:{_gameController.GameTime.Seconds:00}";
+            string mainMenuText = "Press ESC for Main Menu";
+            Vector2 mainMenuSize = _font.MeasureString(mainMenuText);
+            _spriteBatch.DrawString(_font, mainMenuText,
+                new Vector2((_screenWidth - mainMenuSize.X) / 2, menuRect.Y + 160),
+                Color.White);
+
+            string levelText = $"Level: {gameController.CurrentLevel?.Name ?? "Unknown"}";
+            string timeText = $"Time: {gameController.GameTime.Minutes:00}:{gameController.GameTime.Seconds:00}";
             _spriteBatch.DrawString(_font, levelText,
-                new Vector2(menuRect.X + 30, menuRect.Y + 180),
+                new Vector2(menuRect.X + 30, menuRect.Y + 300),
                 Color.LightGray);
             _spriteBatch.DrawString(_font, timeText,
-                new Vector2(menuRect.X + 30, menuRect.Y + 210),
+                new Vector2(menuRect.X + 30, menuRect.Y + 330),
                 Color.LightGray);
         }
 
-        private void DrawLevelCompleteMenu()
+        private void DrawLevelCompleteMenu(GameController gameController)
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT), new Color(0, 0, 0, 180));
+            _spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, _screenWidth, _screenHeight), new Color(0, 0, 0, 200));
 
-            Rectangle menuRect = new Rectangle(SCREEN_WIDTH / 2 - 200, SCREEN_HEIGHT / 2 - 150, 400, 300);
-            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(40, 40, 40, 230));
-            DrawRectangleBorder(menuRect, new Color(0, 150, 0), 2);
+            Rectangle menuRect = new Rectangle(_screenWidth / 2 - 250, _screenHeight / 2 - 200, 500, 400);
+            _spriteBatch.Draw(_pixelTexture, menuRect, new Color(30, 30, 30, 240));
+            DrawRectangleBorder(menuRect, Color.LimeGreen, 3);
 
             string completeText = "LEVEL COMPLETE!";
-            Vector2 textSize = _font.MeasureString(completeText);
-            _spriteBatch.DrawString(_font, completeText,
-                new Vector2((SCREEN_WIDTH - textSize.X) / 2, menuRect.Y + 30),
-                Color.Green);
+            Vector2 textSize = _titleFont.MeasureString(completeText);
+            _spriteBatch.DrawString(_titleFont, completeText,
+                new Vector2((_screenWidth - textSize.X) / 2, menuRect.Y + 30),
+                Color.LimeGreen);
 
-            string timeText = $"Time: {_gameController.GameTime.Minutes:00}:{_gameController.GameTime.Seconds:00}";
+            string timeText = $"Time: {gameController.GameTime.Minutes:00}:{gameController.GameTime.Seconds:00}";
             Vector2 timeSize = _font.MeasureString(timeText);
             _spriteBatch.DrawString(_font, timeText,
-                new Vector2((SCREEN_WIDTH - timeSize.X) / 2, menuRect.Y + 80),
+                new Vector2((_screenWidth - timeSize.X) / 2, menuRect.Y + 100),
                 Color.White);
 
-            string continueText = "Press C to continue to the next level";
+            string continueText = "Press C to Continue";
             Vector2 continueSize = _font.MeasureString(continueText);
             _spriteBatch.DrawString(_font, continueText,
-                new Vector2((SCREEN_WIDTH - continueSize.X) / 2, menuRect.Y + 130),
+                new Vector2((_screenWidth - continueSize.X) / 2, menuRect.Y + 140),
                 Color.White);
 
-            string restartText = "Press R to replay this level";
+            string restartText = "Press R to Replay";
             Vector2 restartSize = _font.MeasureString(restartText);
             _spriteBatch.DrawString(_font, restartText,
-                new Vector2((SCREEN_WIDTH - restartSize.X) / 2, menuRect.Y + 160),
+                new Vector2((_screenWidth - restartSize.X) / 2, menuRect.Y + 180),
                 Color.White);
 
-            string levelText = $"Level: {_gameController.CurrentLevel?.Name ?? "Unknown"}";
+            string levelText = $"Level: {gameController.CurrentLevel?.Name ?? "Unknown"}";
             _spriteBatch.DrawString(_font, levelText,
-                new Vector2(menuRect.X + 30, menuRect.Y + 210),
+                new Vector2(menuRect.X + 30, menuRect.Y + 330),
                 Color.LightGray);
         }
 
-        private void UpdateCamera()
+        private GameController _gameController;
+
+        public void ShowMainMenu()
         {
-            if (_gameController.Motorcycle != null)
-            {
-                Vector2 visualCenter = _gameController.Motorcycle.GetVisualCenter();
-                _camera.Update(visualCenter);
-            }
+            _gameController.EnterMainMenu();
+            Log("UIController", "Main menu displayed", () => Info("UIController", "ShowMainMenu completed"));
         }
 
-        private void GameController_GameEvent(object sender, GameEventArgs e)
+        private void ShowBikeSelection()
         {
-            switch (e.Type)
-            {
-                case GameEventType.LevelComplete:
-                case GameEventType.GameOver:
-                case GameEventType.BikeChanged:
-                case GameEventType.CheckpointReached:
-                case GameEventType.Error:
-                    ShowMessage(e.Message);
-                    break;
-            }
+            _gameController.EnterBikeSelection();
+            var availableBikes = Enum.GetValues(typeof(BikeType)).Cast<BikeType>().ToList();
+            _gameController.SetBikeType(availableBikes[_selectedBikeIndex]);
+            _gameController.SetBikeColor(_availableBikeColors[_selectedColorIndex]);
+            Log("UIController", "Bike selection menu displayed", () => Info("UIController", "ShowBikeSelection completed"));
         }
 
-        private void ShowMessage(string message)
+        private void ShowLevelSelection()
         {
-            Log("Game", $"Message: {message}", () => Debug("Game", $"ShowMessage: {message}"));
+            _gameController.EnterLevelSelection();
+            _gameController.SelectLevel(_selectedLevelIndex + 1);
+            Log("UIController", "Level selection menu displayed", () => Info("UIController", "ShowLevelSelection completed"));
         }
 
-        protected override void UnloadContent()
+        private void StartGame(int levelId)
         {
-            _renderCancellationTokenSource?.Cancel();
-            _renderCancellationTokenSource?.Dispose();
-            _pixelTexture?.Dispose();
-            base.UnloadContent();
-            Log("Game", "Content unloaded", () => Info("Game", "UnloadContent completed"));
+            _gameController.StartLevel(levelId);
+            Log("UIController", $"Level {levelId} started", () => Info("UIController", "StartGame completed"));
+        }
+
+        public void ShowMessage(string message)
+        {
+            Log("UIController", $"Message: {message}", () => Debug("UIController", $"ShowMessage: {message}"));
         }
     }
 
@@ -681,5 +736,6 @@ namespace GravityDefiedGame
         public bool IsVisible { get; set; } = true;
         public Action OnClick { get; set; }
         public string Text { get; set; }
+        public Color HoverColor { get; set; } = Color.Gray;
     }
 }
