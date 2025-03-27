@@ -5,18 +5,24 @@ using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using GravityDefiedGame.Views;
 using static GravityDefiedGame.Utilities.GameConstants.Motorcycle;
 using static GravityDefiedGame.Utilities.GameConstants.Physics;
 using static GravityDefiedGame.Utilities.GameConstants.Validation;
 using static GravityDefiedGame.Utilities.LoggerCore;
 using static GravityDefiedGame.Utilities.Logger;
+using static GravityDefiedGame.Models.BikeGeom;
 
 namespace GravityDefiedGame.Models
 {
     public class Motorcycle : PhysicsComponent
     {
+        #region Private Fields
         private readonly BikePhysics _physics;
+        private int _direction = 1;
+        #endregion
 
+        #region Properties
         // Свойства состояния мотоцикла
         public float SuspensionRealMaxAngle { get; internal set; }
         public bool EnforceSuspensionAngleLimits { get; set; } = true;
@@ -50,6 +56,7 @@ namespace GravityDefiedGame.Models
         public Color BikeColor { get; private set; }
         public BikeState State { get; internal set; }
 
+        // Вычисляемые свойства состояния мотоцикла
         public bool IsCrashed
         {
             get => (State & BikeState.Crashed) == BikeState.Crashed;
@@ -85,15 +92,8 @@ namespace GravityDefiedGame.Models
         public float WheelieTime { get; internal set; }
         public float StoppieTime { get; internal set; }
 
-        public float WheelieIntensity
-        {
-            get => IsInWheelie ? MathHelper.Min(1.0f, WheelieTime / 1.0f) : 0;
-        }
-
-        public float StoppieIntensity
-        {
-            get => IsInStoppie ? MathHelper.Min(1.0f, StoppieTime / 0.5f) : 0;
-        }
+        public float WheelieIntensity => IsInWheelie ? MathHelper.Min(1.0f, WheelieTime / 1.0f) : 0;
+        public float StoppieIntensity => IsInStoppie ? MathHelper.Min(1.0f, StoppieTime / 0.5f) : 0;
 
         public Vector2 FrontAttachmentPoint { get; set; }
         public Vector2 RearAttachmentPoint { get; set; }
@@ -111,7 +111,12 @@ namespace GravityDefiedGame.Models
             internal set => (FrontSuspensionOffset, RearSuspensionOffset) = value;
         }
 
-        public int Direction { get; private set; } = 1;
+        public int Direction
+        {
+            get => _direction;
+            private set => _direction = value;
+        }
+        #endregion
 
         public Motorcycle(BikeType bikeType = BikeType.Standard)
         {
@@ -138,12 +143,13 @@ namespace GravityDefiedGame.Models
             });
         }
 
+        #region Public Methods
         public void Reset()
         {
             Log("Motorcycle", "resetting motorcycle", () =>
             {
                 _physics.Reset();
-                Direction = 1; 
+                Direction = 1;
                 Debug("Motorcycle", "Motorcycle reset to initial state");
             });
         }
@@ -176,6 +182,23 @@ namespace GravityDefiedGame.Models
             });
         }
 
+        public void UpdateFromTheme()
+        {
+            Log("Motorcycle", "updating from theme", () =>
+            {
+                try
+                {
+                    // Обновляем цвет мотоцикла на основе текущей темы
+                    BikeColor = ThemeManager.CurrentTheme.BikeColors[SkeletonLineType.MainFrame];
+                    Debug("Motorcycle", $"Bike color updated from theme to {BikeColor}");
+                }
+                catch (Exception ex)
+                {
+                    Error("Motorcycle", $"Failed to update from theme: {ex.Message}");
+                }
+            });
+        }
+
         public void Update(float deltaTime, Level level, CancellationToken cancellationToken = default)
         {
             Log("Motorcycle", "updating motorcycle", () =>
@@ -188,16 +211,16 @@ namespace GravityDefiedGame.Models
         {
             Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
             {
-                Throttle = MathHelper.Clamp(amount, 0f, 1f);
+            Throttle = MathHelper.Clamp(amount, 0f, 1f);
                 if (Direction == -1)
                 {
                     IsMovingBackward = true;
-                    _physics.ApplyThrottle(amount * Direction); 
+                    _physics.ApplyThrottle(amount * Direction);
                 }
                 else
                 {
                     IsMovingBackward = false;
-                    _physics.ApplyThrottle(amount); 
+                    _physics.ApplyThrottle(amount);
                 }
             });
         }
@@ -207,7 +230,7 @@ namespace GravityDefiedGame.Models
             Log("Motorcycle", $"applying brake: {amount:F2}", () =>
             {
                 Brake = MathHelper.Clamp(amount, 0f, 1f);
-                _physics.ApplyBrake(amount); 
+                _physics.ApplyBrake(amount);
             });
         }
 
@@ -223,36 +246,24 @@ namespace GravityDefiedGame.Models
         {
             Log("Motorcycle", $"setting direction: {direction}", () =>
             {
-                if (direction != 1 && direction != -1)
+                if (direction is not (1 or -1))
                     throw new ArgumentException("Direction must be 1 or -1", nameof(direction));
+
                 Direction = direction;
                 Debug("Motorcycle", $"Direction set to {direction}");
             });
         }
 
-        public float GetWheelRadius()
-        {
-            return _physics.WheelRadius;
-        }
+        public float GetWheelRadius() => _physics.WheelRadius;
 
-        public Vector2 GetVisualCenter()
-        {
+        public Vector2 GetVisualCenter() =>
             Log("Motorcycle", "Calculating visual center", () =>
-            {
-                Vector2 center = (WheelPositions.Front + WheelPositions.Rear) / 2f;
-                return center;
-            }, Position);
-            return (WheelPositions.Front + WheelPositions.Rear) / 2f;
-        }
+                (WheelPositions.Front + WheelPositions.Rear) / 2f,
+            Position);
 
-        public List<Vector2> GetFramePoints()
-        {
-            return _physics.GetFramePoints();
-        }
+        public List<Vector2> GetFramePoints() => _physics.GetFramePoints();
 
-        public (List<BikeGeom.SkeletonPoint> Points, List<BikeGeom.SkeletonLine> Lines) GetSkeleton()
-        {
-            return _physics.GetSkeleton();
-        }
+        public (List<SkeletonPoint> Points, List<SkeletonLine> Lines) GetSkeleton() => _physics.GetSkeleton();
+        #endregion
     }
 }

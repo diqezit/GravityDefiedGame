@@ -18,6 +18,7 @@ namespace GravityDefiedGame.Controllers
         MainMenu,
         BikeSelection,
         LevelSelection,
+        ThemeSelection,
         Playing,
         Paused,
         GameOver,
@@ -26,7 +27,7 @@ namespace GravityDefiedGame.Controllers
 
     public class GameController
     {
-        // Константы для управления и игровой механики
+        #region Constants
         private static class Constants
         {
             // Значения управления
@@ -39,16 +40,17 @@ namespace GravityDefiedGame.Controllers
             // Игровые параметры
             public const float MaxFallHeight = 1000.0f;
         }
+        #endregion
 
-        // Приватные поля
+        #region Private Fields
         private readonly InputState _input = new();
         private readonly Stopwatch _gameStopwatch = new();
         private readonly Dictionary<string, Action> _keyDownActions;
         private readonly Dictionary<string, Action> _keyUpActions;
-        private readonly Dictionary<Keys, Action> _systemKeyActions;
         private GameState _currentGameState = GameState.MainMenu;
+        #endregion
 
-        // Публичные свойства
+        #region Public Properties
         public Motorcycle Motorcycle { get; }
         public bool IsGameOver => Motorcycle.IsCrashed;
         public bool IsLevelComplete { get; private set; }
@@ -73,6 +75,7 @@ namespace GravityDefiedGame.Controllers
                 OnGameEvent(GetEventTypeForStateTransition(oldState, value), message);
             }
         }
+        #endregion
 
         public event EventHandler<GameEventArgs>? GameEvent;
 
@@ -166,34 +169,12 @@ namespace GravityDefiedGame.Controllers
                 }
             };
 
-            // Инициализация системных клавиш
-            _systemKeyActions = new Dictionary<Keys, Action>
-            {
-                [Keys.Escape] = () =>
-                {
-                    if (CurrentGameState == GameState.Playing) PauseGame();
-                    else if (CurrentGameState == GameState.Paused) ResumeGame();
-                },
-                [Keys.C] = () =>
-                {
-                    if (CurrentGameState == GameState.LevelComplete)
-                        StartNextLevel();
-                },
-                [Keys.R] = () =>
-                {
-                    if (CurrentGameState == GameState.GameOver || CurrentGameState == GameState.LevelComplete)
-                        RestartLevel();
-                }
-            };
-
             InitializeAvailableBikes();
             LoadLevels();
-            Info("GameController", "Game controller initialized with optimized key handling");
+            Info("GameController", "Game controller initialized");
         }
 
         #region Setup and Initialization
-
-        // Инициализация доступных типов мотоциклов
         private void InitializeAvailableBikes()
         {
             AvailableBikes.Clear();
@@ -201,20 +182,20 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", $"Initialized {AvailableBikes.Count} available bike types");
         }
 
-        // Загрузка уровней игры
         public void LoadLevels()
         {
             Levels.Clear();
             var random = new Random();
+
             for (int i = 1; i <= 25; i++)
             {
                 int seed = random.Next();
                 Levels.Add(new Level(i, $"Level {i}", seed));
             }
+
             Info("GameController", $"Loaded {Levels.Count} levels");
         }
 
-        // Инициализация состояния игры для начала уровня
         private void InitializeGameState(int levelId)
         {
             GameTime = TimeSpan.Zero;
@@ -223,7 +204,6 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", $"Level {levelId} started");
         }
 
-        // Инициализация мотоцикла с обработкой ошибок
         private bool TryInitializeMotorcycle(out string errorMessage)
         {
             errorMessage = string.Empty;
@@ -250,12 +230,9 @@ namespace GravityDefiedGame.Controllers
                 return false;
             }
         }
-
         #endregion
 
         #region Game Flow Control
-
-        // Запуск уровня
         public void StartLevel(int levelId)
         {
             Level? level = Levels.FirstOrDefault(l => l.Id == levelId);
@@ -282,7 +259,6 @@ namespace GravityDefiedGame.Controllers
             OnGameEvent(GameEventType.LevelStart, $"Level {levelId} started");
         }
 
-        // Запуск следующего уровня
         public void StartNextLevel()
         {
             int nextLevelId = (CurrentLevel?.Id ?? 0) + 1;
@@ -297,7 +273,6 @@ namespace GravityDefiedGame.Controllers
             }
         }
 
-        // Перезапуск текущего уровня
         public void RestartLevel()
         {
             if (CurrentLevel is null)
@@ -311,7 +286,6 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", $"Level {CurrentLevel.Id} restarted");
         }
 
-        // Пауза игры
         public void PauseGame()
         {
             if (IsPaused) return;
@@ -322,7 +296,6 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", "Game paused");
         }
 
-        // Возобновление игры
         public void ResumeGame()
         {
             if (!IsPaused) return;
@@ -332,21 +305,14 @@ namespace GravityDefiedGame.Controllers
             _gameStopwatch.Start();
             Info("GameController", "Game resumed");
         }
-
         #endregion
 
         #region Menu Navigation
-
-        // Переход в главное меню
         public void EnterMainMenu() => CurrentGameState = GameState.MainMenu;
-
-        // Переход к выбору мотоцикла
         public void EnterBikeSelection() => CurrentGameState = GameState.BikeSelection;
-
-        // Переход к выбору уровня
         public void EnterLevelSelection() => CurrentGameState = GameState.LevelSelection;
+        public void EnterThemeSelection() => CurrentGameState = GameState.ThemeSelection;
 
-        // Выбор мотоцикла
         public void SetBikeType(BikeType bikeType)
         {
             CurrentBikeType = bikeType;
@@ -355,7 +321,6 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", $"Bike type changed to {bikeType}");
         }
 
-        // Установка цвета мотоцикла
         public void SetBikeColor(Color color)
         {
             Motorcycle.SetBikeColor(color);
@@ -363,7 +328,6 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", "Bike color changed");
         }
 
-        // Выбор уровня
         public void SelectLevel(int levelId)
         {
             if (levelId < 1 || levelId > Levels.Count)
@@ -374,12 +338,9 @@ namespace GravityDefiedGame.Controllers
             OnGameEvent(GameEventType.LevelSelected, $"Selected level: {levelId}");
             Info("GameController", $"Selected level: {levelId}");
         }
-
         #endregion
 
         #region Game Loop
-
-        // Главный метод обновления игрового состояния
         public void Update(float deltaTime, CancellationToken cancellationToken = default)
         {
             try
@@ -481,31 +442,20 @@ namespace GravityDefiedGame.Controllers
             OnGameEvent(GameEventType.GameOver, $"Game over: {reason}");
             Info("GameController", $"Game over: {reason}");
         }
-
         #endregion
 
         #region Input Handling
-
         // Обработка ввода с клавиатуры
         public void HandleInput(KeyboardState keyboardState, KeyboardState previousKeyboardState)
         {
             if (CurrentGameState == GameState.Playing)
             {
-                // Проверка основных игровых клавиш
+                // Оставляем только WASD и Space
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.W, "W");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.S, "S");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.A, "A");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.D, "D");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.Space, "Space");
-            }
-
-            // Проверка системных клавиш
-            foreach (var key in _systemKeyActions.Keys)
-            {
-                if (keyboardState.IsKeyDown(key) && previousKeyboardState.IsKeyUp(key))
-                {
-                    _systemKeyActions[key]();
-                }
             }
         }
 
@@ -536,15 +486,6 @@ namespace GravityDefiedGame.Controllers
             }
         }
 
-        // Обработка системных клавиш
-        public void HandleKeyPress(Keys key, bool isKeyDown)
-        {
-            if (isKeyDown && _systemKeyActions.TryGetValue(key, out var action))
-            {
-                action();
-            }
-        }
-
         // Сброс состояния ввода
         public void ResetInputState()
         {
@@ -569,22 +510,16 @@ namespace GravityDefiedGame.Controllers
         }
 
         // Расчет величины наклона на основе нажатых клавиш
-        private float CalculateLeanAmount()
+        private float CalculateLeanAmount() => (_input.IsLeaningLeft, _input.IsLeaningRight) switch
         {
-            // Проверка комбинаций нажатий клавиш наклона
-            return (_input.IsLeaningLeft, _input.IsLeaningRight) switch
-            {
-                (true, true) => Constants.NoInput,   // Обе клавиши - нейтральное положение
-                (true, false) => Constants.LeftLean, // Только левая - наклон влево
-                (false, true) => Constants.RightLean,// Только правая - наклон вправо
-                _ => Constants.NoInput               // Ни одной - нейтральное положение
-            };
-        }
-
+            (true, true) => Constants.NoInput,   // Обе клавиши - нейтральное положение
+            (true, false) => Constants.LeftLean, // Только левая - наклон влево
+            (false, true) => Constants.RightLean,// Только правая - наклон вправо
+            _ => Constants.NoInput               // Ни одной - нейтральное положение
+        };
         #endregion
 
         #region Utility Methods
-
         // Форматирование игрового времени
         private string FormatGameTime() =>
             GameTime.TotalHours >= 1
@@ -598,6 +533,7 @@ namespace GravityDefiedGame.Controllers
                 (_, GameState.MainMenu) => "Entered Main Menu",
                 (_, GameState.BikeSelection) => "Entered Bike Selection",
                 (_, GameState.LevelSelection) => "Entered Level Selection",
+                (_, GameState.ThemeSelection) => "Entered Theme Selection",
                 (_, GameState.Playing) when oldState == GameState.Paused => "Game resumed",
                 (_, GameState.Playing) => $"Level {CurrentLevel?.Id ?? 0} started",
                 (_, GameState.Paused) => "Game paused",
@@ -613,6 +549,7 @@ namespace GravityDefiedGame.Controllers
                 (_, GameState.MainMenu) => GameEventType.MenuChanged,
                 (_, GameState.BikeSelection) => GameEventType.MenuChanged,
                 (_, GameState.LevelSelection) => GameEventType.MenuChanged,
+                (_, GameState.ThemeSelection) => GameEventType.MenuChanged,
                 (_, GameState.Playing) when oldState == GameState.Paused => GameEventType.GameResumed,
                 (_, GameState.Playing) => GameEventType.LevelStart,
                 (_, GameState.Paused) => GameEventType.GamePaused,
@@ -627,12 +564,10 @@ namespace GravityDefiedGame.Controllers
             Debug("GameController", $"Game event: {type} - {message}");
             GameEvent?.Invoke(this, new GameEventArgs(type, message));
         }
-
         #endregion
     }
 
     #region Supporting Types
-
     // Типы игровых событий
     public enum GameEventType
     {
@@ -667,6 +602,5 @@ namespace GravityDefiedGame.Controllers
         public void Reset() =>
             (IsThrottlePressed, IsBrakePressed, IsLeaningLeft, IsLeaningRight) = (false, false, false, false);
     }
-
     #endregion
 }

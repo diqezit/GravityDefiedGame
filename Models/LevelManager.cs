@@ -155,10 +155,12 @@ namespace GravityDefiedGame.Models
         public LevelTheme Theme { get; private set; }
         public float SafeZoneStartLength { get; private set; }
         public float SafeZoneEndLength { get; private set; }
-        public Color VerticalLineColor => ThemeConstants.VerticalLineColor;
-        public Color BackgroundColor => ThemeConstants.BackgroundColor;
-        public Color TerrainColor => ThemeConstants.TerrainColor;
-        public Color SafeZoneColor => ThemeConstants.SafeZoneColor;
+
+        // Изменение для поддержки темы - свойства используют ThemeManager
+        public Color VerticalLineColor => ThemeManager.CurrentTheme.VerticalLineColor;
+        public Color BackgroundColor => ThemeManager.CurrentTheme.BackgroundColor;
+        public Color TerrainColor => ThemeManager.CurrentTheme.TerrainColor;
+        public Color SafeZoneColor => ThemeManager.CurrentTheme.SafeZoneColor;
 
         private int _currentSegmentIndex = 0;
 
@@ -245,28 +247,79 @@ namespace GravityDefiedGame.Models
 #endif
         }
 
-        private bool IsOutOfBounds(float x) =>
-            TerrainPoints.Count < 2 || x < TerrainPoints[0].X || x > TerrainPoints[TerrainPoints.Count - 1].X;
+        private bool IsOutOfBounds(float x)
+        {
+            // Проверка на некорректные значения
+            if (float.IsNaN(x) || float.IsInfinity(x))
+            {
+                Error("Level", $"IsOutOfBounds called with invalid x: {x}");
+                return true;
+            }
+
+            return TerrainPoints.Count < 2 || x < TerrainPoints[0].X || x > TerrainPoints[TerrainPoints.Count - 1].X;
+        }
 
         private float GetOutOfBoundsValue(float x)
         {
 #if DEBUG
             return Log("Level", "Getting OOB value", () =>
             {
-                if (x < TerrainPoints[0].X || x > TerrainPoints[TerrainPoints.Count - 1].X)
+                // Проверка на некорректные значения
+                if (float.IsNaN(x) || float.IsInfinity(x))
                 {
-                    Warning("Level", $"Out of bounds X={x:F1}");
-                    return float.MaxValue;
+                    Error("Level", $"Invalid X coordinate: {x}");
+                    return DefaultGroundY;
                 }
+
+                // Обработка выхода за границы
+                if (TerrainPoints.Count == 0)
+                {
+                    Warning("Level", "No terrain points available");
+                    return DefaultGroundY;
+                }
+
+                if (x < TerrainPoints[0].X)
+                {
+                    Warning("Level", $"X={x:F1} is before level start (min={TerrainPoints[0].X:F1})");
+                    return TerrainPoints[0].YMiddle;
+                }
+
+                if (x > TerrainPoints[TerrainPoints.Count - 1].X)
+                {
+                    Warning("Level", $"X={x:F1} is after level end (max={TerrainPoints[TerrainPoints.Count - 1].X:F1})");
+                    return TerrainPoints[TerrainPoints.Count - 1].YMiddle;
+                }
+
+                Warning("Level", $"Out of bounds X={x:F1} but within range?");
                 return DefaultGroundY;
             }, DefaultGroundY);
 #else
+            // В релизе просто безопасно возвращаем значение
+            if (float.IsNaN(x) || float.IsInfinity(x)) return DefaultGroundY;
+            if (TerrainPoints.Count == 0) return DefaultGroundY;
+            if (x < TerrainPoints[0].X) return TerrainPoints[0].YMiddle;
+            if (x > TerrainPoints[TerrainPoints.Count - 1].X) return TerrainPoints[TerrainPoints.Count - 1].YMiddle;
             return DefaultGroundY;
 #endif
         }
 
         private void UpdateSegmentIndex(float x)
         {
+            // Защита от некорректных значений
+            if (float.IsNaN(x) || float.IsInfinity(x))
+            {
+                Error("Level", $"UpdateSegmentIndex called with invalid x: {x}");
+                _currentSegmentIndex = 0;
+                return;
+            }
+
+            if (TerrainPoints.Count < 2)
+            {
+                Warning("Level", "Not enough terrain points for segment indexing");
+                _currentSegmentIndex = 0;
+                return;
+            }
+
             if (_currentSegmentIndex >= 0 && _currentSegmentIndex < TerrainPoints.Count - 1)
             {
                 var p1 = TerrainPoints[_currentSegmentIndex];
@@ -311,10 +364,29 @@ namespace GravityDefiedGame.Models
 
         private int FindTerrainSegmentIndex(float x)
         {
+            if (float.IsNaN(x) || float.IsInfinity(x))
+            {
+                Error("Level", $"FindTerrainSegmentIndex called with invalid x: {x}");
+                return 0;
+            }
+
+            if (TerrainPoints.Count < 2)
+            {
+                Warning("Level", "Not enough terrain points");
+                return 0;
+            }
+
+            if (x < TerrainPoints[0].X) return 0;
+            if (x > TerrainPoints[TerrainPoints.Count - 1].X) return TerrainPoints.Count - 2;
+
             int left = 0, right = TerrainPoints.Count - 1;
             while (left <= right)
             {
                 int mid = left + (right - left) / 2;
+
+                if (mid >= TerrainPoints.Count - 1)
+                    return TerrainPoints.Count - 2;
+
                 if (TerrainPoints[mid].X <= x && (mid == TerrainPoints.Count - 1 || TerrainPoints[mid + 1].X > x))
                     return mid;
                 else if (TerrainPoints[mid].X < x)
@@ -322,13 +394,14 @@ namespace GravityDefiedGame.Models
                 else
                     right = mid - 1;
             }
-            return -1;
+
+            return Math.Min(Math.Max(0, left), TerrainPoints.Count - 2);
         }
 
         private float LinearInterpolate(float x, float x1, float y1, float x2, float y2) =>
             y1 + (y2 - y1) * ((x - x1) / (x2 - x1));
 
-        private float CalculateDistance(Vector2 p1, Vector2 p2) =>
+        private new float CalculateDistance(Vector2 p1, Vector2 p2) =>
             Vector2.Distance(p1, p2);
 
         #endregion Private Methods
@@ -509,6 +582,13 @@ namespace GravityDefiedGame.Models
                     float midLen = length - safeStart - safeEnd;
                     float lastY = baseY;
                     int count = _pointCount - pts.Count - PointCountReductionFactor;
+
+                    if (count <= 0)
+                    {
+                        Warning("LevelGenerator", "Too few points to generate terrain");
+                        count = Max(1, _pointCount / 2);
+                    }
+
                     for (int i = 1; i <= count; i++)
                     {
                         float progress = (float)i / count;
@@ -612,9 +692,9 @@ namespace GravityDefiedGame.Models
 
         #region Level Manager Functionality
 
-        private static List<Level> _allLevels = new List<Level>();
-        private static Level _currentLevel;
-        public static event EventHandler<LevelEventArgs> LevelChanged;
+        private static new List<Level> _allLevels = new List<Level>();
+        private static Level? _currentLevel;
+        public static event EventHandler<LevelEventArgs>? LevelChanged;
 
         public static void InitializeLevels(int count = 25)
         {
@@ -646,7 +726,7 @@ namespace GravityDefiedGame.Models
             return true;
         }
 
-        public static Level GetCurrentLevel()
+        public static Level? GetCurrentLevel()
         {
             return _currentLevel;
         }

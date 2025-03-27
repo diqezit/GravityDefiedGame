@@ -15,17 +15,9 @@ using static GravityDefiedGame.Models.DrawingComponent.DrawingConstants;
 
 namespace GravityDefiedGame.Views
 {
-    public static class ThemeConstants
-    {
-        public static readonly Color
-            BackgroundColor = new(255, 204, 102),
-            TerrainColor = new(204, 153, 102),
-            SafeZoneColor = new(152, 251, 152),
-            VerticalLineColor = new(204, 153, 102);
-    }
-
     public class Renderer : DrawingComponent
     {
+        #region Private Fields
         private readonly SpriteBatch _spriteBatch;
         private readonly GraphicsDevice _graphicsDevice;
         private readonly Texture2D _pixelTexture;
@@ -33,7 +25,8 @@ namespace GravityDefiedGame.Views
         private readonly GameController _gameController;
         private readonly SkeletonRenderer _skeletonRenderer;
         private readonly ShadowRenderer _shadowRenderer;
-        private readonly ColorSet _colors;
+        private ColorSet _colors;
+        #endregion
 
         public Renderer(SpriteBatch spriteBatch, GraphicsDevice graphicsDevice, GameController gameController, Camera camera)
         {
@@ -45,9 +38,11 @@ namespace GravityDefiedGame.Views
             _pixelTexture = new Texture2D(graphicsDevice, 1, 1);
             _pixelTexture.SetData(new[] { Color.White });
 
-            _colors = CreateColorSet();
+            _colors = CreateColorSetFromTheme(ThemeManager.CurrentTheme);
             _skeletonRenderer = new SkeletonRenderer(_spriteBatch, _pixelTexture, _camera, _colors.LineTypeColors);
             _shadowRenderer = new ShadowRenderer(_spriteBatch, _pixelTexture, _camera, _gameController);
+
+            ThemeManager.ThemeChanged += OnThemeChanged;
 
             Log("Renderer", "Initializing renderer", () => {
                 _shadowRenderer.Initialize();
@@ -56,24 +51,22 @@ namespace GravityDefiedGame.Views
             });
         }
 
-        private ColorSet CreateColorSet() => new(
-            LineTypeColors: new Dictionary<SkeletonLineType, Color>
-            {
-                [SkeletonLineType.MainFrame] = new Color(150, 150, 150),
-                [SkeletonLineType.Suspension] = Color.Black,
-                [SkeletonLineType.Wheel] = Color.Black,
-                [SkeletonLineType.Seat] = new Color(200, 200, 200),
-                [SkeletonLineType.Handlebar] = new Color(150, 150, 150),
-                [SkeletonLineType.Exhaust] = new Color(100, 100, 100)
-            },
-            WheelFill: new Color(200, 200, 200),
-            WheelStroke: Color.Black,
-            SpokeStroke: Color.Black,
+        private void OnThemeChanged()
+        {
+            _colors = CreateColorSetFromTheme(ThemeManager.CurrentTheme);
+            _skeletonRenderer.UpdateLineColors(_colors.LineTypeColors);
+        }
+
+        private static ColorSet CreateColorSetFromTheme(ThemeSettings theme) => new(
+            LineTypeColors: theme.BikeColors,
+            WheelFill: theme.WheelFill,
+            WheelStroke: theme.WheelStroke,
+            SpokeStroke: theme.SpokeStroke,
             TerrainFill: null,
-            TerrainStroke: ThemeConstants.TerrainColor,
+            TerrainStroke: theme.TerrainColor,
             SuspensionStroke: Color.DarkGray,
             SuspensionFill: new Color(180, 180, 180),
-            ShadowStroke: new Color((byte)0, (byte)0, (byte)0, (255 * ShadowOpacity))
+            ShadowStroke: theme.ShadowColor
         );
 
         public void Render(CancellationToken cancellationToken = default) =>
@@ -116,7 +109,7 @@ namespace GravityDefiedGame.Views
                     _pixelTexture,
                     topPoint1,
                     topPoint2,
-                    point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
+                    point1.IsSafeZone ? ThemeManager.CurrentTheme.SafeZoneColor : _colors.TerrainStroke,
                     TerrainStrokeThickness
                 );
             }
@@ -131,7 +124,7 @@ namespace GravityDefiedGame.Views
                     _pixelTexture,
                     bottomPoint1,
                     bottomPoint2,
-                    point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
+                    point1.IsSafeZone ? ThemeManager.CurrentTheme.SafeZoneColor : _colors.TerrainStroke,
                     TerrainStrokeThickness
                 );
             }
@@ -163,7 +156,7 @@ namespace GravityDefiedGame.Views
                         _pixelTexture,
                         topPoint,
                         bottomPoint,
-                        ThemeConstants.VerticalLineColor,
+                        ThemeManager.CurrentTheme.VerticalLineColor,
                         VerticalLineStrokeThickness
                     );
                 }
@@ -200,6 +193,11 @@ namespace GravityDefiedGame.Views
             private readonly Camera _camera;
             private readonly GameController _gameController;
 
+            // Константы для теней
+            private const float ShadowOffsetFactor = 0.2f;    // Фактор смещения тени
+            private const float ShadowScaleFactor = 0.05f;    // Фактор масштаба тени
+            private const int ShadowInterpolationSteps = 5;   // Шаги интерполяции для сглаживания
+
             public ShadowRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera, GameController gameController)
             {
                 _spriteBatch = spriteBatch;
@@ -209,9 +207,7 @@ namespace GravityDefiedGame.Views
             }
 
             public void Initialize() =>
-                Log("ShadowRenderer", "Initializing shadow", () => {
-                    Info("ShadowRenderer", "Shadow initialized");
-                });
+                Info("ShadowRenderer", "Shadow initialized");
 
             public void UpdateShadow(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines, CancellationToken cancellationToken) =>
                 Log("ShadowRenderer", "Updating shadow", () => {
@@ -262,7 +258,7 @@ namespace GravityDefiedGame.Views
                             _pixelTexture,
                             worldPoint1,
                             worldPoint2,
-                            new Color((byte)0, (byte)0, (byte)0, (byte)(255 * ShadowOpacity)),
+                            ThemeManager.CurrentTheme.ShadowColor,
                             BikeStrokeThickness
                         );
                     }
@@ -271,24 +267,24 @@ namespace GravityDefiedGame.Views
 
             private Vector2 CalculateShadowPoint(Vector2 framePoint) =>
                 Log("ShadowRenderer", $"Calculating shadow point for ({framePoint.X:F1}, {framePoint.Y:F1})", () => {
-                    if (!PhysicsComponent.IsValidPoint(framePoint) || _gameController.CurrentLevel is null)
+                if (!PhysicsComponent.IsValidPoint(framePoint) || _gameController.CurrentLevel is null)
+                {
+                    Debug("ShadowRenderer", "Invalid frame point or null level");
+                    return framePoint;
+                }
+
+                try
+                {
+                    double groundY = _gameController.CurrentLevel.GetGroundYAtX(framePoint.X);
+                    if (double.IsInfinity(groundY) || double.IsNaN(groundY))
                     {
-                        Debug("ShadowRenderer", "Invalid frame point or null level");
+                        Debug("ShadowRenderer", $"Invalid ground Y at X={framePoint.X:F1}");
                         return framePoint;
                     }
 
-                    try
-                    {
-                        double groundY = _gameController.CurrentLevel.GetGroundYAtX(framePoint.X);
-                        if (double.IsInfinity(groundY) || double.IsNaN(groundY))
-                        {
-                            Debug("ShadowRenderer", $"Invalid ground Y at X={framePoint.X:F1}");
-                            return framePoint;
-                        }
-
-                        double heightAboveGround = groundY - framePoint.Y;
-                        if (heightAboveGround <= 0 || double.IsInfinity(heightAboveGround) || double.IsNaN(heightAboveGround))
-                            return framePoint;
+                    double heightAboveGround = groundY - framePoint.Y;
+                    if (heightAboveGround <= 0 || double.IsInfinity(heightAboveGround) || double.IsNaN(heightAboveGround))
+                        return framePoint;
 
                         double shadowX = framePoint.X + heightAboveGround * ShadowOffsetFactor;
                         if (double.IsInfinity(shadowX) || double.IsNaN(shadowX))
@@ -307,132 +303,89 @@ namespace GravityDefiedGame.Views
                     }
                 }, framePoint);
 
-            private List<SkeletonPoint> GetValidFramePoints(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines) =>
-                Log("ShadowRenderer", "Getting valid frame points", () => {
-                    var mainFrameLines = skeletonLines.Where(l => l.Type == SkeletonLineType.MainFrame).ToList();
-                    var framePointsIndices = new HashSet<int>(mainFrameLines.SelectMany(line => new[] { line.StartPointIndex, line.EndPointIndex }));
-                    return framePointsIndices
-                        .Select(idx => skeletonPoints[idx])
-                        .OrderBy(p => p.Position.X)
-                        .Where(p => PhysicsComponent.IsValidPoint(p.Position))
-                        .ToList();
-                }, new List<SkeletonPoint>());
+            private List<Vector2> GetValidFramePoints(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines)
+            {
+                // Выбираем точки основной рамы
+                var framePointIndices = skeletonLines
+                    .Where(l => l.Type == SkeletonLineType.MainFrame)
+                    .SelectMany(l => new[] { l.StartPointIndex, l.EndPointIndex })
+                    .Where(idx => idx >= 0 && idx < skeletonPoints.Count)
+                    .ToHashSet();
 
-            private (float centerX, float centerY, float scale) CalculateShadowParameters(List<SkeletonPoint> framePoints) =>
-                Log("ShadowRenderer", "Calculating shadow parameters", () => {
-                    if (_gameController.CurrentLevel is null || framePoints.Count < 2)
-                    {
-                        Debug("ShadowRenderer", "Invalid level or insufficient points");
-                        return (0, 0, 1);
-                    }
+                // Используем точки напрямую - они уже в мировой системе координат
+                return framePointIndices
+                    .Select(idx => skeletonPoints[idx].Position)
+                    .Where(PhysicsComponent.IsValidPoint)
+                    .OrderBy(p => p.X)
+                    .ToList();
+            }
 
-                    float totalHeight = 0;
-                    int validPointsCount = 0;
-
-                    foreach (var point in framePoints)
-                    {
-                        try
-                        {
-                            double groundY = _gameController.CurrentLevel.GetGroundYAtX(point.Position.X);
-                            float heightAboveGround = (float)(groundY - point.Position.Y);
-                            if (float.IsFinite(heightAboveGround))
-                            {
-                                totalHeight += heightAboveGround > 0 ? heightAboveGround : 0;
-                                validPointsCount++;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug("ShadowRenderer", $"Error calculating height: {ex.Message}");
-                            continue;
-                        }
-                    }
-
-                    if (validPointsCount == 0)
-                    {
-                        Debug("ShadowRenderer", "No valid points for height calculation");
-                        return (0, 0, 1);
-                    }
-
-                    float averageHeight = totalHeight / validPointsCount;
-                    float scale = 1 / MathHelper.Max(1 + ShadowScaleFactor * averageHeight, 0.1f);
-
-                    float minX = framePoints.Min(p => p.Position.X);
-                    float maxX = framePoints.Max(p => p.Position.X);
-                    float centerX = (minX + maxX) / 2;
-
-                    try
-                    {
-                        double centerY = _gameController.CurrentLevel.GetGroundYAtX(centerX);
-                        if (double.IsFinite(centerY))
-                            return (centerX, (float)centerY, scale);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug("ShadowRenderer", $"Error getting center Y: {ex.Message}");
-                    }
-
+            private (float centerX, float centerY, float scale) CalculateShadowParameters(List<Vector2> framePoints)
+            {
+                if (framePoints.Count == 0)
                     return (0, 0, 0);
-                }, (0, 0, 0));
 
-            private List<Vector2> GenerateShadowPoints(
-                List<SkeletonPoint> framePoints,
-                float centerX,
-                float centerY,
-                float scale,
-                CancellationToken cancellationToken) =>
-                Log("ShadowRenderer", "Generating shadow points", () => {
-                    var shadowPoints = new List<Vector2>();
-                    if (!float.IsFinite(centerX) || !float.IsFinite(centerY) || !float.IsFinite(scale))
-                    {
-                        Debug("ShadowRenderer", "Invalid shadow parameters");
+                // Находим центр объекта
+                float sumX = 0, sumY = 0;
+                foreach (var point in framePoints)
+                {
+                    sumX += point.X;
+                    sumY += point.Y;
+                }
+
+                float centerX = sumX / framePoints.Count;
+                float centerY = sumY / framePoints.Count;
+
+                // Вычисляем масштаб тени
+                float scale = 1.0f - ShadowScaleFactor * framePoints.Count;
+                return (centerX, centerY, float.IsNaN(scale) || scale <= 0 ? 0.5f : scale);
+            }
+
+            private List<Vector2> GenerateShadowPoints(List<Vector2> framePoints, float centerX, float centerY, float scale, CancellationToken cancellationToken)
+            {
+                var shadowPoints = new List<Vector2>();
+                if (framePoints.Count == 0)
+                    return shadowPoints;
+
+                for (int i = 0; i < framePoints.Count - 1; i++)
+                {
+                    if (cancellationToken.IsCancellationRequested)
                         return shadowPoints;
-                    }
 
-                    for (int i = 0; i < framePoints.Count - 1; i++)
+                    var start = framePoints[i];
+                    var end = framePoints[i + 1];
+
+                    if (!PhysicsComponent.IsValidPoint(start) || !PhysicsComponent.IsValidPoint(end))
+                        continue;
+
+                    for (int step = 0; step <= ShadowInterpolationSteps; step++)
                     {
                         if (cancellationToken.IsCancellationRequested)
-                        {
-                            Warning("ShadowRenderer", "Shadow points generation cancelled");
                             return shadowPoints;
-                        }
 
-                        var start = framePoints[i].Position;
-                        var end = framePoints[i + 1].Position;
-                        if (!PhysicsComponent.IsValidPoint(start) || !PhysicsComponent.IsValidPoint(end))
+                        float t = (float)step / ShadowInterpolationSteps;
+                        var interpolatedPoint = Vector2.Lerp(start, end, t);
+
+                        if (!PhysicsComponent.IsValidPoint(interpolatedPoint))
                             continue;
 
-                        for (int step = 0; step <= ShadowInterpolationSteps; step++)
-                        {
-                            if (cancellationToken.IsCancellationRequested)
-                            {
-                                Warning("ShadowRenderer", "Shadow points generation cancelled");
-                                return shadowPoints;
-                            }
+                        var shadowPoint = CalculateShadowPoint(interpolatedPoint);
+                        if (!PhysicsComponent.IsValidPoint(shadowPoint))
+                            continue;
 
-                            float t = (float)step / ShadowInterpolationSteps;
-                            var interpolatedPoint = Vector2.Lerp(start, end, t);
+                        float dx = shadowPoint.X - centerX;
+                        float dy = shadowPoint.Y - centerY;
+                        shadowPoint = new Vector2(
+                            centerX + scale * dx,
+                            centerY + scale * dy
+                        );
 
-                            if (!PhysicsComponent.IsValidPoint(interpolatedPoint))
-                                continue;
-
-                            var shadowPoint = CalculateShadowPoint(interpolatedPoint);
-                            if (!PhysicsComponent.IsValidPoint(shadowPoint))
-                                continue;
-
-                            float dx = shadowPoint.X - centerX;
-                            float dy = shadowPoint.Y - centerY;
-                            shadowPoint = new Vector2(
-                                centerX + scale * dx,
-                                centerY + scale * dy
-                            );
-
-                            if (PhysicsComponent.IsValidPoint(shadowPoint))
-                                shadowPoints.Add(shadowPoint);
-                        }
+                        if (PhysicsComponent.IsValidPoint(shadowPoint))
+                            shadowPoints.Add(shadowPoint);
                     }
-                    return shadowPoints;
-                }, new List<Vector2>());
+                }
+                return shadowPoints;
+            }
         }
         #endregion
 
@@ -442,10 +395,9 @@ namespace GravityDefiedGame.Views
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
             private readonly Camera _camera;
-            private readonly Dictionary<SkeletonLineType, Color> _lineTypeColors;
+            private Dictionary<SkeletonLineType, Color> _lineTypeColors;
 
-            public SkeletonRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera,
-                                   Dictionary<SkeletonLineType, Color> lineTypeColors)
+            public SkeletonRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera, Dictionary<SkeletonLineType, Color> lineTypeColors)
             {
                 _spriteBatch = spriteBatch;
                 _pixelTexture = pixelTexture;
@@ -454,39 +406,39 @@ namespace GravityDefiedGame.Views
             }
 
             public void InitializeSkeletonLines() =>
-                Log("SkeletonRenderer", "Initializing skeleton lines", () => {
-                    Info("SkeletonRenderer", "Skeleton lines initialized");
-                });
+                Info("SkeletonRenderer", "Skeleton lines initialized");
+
+            public void UpdateLineColors(Dictionary<SkeletonLineType, Color> newColors) =>
+                _lineTypeColors = newColors;
 
             public void UpdateSkeletonVisuals(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines) =>
-                    Log("SkeletonRenderer", "Updating skeleton visuals", () => {
-                        foreach (var line in skeletonLines)
+                Log("SkeletonRenderer", "Updating skeleton visuals", () => {
+                    foreach (var line in skeletonLines)
+                    {
+                        if (line.StartPointIndex >= 0 && line.StartPointIndex < skeletonPoints.Count &&
+                            line.EndPointIndex >= 0 && line.EndPointIndex < skeletonPoints.Count)
                         {
-                            if (line.StartPointIndex >= 0 && line.StartPointIndex < skeletonPoints.Count &&
-                                line.EndPointIndex >= 0 && line.EndPointIndex < skeletonPoints.Count)
-                            {
-                                var startPoint = skeletonPoints[line.StartPointIndex].Position;
-                                var endPoint = skeletonPoints[line.EndPointIndex].Position;
+                            var startPoint = skeletonPoints[line.StartPointIndex].Position;
+                            var endPoint = skeletonPoints[line.EndPointIndex].Position;
 
-                                if (PhysicsComponent.IsValidPoint(startPoint) && PhysicsComponent.IsValidPoint(endPoint))
-                                {
-                                    DrawingComponent.DrawLine(
-                                        _spriteBatch,
-                                        _pixelTexture,
-                                        startPoint,
-                                        endPoint,
-                                        GetColorForLineType(line.Type),
-                                        BikeStrokeThickness
-                                    );
-                                }
+                            if (PhysicsComponent.IsValidPoint(startPoint) && PhysicsComponent.IsValidPoint(endPoint))
+                            {
+                                // Используем координаты напрямую без преобразования
+                                DrawingComponent.DrawLine(
+                                    _spriteBatch,
+                                    _pixelTexture,
+                                    startPoint,
+                                    endPoint,
+                                    GetColorForLineType(line.Type),
+                                    BikeStrokeThickness
+                                );
                             }
                         }
-                    });
+                    }
+                });
 
-            public void DrawSkeleton(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines)
-            {
+            public void DrawSkeleton(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines) =>
                 UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
-            }
 
             private Color GetColorForLineType(SkeletonLineType lineType) =>
                 _lineTypeColors.TryGetValue(lineType, out var color) ? color : _lineTypeColors[SkeletonLineType.MainFrame];

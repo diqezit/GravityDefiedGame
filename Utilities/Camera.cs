@@ -41,5 +41,19 @@ namespace GravityDefiedGame.Utilities
         {
             _position = Vector2.Lerp(_position, targetPosition, 0.1f); // Плавное движение
         }
+
+        // преобразования координат из мировых в экранные
+        public Vector2 TransformToScreen(Vector2 worldPosition)
+        {
+            Vector2 viewCenter = new Vector2(_screenWidth / 2, _screenHeight / 2);
+            return viewCenter + (worldPosition - _position) * Zoom;
+        }
+
+        // преобразования координат из экранных в мировые
+        public Vector2 TransformToWorld(Vector2 screenPosition)
+        {
+            Vector2 viewCenter = new Vector2(_screenWidth / 2, _screenHeight / 2);
+            return _position + (screenPosition - viewCenter) / Zoom;
+        }
     }
 }
