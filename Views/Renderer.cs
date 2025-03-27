@@ -11,6 +11,7 @@ using GravityDefiedGame.Models;
 using GravityDefiedGame.Utilities;
 using static GravityDefiedGame.Models.BikeGeom;
 using static GravityDefiedGame.Utilities.Logger;
+using static GravityDefiedGame.Models.DrawingComponent.DrawingConstants;
 
 namespace GravityDefiedGame.Views
 {
@@ -23,20 +24,8 @@ namespace GravityDefiedGame.Views
             VerticalLineColor = new(204, 153, 102);
     }
 
-    public class Renderer
+    public class Renderer : DrawingComponent
     {
-        private const float
-            Perspective = 0.2f,
-            TerrainStrokeThickness = 3.0f,
-            VerticalLineStrokeThickness = 0.5f,
-            BikeStrokeThickness = 3.0f,
-            ShadowOpacity = 0.5f,
-            ShadowOffsetFactor = 0.2f,
-            ShadowScaleFactor = 0.01f;
-
-        private const int
-            ShadowInterpolationSteps = 5;
-
         private readonly SpriteBatch _spriteBatch;
         private readonly GraphicsDevice _graphicsDevice;
         private readonly Texture2D _pixelTexture;
@@ -120,9 +109,11 @@ namespace GravityDefiedGame.Views
             var topPoint1 = GetTopPointWithOffset(point1);
             var topPoint2 = GetTopPointWithOffset(point2);
 
-            if (IsValidPoint(topPoint1) && IsValidPoint(topPoint2))
+            if (PhysicsComponent.IsValidPoint(topPoint1) && PhysicsComponent.IsValidPoint(topPoint2))
             {
                 DrawLine(
+                    _spriteBatch,
+                    _pixelTexture,
                     topPoint1,
                     topPoint2,
                     point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
@@ -130,12 +121,14 @@ namespace GravityDefiedGame.Views
                 );
             }
 
-            var bottomPoint1 = new Vector2((float)point1.X, (float)point1.YBottom); // Мировые координаты
-            var bottomPoint2 = new Vector2((float)point2.X, (float)point2.YBottom); // Мировые координаты
+            var bottomPoint1 = new Vector2((float)point1.X, (float)point1.YBottom);
+            var bottomPoint2 = new Vector2((float)point2.X, (float)point2.YBottom);
 
-            if (IsValidPoint(bottomPoint1) && IsValidPoint(bottomPoint2))
+            if (PhysicsComponent.IsValidPoint(bottomPoint1) && PhysicsComponent.IsValidPoint(bottomPoint2))
             {
                 DrawLine(
+                    _spriteBatch,
+                    _pixelTexture,
                     bottomPoint1,
                     bottomPoint2,
                     point1.IsSafeZone ? ThemeConstants.SafeZoneColor : _colors.TerrainStroke,
@@ -151,7 +144,7 @@ namespace GravityDefiedGame.Views
             float offsetX = -Perspective * dx;
             float worldX = (float)point.X + offsetX;
             float worldY = (float)point.YTop;
-            return new Vector2(worldX, worldY); // Возвращаем мировые координаты
+            return new Vector2(worldX, worldY);
         }
 
         private void UpdateVerticalLines(List<Level.TerrainPoint> terrainPoints, CancellationToken cancellationToken)
@@ -161,11 +154,13 @@ namespace GravityDefiedGame.Views
                 if (cancellationToken.IsCancellationRequested) return;
 
                 var topPoint = GetTopPointWithOffset(point);
-                var bottomPoint = new Vector2((float)point.X, (float)point.YBottom); // Мировые координаты
+                var bottomPoint = new Vector2((float)point.X, (float)point.YBottom);
 
-                if (IsValidPoint(topPoint) && IsValidPoint(bottomPoint))
+                if (PhysicsComponent.IsValidPoint(topPoint) && PhysicsComponent.IsValidPoint(bottomPoint))
                 {
                     DrawLine(
+                        _spriteBatch,
+                        _pixelTexture,
                         topPoint,
                         bottomPoint,
                         ThemeConstants.VerticalLineColor,
@@ -183,32 +178,6 @@ namespace GravityDefiedGame.Views
             var (skeletonPoints, skeletonLines) = motorcycle.GetSkeleton();
             _skeletonRenderer.UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
             _shadowRenderer.UpdateShadow(skeletonPoints, skeletonLines, cancellationToken);
-        }
-
-        private bool IsValidPoint(Vector2 point) =>
-            !float.IsNaN(point.X) && !float.IsNaN(point.Y) &&
-            !float.IsInfinity(point.X) && !float.IsInfinity(point.Y);
-
-        private void DrawLine(Vector2 start, Vector2 end, Color color, float thickness)
-        {
-            if (!IsValidPoint(start) || !IsValidPoint(end)) return;
-
-            float length = Vector2.Distance(start, end);
-            if (length < 0.001f) return;
-
-            float rotation = (float)Math.Atan2(end.Y - start.Y, end.X - start.X);
-
-            _spriteBatch.Draw(
-                _pixelTexture,
-                start,
-                null,
-                color,
-                rotation,
-                Vector2.Zero,
-                new Vector2(length, thickness),
-                SpriteEffects.None,
-                0
-            );
         }
 
         private record ColorSet(
@@ -283,39 +252,26 @@ namespace GravityDefiedGame.Views
 
                 for (int i = 0; i < shadowPoints.Count - 1; i++)
                 {
-                    var worldPoint1 = shadowPoints[i];     
+                    var worldPoint1 = shadowPoints[i];
                     var worldPoint2 = shadowPoints[i + 1];
 
-                    if (IsValidPoint(worldPoint1) && IsValidPoint(worldPoint2))
+                    if (PhysicsComponent.IsValidPoint(worldPoint1) && PhysicsComponent.IsValidPoint(worldPoint2))
                     {
-                        float length = Vector2.Distance(worldPoint1, worldPoint2);
-                        if (length < 0.001f)
-                            continue;
-
-                        float rotation = (float)Math.Atan2(worldPoint2.Y - worldPoint1.Y, worldPoint2.X - worldPoint1.X);
-
-                        _spriteBatch.Draw(
+                        DrawingComponent.DrawLine(
+                            _spriteBatch,
                             _pixelTexture,
                             worldPoint1,
-                            null,
+                            worldPoint2,
                             new Color((byte)0, (byte)0, (byte)0, (byte)(255 * ShadowOpacity)),
-                            rotation,
-                            Vector2.Zero,
-                            new Vector2(length, BikeStrokeThickness),
-                            SpriteEffects.None,
-                            0
+                            BikeStrokeThickness
                         );
                     }
                 }
             }
 
-            private bool IsValidPoint(Vector2 point) =>
-                !float.IsNaN(point.X) && !float.IsNaN(point.Y) &&
-                !float.IsInfinity(point.X) && !float.IsInfinity(point.Y);
-
             private Vector2 CalculateShadowPoint(Vector2 framePoint) =>
                 Log("ShadowRenderer", $"Calculating shadow point for ({framePoint.X:F1}, {framePoint.Y:F1})", () => {
-                    if (!IsValidPoint(framePoint) || _gameController.CurrentLevel is null)
+                    if (!PhysicsComponent.IsValidPoint(framePoint) || _gameController.CurrentLevel is null)
                     {
                         Debug("ShadowRenderer", "Invalid frame point or null level");
                         return framePoint;
@@ -358,7 +314,7 @@ namespace GravityDefiedGame.Views
                     return framePointsIndices
                         .Select(idx => skeletonPoints[idx])
                         .OrderBy(p => p.Position.X)
-                        .Where(p => IsValidPoint(p.Position))
+                        .Where(p => PhysicsComponent.IsValidPoint(p.Position))
                         .ToList();
                 }, new List<SkeletonPoint>());
 
@@ -443,7 +399,7 @@ namespace GravityDefiedGame.Views
 
                         var start = framePoints[i].Position;
                         var end = framePoints[i + 1].Position;
-                        if (!IsValidPoint(start) || !IsValidPoint(end))
+                        if (!PhysicsComponent.IsValidPoint(start) || !PhysicsComponent.IsValidPoint(end))
                             continue;
 
                         for (int step = 0; step <= ShadowInterpolationSteps; step++)
@@ -457,11 +413,11 @@ namespace GravityDefiedGame.Views
                             float t = (float)step / ShadowInterpolationSteps;
                             var interpolatedPoint = Vector2.Lerp(start, end, t);
 
-                            if (!IsValidPoint(interpolatedPoint))
+                            if (!PhysicsComponent.IsValidPoint(interpolatedPoint))
                                 continue;
 
                             var shadowPoint = CalculateShadowPoint(interpolatedPoint);
-                            if (!IsValidPoint(shadowPoint))
+                            if (!PhysicsComponent.IsValidPoint(shadowPoint))
                                 continue;
 
                             float dx = shadowPoint.X - centerX;
@@ -471,7 +427,7 @@ namespace GravityDefiedGame.Views
                                 centerY + scale * dy
                             );
 
-                            if (IsValidPoint(shadowPoint))
+                            if (PhysicsComponent.IsValidPoint(shadowPoint))
                                 shadowPoints.Add(shadowPoint);
                         }
                     }
@@ -509,12 +465,19 @@ namespace GravityDefiedGame.Views
                             if (line.StartPointIndex >= 0 && line.StartPointIndex < skeletonPoints.Count &&
                                 line.EndPointIndex >= 0 && line.EndPointIndex < skeletonPoints.Count)
                             {
-                                var startPoint = skeletonPoints[line.StartPointIndex].Position; 
-                                var endPoint = skeletonPoints[line.EndPointIndex].Position;     
+                                var startPoint = skeletonPoints[line.StartPointIndex].Position;
+                                var endPoint = skeletonPoints[line.EndPointIndex].Position;
 
-                                if (IsValidPoint(startPoint) && IsValidPoint(endPoint))
+                                if (PhysicsComponent.IsValidPoint(startPoint) && PhysicsComponent.IsValidPoint(endPoint))
                                 {
-                                    DrawLine(startPoint, endPoint, GetColorForLineType(line.Type), BikeStrokeThickness);
+                                    DrawingComponent.DrawLine(
+                                        _spriteBatch,
+                                        _pixelTexture,
+                                        startPoint,
+                                        endPoint,
+                                        GetColorForLineType(line.Type),
+                                        BikeStrokeThickness
+                                    );
                                 }
                             }
                         }
@@ -525,36 +488,8 @@ namespace GravityDefiedGame.Views
                 UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
             }
 
-            private void DrawLine(Vector2 start, Vector2 end, Color color, float thickness)
-            {
-                if (!IsValidPoint(start) || !IsValidPoint(end))
-                    return;
-
-                float length = Vector2.Distance(start, end);
-                if (length < 0.001f)
-                    return;
-
-                float rotation = (float)Math.Atan2(end.Y - start.Y, end.X - start.X);
-
-                _spriteBatch.Draw(
-                    _pixelTexture,
-                    start,
-                    null,
-                    color,
-                    rotation,
-                    Vector2.Zero,
-                    new Vector2(length, thickness),
-                    SpriteEffects.None,
-                    0
-                );
-            }
-
             private Color GetColorForLineType(SkeletonLineType lineType) =>
                 _lineTypeColors.TryGetValue(lineType, out var color) ? color : _lineTypeColors[SkeletonLineType.MainFrame];
-
-            private bool IsValidPoint(Vector2 point) =>
-                !float.IsNaN(point.X) && !float.IsNaN(point.Y) &&
-                !float.IsInfinity(point.X) && !float.IsInfinity(point.Y);
         }
         #endregion
     }

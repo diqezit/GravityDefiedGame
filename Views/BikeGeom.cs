@@ -9,7 +9,7 @@ using GravityDefiedGame.Utilities;
 
 namespace GravityDefiedGame.Models
 {
-    public class BikeGeom
+    public class BikeGeom : DrawingComponent
     {
         public static class GeometryConstants
         {
@@ -117,29 +117,24 @@ namespace GravityDefiedGame.Models
             var wheelPositions = _bike.WheelPositions;
             var attachmentPoints = _bike.AttachmentPoints;
 
-            // Добавляем основные точки
             points.Add(new SkeletonPoint(wheelPositions.Front, SkeletonPointType.FrontWheel));
             points.Add(new SkeletonPoint(wheelPositions.Rear, SkeletonPointType.RearWheel));
             points.Add(new SkeletonPoint(attachmentPoints.Front, SkeletonPointType.FrontSuspension));
             points.Add(new SkeletonPoint(attachmentPoints.Rear, SkeletonPointType.RearSuspension));
 
-            // Добавляем раму
             var chassisPoints = GetChassisPoints();
             int frameStart = points.Count;
             points.AddRange(chassisPoints.Select(p => new SkeletonPoint(p, SkeletonPointType.Frame)));
 
-            // Добавляем линии подвески
             lines.Add(new SkeletonLine(0, 2, SkeletonLineType.Suspension));
             lines.Add(new SkeletonLine(1, 3, SkeletonLineType.Suspension));
             lines.Add(new SkeletonLine(2, frameStart, SkeletonLineType.Suspension));
             lines.Add(new SkeletonLine(3, frameStart + 1, SkeletonLineType.Suspension));
 
-            // Замыкаем раму
             for (int i = frameStart; i < frameStart + chassisPoints.Count - 1; i++)
                 lines.Add(new SkeletonLine(i, i + 1, SkeletonLineType.MainFrame));
             lines.Add(new SkeletonLine(frameStart + chassisPoints.Count - 1, frameStart, SkeletonLineType.MainFrame));
 
-            // Добавляем колеса
             AddWheelSpokes(points, lines);
         }
 
@@ -168,14 +163,14 @@ namespace GravityDefiedGame.Models
                 double angle = rotation + i * (2 * Math.PI / spokeCount);
                 float effectiveRadius = wheelRadius;
 
-                Vector2 spokeEnd = Offset(center, wheelRadius, 0, angle);
+                Vector2 spokeEnd = Offset(center, wheelRadius, 0, (float)angle);
                 if (!_bike.IsInAir && spokeEnd.Y >= groundY - 1)
                 {
                     float penetration = spokeEnd.Y - (groundY - 1);
                     effectiveRadius = wheelRadius * (1.0f - MathHelper.Min(0.2f, penetration / wheelRadius));
                 }
 
-                spokeEnd = Offset(center, effectiveRadius, 0, angle);
+                spokeEnd = Offset(center, effectiveRadius, 0, (float)angle);
                 points.Add(new SkeletonPoint(spokeEnd, SkeletonPointType.Wheel));
                 int spokeEndIndex = points.Count - 1;
                 spokeEndIndices.Add(spokeEndIndex);
@@ -205,14 +200,9 @@ namespace GravityDefiedGame.Models
             };
 
             Vector2 seatStart = Offset(rearUpper, xOffset, -5f, _bike.Angle);
-            int startIndex = points.Count;
 
-            points.Add(new SkeletonPoint(seatStart, SkeletonPointType.Seat));
-            points.Add(new SkeletonPoint(Offset(seatStart, width, 0, _bike.Angle), SkeletonPointType.Seat));
-            points.Add(new SkeletonPoint(Offset(seatStart, width, height, _bike.Angle), SkeletonPointType.Seat));
-            points.Add(new SkeletonPoint(Offset(seatStart, 0, height, _bike.Angle), SkeletonPointType.Seat));
-
-            AddRectangleLines(lines, startIndex, SkeletonLineType.Seat);
+            AddRectangle(points, lines, seatStart, width, height, _bike.Angle,
+                       SkeletonPointType.Seat, SkeletonLineType.Seat);
         }
 
         private void AddHandlebar(List<SkeletonPoint> points, List<SkeletonLine> lines)
@@ -265,14 +255,6 @@ namespace GravityDefiedGame.Models
             AddRectangleLines(lines, startIndex, SkeletonLineType.Exhaust);
         }
 
-        private void AddRectangleLines(List<SkeletonLine> lines, int startIndex, SkeletonLineType type)
-        {
-            lines.Add(new SkeletonLine(startIndex, startIndex + 1, type));
-            lines.Add(new SkeletonLine(startIndex + 1, startIndex + 2, type));
-            lines.Add(new SkeletonLine(startIndex + 2, startIndex + 3, type));
-            lines.Add(new SkeletonLine(startIndex + 3, startIndex, type));
-        }
-
         private void AddEnhancedElements(List<SkeletonPoint> points, List<SkeletonLine> lines)
         {
             AddRearSwingArm(points, lines);
@@ -303,17 +285,14 @@ namespace GravityDefiedGame.Models
 
             float halfWidth = engineWidth / 2;
             float halfHeight = engineHeight / 2;
-            int startIndex = points.Count;
 
-            // Основной блок двигателя
-            points.Add(new SkeletonPoint(Offset(engineCenter, -halfWidth, -halfHeight * 0.7f, _bike.Angle), SkeletonPointType.Engine));
-            points.Add(new SkeletonPoint(Offset(engineCenter, halfWidth, -halfHeight * 0.7f, _bike.Angle), SkeletonPointType.Engine));
-            points.Add(new SkeletonPoint(Offset(engineCenter, halfWidth, halfHeight, _bike.Angle), SkeletonPointType.Engine));
-            points.Add(new SkeletonPoint(Offset(engineCenter, -halfWidth, halfHeight, _bike.Angle), SkeletonPointType.Engine));
+            AddRectangle(
+                points, lines,
+                Offset(engineCenter, -halfWidth, -halfHeight * 0.7f, _bike.Angle),
+                engineWidth, engineHeight * 1.7f, _bike.Angle,
+                SkeletonPointType.Engine, SkeletonLineType.Engine
+            );
 
-            AddRectangleLines(lines, startIndex, SkeletonLineType.Engine);
-
-            // Цилиндр двигателя
             AddEngineCylinder(points, lines, engineCenter, halfWidth, halfHeight);
         }
 
@@ -327,14 +306,11 @@ namespace GravityDefiedGame.Models
             };
 
             Vector2 cylinderBase = Offset(engineCenter, offsetX, offsetY, _bike.Angle);
-            int startIndex = points.Count;
 
-            points.Add(new SkeletonPoint(cylinderBase, SkeletonPointType.Engine));
-            points.Add(new SkeletonPoint(Offset(cylinderBase, cylinderWidth, 0, _bike.Angle), SkeletonPointType.Engine));
-            points.Add(new SkeletonPoint(Offset(cylinderBase, cylinderWidth, cylinderHeight, _bike.Angle), SkeletonPointType.Engine));
-            points.Add(new SkeletonPoint(Offset(cylinderBase, 0, cylinderHeight, _bike.Angle), SkeletonPointType.Engine));
-
-            AddRectangleLines(lines, startIndex, SkeletonLineType.Engine);
+            AddRectangle(
+                points, lines, cylinderBase, cylinderWidth, cylinderHeight, _bike.Angle,
+                SkeletonPointType.Engine, SkeletonLineType.Engine
+            );
         }
 
         private void AddChain(List<SkeletonPoint> points, List<SkeletonLine> lines)
@@ -342,7 +318,6 @@ namespace GravityDefiedGame.Models
             Vector2 rearWheel = _bike.WheelPositions.Rear;
             var chassisPoints = GetChassisPoints();
 
-            // Расчет позиции двигателя (аналогично методу AddEngine)
             float enginePositionRatio = 0.3f;
             Vector2 engineCenter = new Vector2(
                 chassisPoints[0].X - (chassisPoints[0].X - chassisPoints[1].X) * enginePositionRatio - 10f,
@@ -359,7 +334,6 @@ namespace GravityDefiedGame.Models
             int segmentCount = 8;
             int startIndex = points.Count;
 
-            // Верхняя часть цепи
             points.Add(new SkeletonPoint(engineSprocket, SkeletonPointType.Chain));
             for (int i = 1; i < segmentCount; i++)
             {
@@ -370,7 +344,6 @@ namespace GravityDefiedGame.Models
                 points.Add(new SkeletonPoint(new Vector2(x, y + sag), SkeletonPointType.Chain));
             }
 
-            // Нижняя часть цепи
             points.Add(new SkeletonPoint(Offset(rearWheel, -rearSprocketRadius, 0, _bike.Angle), SkeletonPointType.Chain));
             for (int i = segmentCount - 1; i > 0; i--)
             {
@@ -381,12 +354,10 @@ namespace GravityDefiedGame.Models
                 points.Add(new SkeletonPoint(new Vector2(x, y + tension), SkeletonPointType.Chain));
             }
 
-            // Соединяем точки цепи
             int totalPoints = 2 * segmentCount;
             for (int i = 0; i < totalPoints; i++)
                 lines.Add(new SkeletonLine(startIndex + i, startIndex + (i + 1) % totalPoints, SkeletonLineType.Chain));
 
-            // Добавляем звездочки
             AddSprockets(points, lines, engineSprocket, rearWheel, sprocketRadius, rearSprocketRadius);
         }
 
@@ -395,23 +366,21 @@ namespace GravityDefiedGame.Models
         {
             int sprocketSegments = 8;
 
-            // Звездочка двигателя
             int frontStartIndex = points.Count;
             for (int i = 0; i < sprocketSegments; i++)
             {
                 double angle = i * (2 * Math.PI / sprocketSegments);
-                points.Add(new SkeletonPoint(Offset(engineSprocket, sprocketRadius, 0, angle), SkeletonPointType.Chain));
+                points.Add(new SkeletonPoint(Offset(engineSprocket, sprocketRadius, 0, (float)angle), SkeletonPointType.Chain));
             }
 
             for (int i = 0; i < sprocketSegments; i++)
                 lines.Add(new SkeletonLine(frontStartIndex + i, frontStartIndex + (i + 1) % sprocketSegments, SkeletonLineType.Chain));
 
-            // Звездочка заднего колеса
             int rearStartIndex = points.Count;
             for (int i = 0; i < sprocketSegments; i++)
             {
                 double angle = i * (2 * Math.PI / sprocketSegments);
-                points.Add(new SkeletonPoint(Offset(rearWheel, rearSprocketRadius, 0, angle), SkeletonPointType.Chain));
+                points.Add(new SkeletonPoint(Offset(rearWheel, rearSprocketRadius, 0, (float)angle), SkeletonPointType.Chain));
             }
 
             for (int i = 0; i < sprocketSegments; i++)
@@ -446,21 +415,18 @@ namespace GravityDefiedGame.Models
             Vector2 rearAttachment = _bike.AttachmentPoints.Rear;
             float swingArmWidth = 3.0f;
 
-            // Вычисляем нормализованный вектор направления маятника
             float dx = rearWheel.X - rearAttachment.X;
             float dy = rearWheel.Y - rearAttachment.Y;
             float length = (float)Math.Sqrt(dx * dx + dy * dy);
             float normalizedX = dx / length;
             float normalizedY = dy / length;
 
-            // Перпендикулярный вектор для смещения в стороны
             float perpX = -normalizedY;
             float perpY = normalizedX;
 
             int startIndex = points.Count;
             points.Add(new SkeletonPoint(rearAttachment, SkeletonPointType.ShockAbsorber));
 
-            // Создаем точки маятника
             Vector2 swingArmTopFrame = new Vector2(
                 rearAttachment.X + perpX * swingArmWidth / 2,
                 rearAttachment.Y + perpY * swingArmWidth / 2
@@ -483,7 +449,6 @@ namespace GravityDefiedGame.Models
             points.Add(new SkeletonPoint(swingArmTopWheel, SkeletonPointType.ShockAbsorber));
             points.Add(new SkeletonPoint(swingArmBottomWheel, SkeletonPointType.ShockAbsorber));
 
-            // Соединяем точки линиями
             lines.Add(new SkeletonLine(startIndex + 1, startIndex + 3, SkeletonLineType.ShockAbsorber));
             lines.Add(new SkeletonLine(startIndex + 2, startIndex + 4, SkeletonLineType.ShockAbsorber));
             lines.Add(new SkeletonLine(startIndex + 1, startIndex + 2, SkeletonLineType.ShockAbsorber));
@@ -501,7 +466,6 @@ namespace GravityDefiedGame.Models
                 _ => ShockAbsorberWidth
             };
 
-            // Расчет сжатия амортизатора
             float compressionRatio = 1.0f;
             if (!_bike.IsInAir)
             {
@@ -513,7 +477,6 @@ namespace GravityDefiedGame.Models
             int startIndex = points.Count;
             Vector2 shockTop = Offset(rearUpper, -5, 0, _bike.Angle);
 
-            // Расчет нижней точки амортизатора
             float dx = _bike.WheelPositions.Rear.X - rearAttachment.X;
             float dy = _bike.WheelPositions.Rear.Y - rearAttachment.Y;
             float attachRatio = 0.3f;
@@ -526,7 +489,6 @@ namespace GravityDefiedGame.Models
             points.Add(new SkeletonPoint(shockBottom, SkeletonPointType.ShockAbsorber));
             lines.Add(new SkeletonLine(startIndex, startIndex + 1, SkeletonLineType.ShockAbsorber));
 
-            // Добавляем пружину амортизатора
             Vector2 shockMid = new Vector2(
                 (shockTop.X + shockBottom.X) / 2,
                 (shockTop.Y + shockBottom.Y) / 2
@@ -541,14 +503,6 @@ namespace GravityDefiedGame.Models
             points.Add(new SkeletonPoint(spring1, SkeletonPointType.ShockAbsorber));
             points.Add(new SkeletonPoint(spring2, SkeletonPointType.ShockAbsorber));
             lines.Add(new SkeletonLine(startIndex + 2, startIndex + 3, SkeletonLineType.ShockAbsorber));
-        }
-
-        private Vector2 Offset(Vector2 basePoint, float offsetX, float offsetY, double angle)
-        {
-            return new Vector2(
-                basePoint.X + offsetX * (float)Math.Cos(angle) - offsetY * (float)Math.Sin(angle),
-                basePoint.Y + offsetX * (float)Math.Sin(angle) + offsetY * (float)Math.Cos(angle)
-            );
         }
     }
 }

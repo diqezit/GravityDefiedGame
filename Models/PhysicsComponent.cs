@@ -1,9 +1,12 @@
 ﻿using System;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using static System.Math;
 using static GravityDefiedGame.Utilities.LoggerCore;
 using static GravityDefiedGame.Utilities.Logger;
 using GravityDefiedGame.Utilities;
+using static GravityDefiedGame.Models.BikeGeom;
+using System.Collections.Generic;
 
 namespace GravityDefiedGame.Models
 {
@@ -130,5 +133,85 @@ namespace GravityDefiedGame.Models
         internal static (float cos, float sin) GetTrigsFromAngle(float angle) =>
             Log("PhysicsComponent", "getting trigs from angle", () =>
                 ((float)Cos(angle), (float)Sin(angle)), (1.0f, 0.0f));
+
+        public static bool IsValidPoint(Vector2 point) =>
+            !float.IsNaN(point.X) && !float.IsNaN(point.Y) &&
+            !float.IsInfinity(point.X) && !float.IsInfinity(point.Y);
+    }
+
+    public abstract class DrawingComponent
+    {
+        public static class DrawingConstants
+        {
+            public const float
+                BikeStrokeThickness = 3.0f,
+                TerrainStrokeThickness = 3.0f,
+                VerticalLineStrokeThickness = 0.5f;
+
+            public const float
+                ShadowOpacity = 0.5f,
+                ShadowOffsetFactor = 0.2f,
+                ShadowScaleFactor = 0.01f;
+
+            public const int
+                ShadowInterpolationSteps = 5;
+
+            public const float
+                Perspective = 0.2f,
+                FrameHeightMultiplier = 1.2f,
+                LowerFrameOffsetMultiplier = 0.15f,
+                UpperFrameOffsetMultiplier = 0.4f;
+        }
+
+        public static void DrawLine(SpriteBatch spriteBatch, Texture2D pixelTexture,
+                                  Vector2 start, Vector2 end, Color color, float thickness)
+        {
+            if (!PhysicsComponent.IsValidPoint(start) || !PhysicsComponent.IsValidPoint(end)) return;
+
+            float length = Vector2.Distance(start, end);
+            if (length < 0.001f) return;
+
+            float rotation = (float)Math.Atan2(end.Y - start.Y, end.X - start.X);
+
+            spriteBatch.Draw(
+                pixelTexture,
+                start,
+                null,
+                color,
+                rotation,
+                Vector2.Zero,
+                new Vector2(length, thickness),
+                SpriteEffects.None,
+                0
+            );
+        }
+
+        public static void AddRectangle(
+            List<SkeletonPoint> points,
+            List<SkeletonLine> lines,
+            Vector2 start,
+            float width,
+            float height,
+            float angle,
+            SkeletonPointType pointType,
+            SkeletonLineType lineType)
+        {
+            int startIndex = points.Count;
+
+            points.Add(new SkeletonPoint(start, pointType));
+            points.Add(new SkeletonPoint(PhysicsComponent.Offset(start, width, 0, angle), pointType));
+            points.Add(new SkeletonPoint(PhysicsComponent.Offset(start, width, height, angle), pointType));
+            points.Add(new SkeletonPoint(PhysicsComponent.Offset(start, 0, height, angle), pointType));
+
+            AddRectangleLines(lines, startIndex, lineType);
+        }
+
+        public static void AddRectangleLines(List<SkeletonLine> lines, int startIndex, SkeletonLineType type)
+        {
+            lines.Add(new SkeletonLine(startIndex, startIndex + 1, type));
+            lines.Add(new SkeletonLine(startIndex + 1, startIndex + 2, type));
+            lines.Add(new SkeletonLine(startIndex + 2, startIndex + 3, type));
+            lines.Add(new SkeletonLine(startIndex + 3, startIndex, type));
+        }
     }
 }
