@@ -26,19 +26,29 @@ namespace GravityDefiedGame.Controllers
 
     public class GameController
     {
+        // Константы для управления и игровой механики
         private static class Constants
         {
-            public const float MaxFallHeight = 1000.0f;
+            // Значения управления
             public const float FullThrottle = 1.0f;
             public const float FullBrake = 1.0f;
             public const float LeftLean = -1.0f;
             public const float RightLean = 1.0f;
             public const float NoInput = 0.0f;
+
+            // Игровые параметры
+            public const float MaxFallHeight = 1000.0f;
         }
 
+        // Приватные поля
         private readonly InputState _input = new();
         private readonly Stopwatch _gameStopwatch = new();
+        private readonly Dictionary<string, Action> _keyDownActions;
+        private readonly Dictionary<string, Action> _keyUpActions;
+        private readonly Dictionary<Keys, Action> _systemKeyActions;
+        private GameState _currentGameState = GameState.MainMenu;
 
+        // Публичные свойства
         public Motorcycle Motorcycle { get; }
         public bool IsGameOver => Motorcycle.IsCrashed;
         public bool IsLevelComplete { get; private set; }
@@ -48,17 +58,142 @@ namespace GravityDefiedGame.Controllers
         public List<BikeType> AvailableBikes { get; } = new();
         public BikeType CurrentBikeType { get; private set; } = BikeType.Standard;
         public TimeSpan GameTime { get; private set; }
-        public GameState CurrentGameState { get; set; } = GameState.MainMenu;
+
+        public GameState CurrentGameState
+        {
+            get => _currentGameState;
+            set
+            {
+                if (_currentGameState == value) return;
+
+                var oldState = _currentGameState;
+                _currentGameState = value;
+
+                string message = GetGameStateMessage(oldState, value);
+                OnGameEvent(GetEventTypeForStateTransition(oldState, value), message);
+            }
+        }
+
         public event EventHandler<GameEventArgs>? GameEvent;
 
         public GameController()
         {
             Motorcycle = new Motorcycle();
+
+            // Инициализация действий для клавиш управления
+            _keyDownActions = new Dictionary<string, Action>
+            {
+                ["W"] = () =>
+                {
+                    if (!_input.IsThrottlePressed)
+                    {
+                        _input.IsThrottlePressed = true;
+                        Motorcycle.SetDirection(1);
+                        Motorcycle.ApplyThrottle(Constants.FullThrottle);
+                        Debug("GameController", "Throttle applied forward");
+                    }
+                },
+                ["S"] = () =>
+                {
+                    if (!_input.IsBrakePressed)
+                    {
+                        _input.IsBrakePressed = true;
+                        Motorcycle.SetDirection(-1);
+                        Motorcycle.ApplyThrottle(Constants.FullThrottle);
+                        Debug("GameController", "Throttle applied backward");
+                    }
+                },
+                ["A"] = () =>
+                {
+                    if (!_input.IsLeaningLeft)
+                    {
+                        _input.IsLeaningLeft = true;
+                        UpdateLeanState();
+                        Debug("GameController", "Leaning left");
+                    }
+                },
+                ["D"] = () =>
+                {
+                    if (!_input.IsLeaningRight)
+                    {
+                        _input.IsLeaningRight = true;
+                        UpdateLeanState();
+                        Debug("GameController", "Leaning right");
+                    }
+                },
+                ["Space"] = () =>
+                {
+                    if (!_input.IsBrakePressed)
+                    {
+                        _input.IsBrakePressed = true;
+                        Motorcycle.ApplyBrake(Constants.FullBrake);
+                        Debug("GameController", "Brake applied");
+                    }
+                }
+            };
+
+            _keyUpActions = new Dictionary<string, Action>
+            {
+                ["W"] = () =>
+                {
+                    _input.IsThrottlePressed = false;
+                    Motorcycle.ApplyThrottle(Constants.NoInput);
+                    Debug("GameController", "Throttle released");
+                },
+                ["S"] = () =>
+                {
+                    _input.IsBrakePressed = false;
+                    Motorcycle.ApplyThrottle(Constants.NoInput);
+                    Debug("GameController", "Backward throttle released");
+                },
+                ["A"] = () =>
+                {
+                    _input.IsLeaningLeft = false;
+                    UpdateLeanState();
+                    Debug("GameController", "Left lean released");
+                },
+                ["D"] = () =>
+                {
+                    _input.IsLeaningRight = false;
+                    UpdateLeanState();
+                    Debug("GameController", "Right lean released");
+                },
+                ["Space"] = () =>
+                {
+                    _input.IsBrakePressed = false;
+                    Motorcycle.ApplyBrake(Constants.NoInput);
+                    Debug("GameController", "Brake released");
+                }
+            };
+
+            // Инициализация системных клавиш
+            _systemKeyActions = new Dictionary<Keys, Action>
+            {
+                [Keys.Escape] = () =>
+                {
+                    if (CurrentGameState == GameState.Playing) PauseGame();
+                    else if (CurrentGameState == GameState.Paused) ResumeGame();
+                },
+                [Keys.C] = () =>
+                {
+                    if (CurrentGameState == GameState.LevelComplete)
+                        StartNextLevel();
+                },
+                [Keys.R] = () =>
+                {
+                    if (CurrentGameState == GameState.GameOver || CurrentGameState == GameState.LevelComplete)
+                        RestartLevel();
+                }
+            };
+
             InitializeAvailableBikes();
             LoadLevels();
-            Info("GameController", "Game controller initialized");
+            Info("GameController", "Game controller initialized with optimized key handling");
         }
 
+        #region Setup and Initialization
+
+        // Инициализация доступных типов мотоциклов
         private void InitializeAvailableBikes()
         {
             AvailableBikes.Clear();
@@ -66,361 +201,169 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", $"Initialized {AvailableBikes.Count} available bike types");
         }
 
+        // Загрузка уровней игры
         public void LoadLevels()
         {
-            Log("GameController", "loading levels", () =>
+            Levels.Clear();
+            var random = new Random();
+            for (int i = 1; i <= 25; i++)
             {
-                Levels.Clear();
-                var random = new Random();
-                for (int i = 1; i <= 25; i++)
-                {
-                    int seed = random.Next();
-                    Levels.Add(new Level(i, $"Level {i}", seed));
-                }
-                Info("GameController", $"Loaded {Levels.Count} levels");
-            });
+                int seed = random.Next();
+                Levels.Add(new Level(i, $"Level {i}", seed));
+            }
+            Info("GameController", $"Loaded {Levels.Count} levels");
         }
 
-        public void StartLevel(int levelId)
-        {
-            Log("GameController", $"starting level {levelId}", () =>
-            {
-                Level? level = Levels.FirstOrDefault(l => l.Id == levelId);
-                if (level is null)
-                {
-                    Error("GameController", $"Failed to start level {levelId}: level not found");
-                    return;
-                }
-
-                CurrentLevel = level;
-                IsLevelComplete = false;
-                CurrentGameState = GameState.Playing;
-                InitializeGameState(levelId);
-                ResetInputState();
-                InitializeMotorcycle();
-            });
-        }
-
-        public void StartNextLevel()
-        {
-            Log("GameController", "starting next level", () =>
-            {
-                int nextLevelId = (CurrentLevel?.Id ?? 0) + 1;
-                if (nextLevelId <= Levels.Count)
-                {
-                    StartLevel(nextLevelId);
-                    OnGameEvent(GameEventType.LevelStart, $"Level {nextLevelId} started");
-                }
-                else
-                {
-                    CurrentGameState = GameState.MainMenu;
-                    OnGameEvent(GameEventType.GameComplete, "Congratulations! All levels completed!");
-                }
-            });
-        }
-
-        public void EnterMainMenu()
-        {
-            CurrentGameState = GameState.MainMenu;
-            OnGameEvent(GameEventType.MenuChanged, "Entered Main Menu");
-        }
-
-        public void EnterBikeSelection()
-        {
-            CurrentGameState = GameState.BikeSelection;
-            OnGameEvent(GameEventType.MenuChanged, "Entered Bike Selection");
-        }
-
-        public void EnterLevelSelection()
-        {
-            CurrentGameState = GameState.LevelSelection;
-            OnGameEvent(GameEventType.MenuChanged, "Entered Level Selection");
-        }
-
-        public void HandleInput(KeyboardState keyboardState, KeyboardState previousKeyboardState)
-        {
-            Log("GameController", "handling input", () =>
-            {
-                if (CurrentGameState == GameState.Playing)
-                {
-                    HandleGameplayInput(keyboardState, previousKeyboardState);
-                }
-
-                foreach (Keys key in new[] { Keys.Escape, Keys.C, Keys.R })
-                {
-                    if (keyboardState.IsKeyDown(key) && previousKeyboardState.IsKeyUp(key))
-                        HandleKeyPress(key, true);
-                }
-            });
-        }
-
-        private void HandleGameplayInput(KeyboardState keyboardState, KeyboardState previousKeyboardState)
-        {
-            if (keyboardState.IsKeyDown(Keys.W) && !previousKeyboardState.IsKeyDown(Keys.W))
-                HandleKeyDown("W");
-            else if (!keyboardState.IsKeyDown(Keys.W) && previousKeyboardState.IsKeyDown(Keys.W))
-                HandleKeyUp("W");
-
-            if (keyboardState.IsKeyDown(Keys.S) && !previousKeyboardState.IsKeyDown(Keys.S))
-                HandleKeyDown("S");
-            else if (!keyboardState.IsKeyDown(Keys.S) && previousKeyboardState.IsKeyDown(Keys.S))
-                HandleKeyUp("S");
-
-            if (keyboardState.IsKeyDown(Keys.A) && !previousKeyboardState.IsKeyDown(Keys.A))
-                HandleKeyDown("A");
-            else if (!keyboardState.IsKeyDown(Keys.A) && previousKeyboardState.IsKeyDown(Keys.A))
-                HandleKeyUp("A");
-
-            if (keyboardState.IsKeyDown(Keys.D) && !previousKeyboardState.IsKeyDown(Keys.D))
-                HandleKeyDown("D");
-            else if (!keyboardState.IsKeyDown(Keys.D) && previousKeyboardState.IsKeyDown(Keys.D))
-                HandleKeyDown("D");
-        }
-
-        public void HandleKeyPress(Keys key, bool isKeyDown)
-        {
-            Log("GameController", $"handling key press: {key}, isDown: {isKeyDown}", () =>
-            {
-                if (isKeyDown)
-                {
-                    switch (key)
-                    {
-                        case Keys.Escape:
-                            if (CurrentGameState == GameState.Playing) PauseGame();
-                            else if (CurrentGameState == GameState.Paused) ResumeGame();
-                            break;
-                        case Keys.C:
-                            if (CurrentGameState == GameState.LevelComplete)
-                                StartNextLevel();
-                            break;
-                        case Keys.R:
-                            if (CurrentGameState == GameState.GameOver || CurrentGameState == GameState.LevelComplete)
-                                RestartLevel();
-                            break;
-                    }
-                }
-            });
-        }
-
+        // Инициализация состояния игры для начала уровня
         private void InitializeGameState(int levelId)
         {
-            Log("GameController", $"initializing game state for level {levelId}", () =>
-            {
-                GameTime = TimeSpan.Zero;
-                _gameStopwatch.Restart();
-                IsPaused = false;
-                OnGameEvent(GameEventType.LevelStart, $"Level {levelId} started");
-                Info("GameController", $"Level {levelId} started");
-            });
+            GameTime = TimeSpan.Zero;
+            _gameStopwatch.Restart();
+            IsPaused = false;
+            Info("GameController", $"Level {levelId} started");
         }
 
-        private void InitializeMotorcycle()
+        // Инициализация мотоцикла с обработкой ошибок
+        private bool TryInitializeMotorcycle(out string errorMessage)
         {
-            Log("GameController", "initializing motorcycle", () =>
-            {
-                if (CurrentLevel is null)
-                {
-                    Warning("GameController", "Cannot initialize motorcycle: no current level");
-                    return;
-                }
+            errorMessage = string.Empty;
 
+            if (CurrentLevel is null)
+            {
+                errorMessage = "Cannot initialize motorcycle: no current level";
+                Warning("GameController", errorMessage);
+                return false;
+            }
+
+            try
+            {
                 Motorcycle.Reset();
                 Motorcycle.SetPosition(CurrentLevel.StartPoint);
                 Motorcycle.SetBikeType(CurrentBikeType);
                 Debug("GameController", $"Motorcycle initialized at position {CurrentLevel.StartPoint} with bike type {CurrentBikeType}");
-            });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Failed to initialize motorcycle: {ex.Message}";
+                Error("GameController", errorMessage);
+                return false;
+            }
         }
 
-        public void Update(float deltaTime, CancellationToken cancellationToken = default)
+        #endregion
+
+        #region Game Flow Control
+
+        // Запуск уровня
+        public void StartLevel(int levelId)
         {
-            if (cancellationToken.IsCancellationRequested ||
-                CurrentGameState != GameState.Playing ||
-                IsPaused)
+            Level? level = Levels.FirstOrDefault(l => l.Id == levelId);
+            if (level is null)
+            {
+                Error("GameController", $"Failed to start level {levelId}: level not found");
+                OnGameEvent(GameEventType.Error, $"Failed to start level {levelId}: level not found");
                 return;
+            }
 
-            Log("GameController", "updating game", () =>
+            CurrentLevel = level;
+            IsLevelComplete = false;
+            InitializeGameState(levelId);
+            ResetInputState();
+
+            if (!TryInitializeMotorcycle(out var errorMessage))
             {
-                UpdateGameTime(deltaTime);
-                UpdateMotorcycle(deltaTime, cancellationToken);
-                CheckGameConditions();
-            });
+                OnGameEvent(GameEventType.Error, errorMessage);
+                CurrentGameState = GameState.MainMenu;
+                return;
+            }
+
+            CurrentGameState = GameState.Playing;
+            OnGameEvent(GameEventType.LevelStart, $"Level {levelId} started");
         }
 
-        private void UpdateGameTime(float deltaTime) => GameTime += TimeSpan.FromSeconds(deltaTime);
-
-        private void UpdateMotorcycle(float deltaTime, CancellationToken cancellationToken = default)
+        // Запуск следующего уровня
+        public void StartNextLevel()
         {
-            Log("GameController", "updating motorcycle", () =>
+            int nextLevelId = (CurrentLevel?.Id ?? 0) + 1;
+            if (nextLevelId <= Levels.Count)
             {
-                if (CurrentLevel is null)
-                {
-                    Warning("GameController", "Cannot update motorcycle: no current level");
-                    return;
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-                Motorcycle.Update(deltaTime, CurrentLevel, cancellationToken);
-            });
+                StartLevel(nextLevelId);
+            }
+            else
+            {
+                CurrentGameState = GameState.MainMenu;
+                OnGameEvent(GameEventType.GameComplete, "Congratulations! All levels completed!");
+            }
         }
 
-        private void CheckGameConditions()
-        {
-            Log("GameController", "checking game conditions", () =>
-            {
-                if (CheckFinishReached()) return;
-                if (CheckFallOutOfBounds()) return;
-                CheckMotorcycleCrash();
-
-                if (IsLevelComplete && CurrentGameState == GameState.Playing)
-                    CurrentGameState = GameState.LevelComplete;
-
-                if (IsGameOver && CurrentGameState == GameState.Playing)
-                    CurrentGameState = GameState.GameOver;
-            });
-        }
-
-        private bool CheckFinishReached()
-        {
-            Log("GameController", "checking finish reached", () =>
-            {
-                if (CurrentLevel?.IsFinishReached(Motorcycle.Position) != true)
-                    return false;
-
-                Info("GameController", "Finish line reached");
-                OnLevelComplete();
-                return true;
-            }, false);
-            return false;
-        }
-
-        private bool CheckFallOutOfBounds()
-        {
-            Log("GameController", "checking fall out of bounds", () =>
-            {
-                if (Motorcycle.Position.Y <= Constants.MaxFallHeight)
-                    return false;
-
-                Warning("GameController", $"Motorcycle fell out of bounds: Y={Motorcycle.Position.Y}");
-                OnGameOver("Fell out of level boundaries");
-                return true;
-            }, false);
-            return false;
-        }
-
-        private void CheckMotorcycleCrash()
-        {
-            Log("GameController", "checking motorcycle crash", () =>
-            {
-                if (Motorcycle.IsCrashed && !IsGameOver)
-                {
-                    Warning("GameController", "Motorcycle crashed");
-                    OnGameOver("Motorcycle crashed");
-                }
-            });
-        }
-
-        private void OnLevelComplete()
-        {
-            Log("GameController", "handling level complete", () =>
-            {
-                IsLevelComplete = true;
-                CurrentGameState = GameState.LevelComplete;
-                string formattedTime = FormatGameTime();
-                string message = $"Level completed!\nTime: {formattedTime}";
-                OnGameEvent(GameEventType.LevelComplete, message);
-                Info("GameController", $"Level {CurrentLevel?.Id} completed: Time={formattedTime}");
-            });
-        }
-
-        private string FormatGameTime() =>
-            GameTime.TotalHours >= 1
-                ? $"{GameTime.Hours:00}:{GameTime.Minutes:00}:{GameTime.Seconds:00}"
-                : $"{GameTime.Minutes:00}:{GameTime.Seconds:00}";
-
-        private void OnGameOver(string reason)
-        {
-            Log("GameController", $"handling game over: {reason}", () =>
-            {
-                CurrentGameState = GameState.GameOver;
-                OnGameEvent(GameEventType.GameOver, $"Game over: {reason}");
-                Info("GameController", $"Game over: {reason}");
-            });
-        }
-
-        private void OnGameEvent(GameEventType type, string message)
-        {
-            Log("GameController", $"firing game event: {type}", () =>
-            {
-                Debug("GameController", $"Game event: {type} - {message}");
-                GameEvent?.Invoke(this, new GameEventArgs(type, message));
-            });
-        }
-
-        public void PauseGame()
-        {
-            Log("GameController", "pausing game", () =>
-            {
-                if (IsPaused) return;
-
-                IsPaused = true;
-                CurrentGameState = GameState.Paused;
-                _gameStopwatch.Stop();
-                OnGameEvent(GameEventType.GamePaused, "Game paused");
-                Info("GameController", "Game paused");
-            });
-        }
-
-        public void ResumeGame()
-        {
-            Log("GameController", "resuming game", () =>
-            {
-                if (!IsPaused) return;
-
-                IsPaused = false;
-                CurrentGameState = GameState.Playing;
-                _gameStopwatch.Start();
-                OnGameEvent(GameEventType.GameResumed, "Game resumed");
-                Info("GameController", "Game resumed");
-            });
-        }
-
+        // Перезапуск текущего уровня
         public void RestartLevel()
         {
-            Log("GameController", "restarting level", () =>
+            if (CurrentLevel is null)
             {
-                if (CurrentLevel is null)
-                {
-                    Warning("GameController", "Cannot restart level: no current level");
-                    return;
-                }
+                Warning("GameController", "Cannot restart level: no current level");
+                return;
+            }
 
-                StartLevel(CurrentLevel.Id);
-                OnGameEvent(GameEventType.LevelRestart, "Level restarted");
-                Info("GameController", $"Level {CurrentLevel.Id} restarted");
-            });
+            StartLevel(CurrentLevel.Id);
+            OnGameEvent(GameEventType.LevelRestart, "Level restarted");
+            Info("GameController", $"Level {CurrentLevel.Id} restarted");
         }
 
+        // Пауза игры
+        public void PauseGame()
+        {
+            if (IsPaused) return;
+
+            IsPaused = true;
+            CurrentGameState = GameState.Paused;
+            _gameStopwatch.Stop();
+            Info("GameController", "Game paused");
+        }
+
+        // Возобновление игры
+        public void ResumeGame()
+        {
+            if (!IsPaused) return;
+
+            IsPaused = false;
+            CurrentGameState = GameState.Playing;
+            _gameStopwatch.Start();
+            Info("GameController", "Game resumed");
+        }
+
+        #endregion
+
+        #region Menu Navigation
+
+        // Переход в главное меню
+        public void EnterMainMenu() => CurrentGameState = GameState.MainMenu;
+
+        // Переход к выбору мотоцикла
+        public void EnterBikeSelection() => CurrentGameState = GameState.BikeSelection;
+
+        // Переход к выбору уровня
+        public void EnterLevelSelection() => CurrentGameState = GameState.LevelSelection;
+
+        // Выбор мотоцикла
         public void SetBikeType(BikeType bikeType)
         {
-            Log("GameController", $"setting bike type to {bikeType}", () =>
-            {
-                CurrentBikeType = bikeType;
-                Motorcycle.SetBikeType(bikeType);
-                OnGameEvent(GameEventType.BikeChanged, $"Selected bike: {bikeType}");
-                Info("GameController", $"Bike type changed to {bikeType}");
-            });
+            CurrentBikeType = bikeType;
+            Motorcycle.SetBikeType(bikeType);
+            OnGameEvent(GameEventType.BikeChanged, $"Selected bike: {bikeType}");
+            Info("GameController", $"Bike type changed to {bikeType}");
         }
 
+        // Установка цвета мотоцикла
         public void SetBikeColor(Color color)
         {
-            Log("GameController", "setting bike color", () =>
-            {
-                Motorcycle.SetBikeColor(color);
-                OnGameEvent(GameEventType.BikeChanged, "Bike color changed");
-                Info("GameController", $"Bike color changed");
-            });
+            Motorcycle.SetBikeColor(color);
+            OnGameEvent(GameEventType.BikeChanged, "Bike color changed");
+            Info("GameController", "Bike color changed");
         }
 
+        // Выбор уровня
         public void SelectLevel(int levelId)
         {
             if (levelId < 1 || levelId > Levels.Count)
@@ -432,139 +375,265 @@ namespace GravityDefiedGame.Controllers
             Info("GameController", $"Selected level: {levelId}");
         }
 
+        #endregion
+
+        #region Game Loop
+
+        // Главный метод обновления игрового состояния
+        public void Update(float deltaTime, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // Проверка условий для пропуска обновления
+                if (cancellationToken.IsCancellationRequested ||
+                    CurrentGameState != GameState.Playing ||
+                    IsPaused || CurrentLevel == null)
+                    return;
+
+                // Обновление времени игры
+                UpdateGameTime(deltaTime);
+
+                // Обновление мотоцикла
+                Motorcycle.Update(deltaTime, CurrentLevel, cancellationToken);
+
+                // Проверка игровых условий
+                CheckGameConditions();
+            }
+            catch (OperationCanceledException)
+            {
+                // Корректная обработка отмены операции
+                PauseGame();
+            }
+            catch (Exception ex)
+            {
+                // Обработка неожиданных ошибок
+                Error("GameController", $"Unexpected error during update: {ex.Message}");
+                OnGameEvent(GameEventType.Error, $"Game error: {ex.Message}");
+                PauseGame();
+            }
+        }
+
+        // Обновление игрового времени
+        private void UpdateGameTime(float deltaTime) => GameTime += TimeSpan.FromSeconds(deltaTime);
+
+        // Проверка игровых условий
+        private void CheckGameConditions()
+        {
+            // Проверяем в порядке приоритета, с ранним возвратом
+            if (CheckFinishReached()) return;
+            if (CheckFallOutOfBounds()) return;
+            CheckMotorcycleCrash();
+
+            if (IsLevelComplete && CurrentGameState == GameState.Playing)
+                CurrentGameState = GameState.LevelComplete;
+
+            if (IsGameOver && CurrentGameState == GameState.Playing)
+                CurrentGameState = GameState.GameOver;
+        }
+
+        // Проверка достижения финиша
+        private bool CheckFinishReached()
+        {
+            if (CurrentLevel?.IsFinishReached(Motorcycle.Position) != true)
+                return false;
+
+            Info("GameController", "Finish line reached");
+            OnLevelComplete();
+            return true;
+        }
+
+        // Проверка падения за пределы уровня
+        private bool CheckFallOutOfBounds()
+        {
+            if (Motorcycle.Position.Y <= Constants.MaxFallHeight)
+                return false;
+
+            Warning("GameController", $"Motorcycle fell out of bounds: Y={Motorcycle.Position.Y}");
+            OnGameOver("Fell out of level boundaries");
+            return true;
+        }
+
+        // Проверка аварии мотоцикла
+        private void CheckMotorcycleCrash()
+        {
+            if (Motorcycle.IsCrashed && !IsGameOver)
+            {
+                Warning("GameController", "Motorcycle crashed");
+                OnGameOver("Motorcycle crashed");
+            }
+        }
+
+        // Обработка завершения уровня
+        private void OnLevelComplete()
+        {
+            IsLevelComplete = true;
+            CurrentGameState = GameState.LevelComplete;
+            string formattedTime = FormatGameTime();
+            string message = $"Level completed!\nTime: {formattedTime}";
+            OnGameEvent(GameEventType.LevelComplete, message);
+            Info("GameController", $"Level {CurrentLevel?.Id} completed: Time={formattedTime}");
+        }
+
+        // Обработка проигрыша
+        private void OnGameOver(string reason)
+        {
+            CurrentGameState = GameState.GameOver;
+            OnGameEvent(GameEventType.GameOver, $"Game over: {reason}");
+            Info("GameController", $"Game over: {reason}");
+        }
+
+        #endregion
+
         #region Input Handling
 
-        public void ResetInputState()
+        // Обработка ввода с клавиатуры
+        public void HandleInput(KeyboardState keyboardState, KeyboardState previousKeyboardState)
         {
-            Log("GameController", "resetting input state", () =>
+            if (CurrentGameState == GameState.Playing)
             {
-                _input.Reset();
-                ResetMotorcycleControls();
-                Debug("GameController", "Input state reset");
-            });
+                // Проверка основных игровых клавиш
+                CheckKeyState(keyboardState, previousKeyboardState, Keys.W, "W");
+                CheckKeyState(keyboardState, previousKeyboardState, Keys.S, "S");
+                CheckKeyState(keyboardState, previousKeyboardState, Keys.A, "A");
+                CheckKeyState(keyboardState, previousKeyboardState, Keys.D, "D");
+                CheckKeyState(keyboardState, previousKeyboardState, Keys.Space, "Space");
+            }
+
+            // Проверка системных клавиш
+            foreach (var key in _systemKeyActions.Keys)
+            {
+                if (keyboardState.IsKeyDown(key) && previousKeyboardState.IsKeyUp(key))
+                {
+                    _systemKeyActions[key]();
+                }
+            }
         }
 
-        private void ResetMotorcycleControls()
+        // Проверка состояния клавиши и вызов соответствующего обработчика
+        private void CheckKeyState(KeyboardState current, KeyboardState previous, Keys key, string keyName)
         {
-            Log("GameController", "resetting motorcycle controls", () =>
-            {
-                Motorcycle.ApplyThrottle(Constants.NoInput);
-                Motorcycle.ApplyBrake(Constants.NoInput);
-                Motorcycle.Lean(Constants.NoInput);
-            });
+            if (current.IsKeyDown(key) && previous.IsKeyUp(key))
+                HandleKeyDown(keyName);
+            else if (current.IsKeyUp(key) && previous.IsKeyDown(key))
+                HandleKeyUp(keyName);
         }
 
+        // Обработка нажатия клавиши
         public void HandleKeyDown(string key)
         {
-            Log("GameController", $"handling key down: {key}", () =>
+            if (_keyDownActions.TryGetValue(key, out var action))
             {
-                switch (key)
-                {
-                    case "W" when !_input.IsThrottlePressed:
-                        _input.IsThrottlePressed = true;
-                        Motorcycle.SetDirection(1); 
-                        Motorcycle.ApplyThrottle(Constants.FullThrottle);
-                        Debug("GameController", "Throttle applied forward");
-                        break;
-
-                    case "S" when !_input.IsBrakePressed:
-                        _input.IsBrakePressed = true;
-                        Motorcycle.SetDirection(-1); 
-                        Motorcycle.ApplyThrottle(Constants.FullThrottle); 
-                        Debug("GameController", "Throttle applied backward");
-                        break;
-
-                    case "A" when !_input.IsLeaningLeft:
-                        _input.IsLeaningLeft = true;
-                        _input.IsLeaningRight = false;
-                        Motorcycle.Lean(Constants.LeftLean);
-                        Debug("GameController", "Leaning left");
-                        break;
-
-                    case "D" when !_input.IsLeaningRight:
-                        _input.IsLeaningRight = true;
-                        _input.IsLeaningLeft = false;
-                        Motorcycle.Lean(Constants.RightLean);
-                        Debug("GameController", "Leaning right");
-                        break;
-
-                    case "Space" when !_input.IsBrakePressed:
-                        _input.IsBrakePressed = true;
-                        Motorcycle.ApplyBrake(Constants.FullBrake);
-                        Debug("GameController", "Brake applied");
-                        break;
-                }
-            });
+                action();
+            }
         }
 
+        // Обработка отпускания клавиши
         public void HandleKeyUp(string key)
         {
-            Log("GameController", $"handling key up: {key}", () =>
+            if (_keyUpActions.TryGetValue(key, out var action))
             {
-                switch (key)
-                {
-                    case "W":
-                        _input.IsThrottlePressed = false;
-                        Motorcycle.ApplyThrottle(Constants.NoInput);
-                        Debug("GameController", "Throttle released");
-                        break;
-
-                    case "S":
-                        _input.IsBrakePressed = false;
-                        Motorcycle.ApplyThrottle(Constants.NoInput);
-                        Debug("GameController", "Backward throttle released");
-                        break;
-
-                    case "A":
-                        _input.IsLeaningLeft = false;
-                        UpdateLeanState();
-                        Debug("GameController", "Left lean released");
-                        break;
-
-                    case "D":
-                        _input.IsLeaningRight = false;
-                        UpdateLeanState();
-                        Debug("GameController", "Right lean released");
-                        break;
-
-                    case "Space":
-                        _input.IsBrakePressed = false;
-                        Motorcycle.ApplyBrake(Constants.NoInput);
-                        Debug("GameController", "Brake released");
-                        break;
-                }
-            });
+                action();
+            }
         }
 
+        // Обработка системных клавиш
+        public void HandleKeyPress(Keys key, bool isKeyDown)
+        {
+            if (isKeyDown && _systemKeyActions.TryGetValue(key, out var action))
+            {
+                action();
+            }
+        }
+
+        // Сброс состояния ввода
+        public void ResetInputState()
+        {
+            _input.Reset();
+            ResetMotorcycleControls();
+            Debug("GameController", "Input state reset");
+        }
+
+        // Сброс управления мотоциклом
+        private void ResetMotorcycleControls()
+        {
+            Motorcycle.ApplyThrottle(Constants.NoInput);
+            Motorcycle.ApplyBrake(Constants.NoInput);
+            Motorcycle.Lean(Constants.NoInput);
+        }
+
+        // Обновление состояния наклона мотоцикла
         private void UpdateLeanState()
         {
-            Log("GameController", "updating lean state", () =>
-            {
-                float leanAmount = CalculateLeanAmount();
-                Motorcycle.Lean(leanAmount);
-            });
+            float leanAmount = CalculateLeanAmount();
+            Motorcycle.Lean(leanAmount);
         }
 
+        // Расчет величины наклона на основе нажатых клавиш
         private float CalculateLeanAmount()
         {
-            Log("GameController", "calculating lean amount", () =>
-                (_input.IsLeaningLeft, _input.IsLeaningRight) switch
-                {
-                    (true, false) => Constants.LeftLean,
-                    (false, true) => Constants.RightLean,
-                    _ => Constants.NoInput
-                }, Constants.NoInput);
+            // Проверка комбинаций нажатий клавиш наклона
             return (_input.IsLeaningLeft, _input.IsLeaningRight) switch
             {
-                (true, false) => Constants.LeftLean,
-                (false, true) => Constants.RightLean,
-                _ => Constants.NoInput
+                (true, true) => Constants.NoInput,   // Обе клавиши - нейтральное положение
+                (true, false) => Constants.LeftLean, // Только левая - наклон влево
+                (false, true) => Constants.RightLean,// Только правая - наклон вправо
+                _ => Constants.NoInput               // Ни одной - нейтральное положение
             };
+        }
+
+        #endregion
+
+        #region Utility Methods
+
+        // Форматирование игрового времени
+        private string FormatGameTime() =>
+            GameTime.TotalHours >= 1
+                ? $"{GameTime.Hours:00}:{GameTime.Minutes:00}:{GameTime.Seconds:00}"
+                : $"{GameTime.Minutes:00}:{GameTime.Seconds:00}";
+
+        // Получение сообщения для перехода между состояниями
+        private string GetGameStateMessage(GameState oldState, GameState newState) =>
+            (oldState, newState) switch
+            {
+                (_, GameState.MainMenu) => "Entered Main Menu",
+                (_, GameState.BikeSelection) => "Entered Bike Selection",
+                (_, GameState.LevelSelection) => "Entered Level Selection",
+                (_, GameState.Playing) when oldState == GameState.Paused => "Game resumed",
+                (_, GameState.Playing) => $"Level {CurrentLevel?.Id ?? 0} started",
+                (_, GameState.Paused) => "Game paused",
+                (_, GameState.GameOver) => "Game over",
+                (_, GameState.LevelComplete) => $"Level {CurrentLevel?.Id ?? 0} completed!",
+                _ => $"State changed: {oldState} -> {newState}"
+            };
+
+        // Определение типа события для перехода между состояниями
+        private GameEventType GetEventTypeForStateTransition(GameState oldState, GameState newState) =>
+            (oldState, newState) switch
+            {
+                (_, GameState.MainMenu) => GameEventType.MenuChanged,
+                (_, GameState.BikeSelection) => GameEventType.MenuChanged,
+                (_, GameState.LevelSelection) => GameEventType.MenuChanged,
+                (_, GameState.Playing) when oldState == GameState.Paused => GameEventType.GameResumed,
+                (_, GameState.Playing) => GameEventType.LevelStart,
+                (_, GameState.Paused) => GameEventType.GamePaused,
+                (_, GameState.GameOver) => GameEventType.GameOver,
+                (_, GameState.LevelComplete) => GameEventType.LevelComplete,
+                _ => GameEventType.MenuChanged
+            };
+
+        // Генерация события игры
+        private void OnGameEvent(GameEventType type, string message)
+        {
+            Debug("GameController", $"Game event: {type} - {message}");
+            GameEvent?.Invoke(this, new GameEventArgs(type, message));
         }
 
         #endregion
     }
 
+    #region Supporting Types
+
+    // Типы игровых событий
     public enum GameEventType
     {
         LevelStart,
@@ -584,8 +653,10 @@ namespace GravityDefiedGame.Controllers
         Error
     }
 
+    // Аргументы события
     public sealed record GameEventArgs(GameEventType Type, string Message);
 
+    // Состояние ввода
     public sealed record InputState
     {
         public bool IsThrottlePressed { get; set; }
@@ -596,4 +667,6 @@ namespace GravityDefiedGame.Controllers
         public void Reset() =>
             (IsThrottlePressed, IsBrakePressed, IsLeaningLeft, IsLeaningRight) = (false, false, false, false);
     }
+
+    #endregion
 }
