@@ -39,7 +39,8 @@ namespace GravityDefiedGame.Models
             get => (FrontWheelPosition, RearWheelPosition);
             internal set => (FrontWheelPosition, RearWheelPosition) = value;
         }
-
+        public float FrontWheelAngularVelocity { get; set; }
+        public float RearWheelAngularVelocity { get; set; }
         public float WheelBase { get; internal set; } = DefaultWheelBase;
         public float FrontWheelRotation { get; internal set; }
         public float RearWheelRotation { get; internal set; }
@@ -211,7 +212,7 @@ namespace GravityDefiedGame.Models
         {
             Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
             {
-            Throttle = MathHelper.Clamp(amount, 0f, 1f);
+                Throttle = MathHelper.Clamp(amount, 0f, 1f);
                 if (Direction == -1)
                 {
                     IsMovingBackward = true;

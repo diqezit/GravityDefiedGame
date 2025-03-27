@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using static GravityDefiedGame.Utilities.GameConstants;
-using static GravityDefiedGame.Utilities.GameConstants.Debug;
 using static GravityDefiedGame.Utilities.GameConstants.Physics;
 using static GravityDefiedGame.Utilities.GameConstants.Validation;
 using static GravityDefiedGame.Utilities.GameConstants.Motorcycle;
@@ -748,7 +747,7 @@ namespace GravityDefiedGame.Models
         public float MaxLeanAngle { get; private set; }              // Макс. угол наклона
 
         // Параметры колес
-        public float WheelRadius { get; private set; } = DefaultWheelRadius; // Радиус колеса
+        public float WheelRadius { get; private set; }               // Радиус колеса
         public float NominalWheelBase { get; private set; }          // Номинальная база колес
         public float MinWheelDistance { get; private set; }          // Мин. расстояние между колесами
         public float MaxWheelDistance { get; private set; }          // Макс. расстояние между колесами
@@ -1072,6 +1071,8 @@ namespace GravityDefiedGame.Models
                 _bike.WheelRotations = (0, 0);
                 _bike.SuspensionOffsets = (_physics.SuspensionRestLength, _physics.SuspensionRestLength);
                 _airTime = _bike.WheelieTime = _bike.StoppieTime = 0;
+                _bike.FrontWheelAngularVelocity = 0;
+                _bike.RearWheelAngularVelocity = 0;
             }
 
             public bool ShouldSkipUpdate(CancellationToken token) =>
@@ -1169,12 +1170,18 @@ namespace GravityDefiedGame.Models
                     return;
                 }
 
+                // Get the ground height at the front and rear wheel's X positions
+                float frontGroundY = _level.GetGroundYAtX(_bike.AttachmentPoints.Front.X);
+                float rearGroundY = _level.GetGroundYAtX(_bike.AttachmentPoints.Rear.X);
+
+                // Calculate the slope angles at the wheel positions
                 float frontAngle = _level.CalculateSlopeAngle(_bike.AttachmentPoints.Front.X);
                 float rearAngle = _level.CalculateSlopeAngle(_bike.AttachmentPoints.Rear.X);
 
                 float bikeAngle = _bike.Angle;
                 float maxAngle = _physics.MaxSuspensionAngle;
 
+                // Calculate the suspension angles, ensuring they respect the max angle limits
                 float frontSuspensionAngle = ClampValue(
                     bikeAngle + frontAngle - MathHelper.PiOver2,
                     bikeAngle - maxAngle,
@@ -1193,19 +1200,33 @@ namespace GravityDefiedGame.Models
                 float frontSuspOffset = _bike.SuspensionOffsets.Front;
                 float rearSuspOffset = _bike.SuspensionOffsets.Rear;
 
-                // Корректировка для трюков
                 ApplyTrickSuspensionAdjustments(ref frontSuspOffset, ref rearSuspOffset);
 
                 _bike.WheelPositions = (
                     new Vector2(
                         _bike.AttachmentPoints.Front.X + frontSuspOffset * (float)cosFrontAngle,
-                        _bike.AttachmentPoints.Front.Y + frontSuspOffset * (float)sinFrontAngle
+                        frontGroundY + _physics.WheelRadius 
                     ),
                     new Vector2(
                         _bike.AttachmentPoints.Rear.X + rearSuspOffset * (float)cosRearAngle,
-                        _bike.AttachmentPoints.Rear.Y + rearSuspOffset * (float)sinRearAngle
+                        rearGroundY + _physics.WheelRadius 
                     )
                 );
+
+                AdjustBikePosition(frontGroundY, rearGroundY);
+            }
+
+            private void AdjustBikePosition(float frontGroundY, float rearGroundY)
+            {
+                float avgGroundY = (frontGroundY + rearGroundY) / 2f;
+                float frontSuspOffset = _bike.SuspensionOffsets.Front;
+                float rearSuspOffset = _bike.SuspensionOffsets.Rear;
+                float avgSuspOffset = (frontSuspOffset + rearSuspOffset) / 2f;
+                float desiredBikeY = avgGroundY + _physics.WheelRadius + avgSuspOffset;
+
+                _bike.Position = new Vector2(_bike.Position.X, desiredBikeY);
+
+                UpdateAttachmentPoints();
             }
 
             private void ApplyTrickSuspensionAdjustments(ref float frontSuspOffset, ref float rearSuspOffset)
@@ -1265,49 +1286,64 @@ namespace GravityDefiedGame.Models
             {
                 var (cosAngle, sinAngle) = _physics.GetBikeTrigs();
                 float groundSpeed = Vector2.Dot(_bike.Velocity, new Vector2((float)cosAngle, (float)sinAngle));
-                float wheelCircumference = WheelCircumferenceFactor * _physics.WheelRadius;
+                float desiredOmega = groundSpeed / _physics.WheelRadius; 
 
-                float frontRotation = UpdateSingleWheelRotation(
-                    _bike.WheelRotations.Front, groundSpeed, deltaTime, true, wheelCircumference);
-                float rearRotation = UpdateSingleWheelRotation(
-                    _bike.WheelRotations.Rear, groundSpeed, deltaTime, false, wheelCircumference);
+                if (_bike.IsInAir)
+                {
+                    float airDeceleration = Physics.AirDeceleration * deltaTime;
+                    _bike.FrontWheelAngularVelocity = DecayAngularVelocity(_bike.FrontWheelAngularVelocity, airDeceleration);
+                    _bike.RearWheelAngularVelocity = DecayAngularVelocity(_bike.RearWheelAngularVelocity, airDeceleration);
 
-                _bike.WheelRotations = (frontRotation % FullRotation, rearRotation % FullRotation);
+                    if (_bike.Throttle > 0)
+                    {
+                        _bike.RearWheelAngularVelocity += _bike.Throttle * Physics.ThrottleRotationEffect * deltaTime;
+                    }
+                }
+                else
+                {
+                    _bike.FrontWheelAngularVelocity = desiredOmega;
+
+                    float maxFrictionTorque = CalculateMaxFrictionTorque(true); 
+                    float engineTorque = _bike.Throttle * _physics.EnginePower * _physics.WheelRadius;
+
+                    float netTorque = engineTorque - Sign(_bike.RearWheelAngularVelocity - desiredOmega) * maxFrictionTorque;
+
+                    float angularAcceleration = netTorque / (_physics.Mass * _physics.WheelRadius * _physics.WheelRadius);
+                    _bike.RearWheelAngularVelocity += angularAcceleration * deltaTime;
+
+                    float maxOmega = desiredOmega + (maxFrictionTorque / (_physics.Mass * _physics.WheelRadius));
+                    _bike.RearWheelAngularVelocity = MathHelper.Clamp(_bike.RearWheelAngularVelocity, desiredOmega - maxOmega, maxOmega);
+                }
+
+                _bike.WheelRotations = (
+                    (_bike.WheelRotations.Front + _bike.FrontWheelAngularVelocity * deltaTime) % FullRotation,
+                    (_bike.WheelRotations.Rear + _bike.RearWheelAngularVelocity * deltaTime) % FullRotation
+                );
             }
 
-            private float UpdateSingleWheelRotation(
-                float currentRotation,
-                float groundSpeed,
-                float deltaTime,
-                bool isFrontWheel,
-                float wheelCircumference)
+            private float CalculateMaxFrictionTorque(bool isRearWheel)
             {
-                float rotationFactor = _bike.IsInAir ? AirRotationFactor : GroundRotationFactor;
-                float rotationDelta = SafeDivide(groundSpeed, wheelCircumference);
-
-                float slipFactor = CalculateWheelSlipFactor();
-
-                rotationDelta = _bike.IsInAir
-                    ? isFrontWheel
-                        ? rotationDelta
-                        : rotationDelta + SafeDivide(_bike.Throttle * ThrottleRotationFactor, wheelCircumference)
-                    : isFrontWheel
-                        ? rotationDelta
-                        : rotationDelta * (1 + slipFactor);
-
-                return currentRotation + rotationDelta * deltaTime * rotationFactor;
+                float normalForce = _physics.Mass * _physics.Gravity / 2;
+                float frictionCoefficient = isRearWheel ? _physics.RearGroundFriction : _physics.FrontGroundFriction;
+                return normalForce * frictionCoefficient * _physics.WheelRadius;
             }
 
-            private float CalculateWheelSlipFactor()
+            private static float DecayAngularVelocity(float omega, float deceleration)
             {
-                if (_bike.Throttle <= WheelSlipThreshold)
-                    return 0;
+                if (omega > 0)
+                {
+                    return Math.Max(0, omega - deceleration);
+                }
+                else if (omega < 0)
+                {
+                    return Math.Min(0, omega + deceleration);
+                }
+                return 0;
+            }
 
-                float slipFactor = (_bike.Throttle - WheelSlipThreshold) * SlipThrottleFactor;
-                slipFactor *= MathHelper.Min(1.0f, _physics.GroundFriction / SlipFrictionRatio);
-                slipFactor *= MathHelper.Min(1.0f, _bike.Velocity.Length() / SlipSpeedThreshold);
-
-                return slipFactor;
+            private static float Sign(float value)
+            {
+                return value > 0 ? 1f : (value < 0 ? -1f : 0f);
             }
         }
 

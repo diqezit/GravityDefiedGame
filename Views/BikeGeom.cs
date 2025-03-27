@@ -191,47 +191,11 @@ namespace GravityDefiedGame.Models
             float wheelRadius = _bike.GetWheelRadius();
             int centerPointIndex = wheelIndex;
             var spokeEndIndices = new List<int>(spokeCount);
-            float groundY = center.Y + wheelRadius;
-
-            float suspensionOffset = wheelIndex == 0
-                ? _bike.SuspensionOffsets.Front
-                : _bike.SuspensionOffsets.Rear;
-            float restLength = _bike.GetWheelRadius() * 2;
-            float compressionRatio = 1.0f - (suspensionOffset / restLength);
 
             for (int i = 0; i < spokeCount; i++)
             {
                 double angle = rotation + i * (2 * Math.PI / spokeCount);
-                float effectiveRadius = wheelRadius;
-
-                if (!_bike.IsInAir)
-                {
-                    Vector2 spokeDirection = new Vector2(
-                        (float)Math.Cos(angle),
-                        (float)Math.Sin(angle)
-                    );
-
-                    bool isBottomSpoke = spokeDirection.Y > 0;
-
-                    if (isBottomSpoke)
-                    {
-                        float bottomFactor = spokeDirection.Y;
-                        float maxDeformation = MathHelper.Min(0.3f, compressionRatio * 0.5f);
-                        float deformation = maxDeformation * bottomFactor * bottomFactor;
-
-                        effectiveRadius = wheelRadius * (1.0f - deformation);
-                    }
-                    else if (_bike.Throttle > 0.7f && wheelIndex == 1)
-                    {
-                        float angle360 = (float)(angle % (2 * Math.PI));
-                        if (angle360 > Math.PI && angle360 < Math.PI * 1.5f)
-                        {
-                            effectiveRadius = wheelRadius * (1.0f - _bike.Throttle * 0.05f);
-                        }
-                    }
-                }
-
-                Vector2 spokeEnd = Offset(center, effectiveRadius, 0, (float)angle);
+                Vector2 spokeEnd = Offset(center, wheelRadius, 0, (float)angle);
                 points.Add(new SkeletonPoint(spokeEnd, SkeletonPointType.Wheel));
                 int spokeEndIndex = points.Count - 1;
                 spokeEndIndices.Add(spokeEndIndex);

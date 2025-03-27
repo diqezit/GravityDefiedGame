@@ -7,7 +7,7 @@ namespace GravityDefiedGame.Utilities
         private int _screenWidth;
         private int _screenHeight;
         private Vector2 _position;
-        public float Zoom { get; private set; } = 1.0f;
+        public float Zoom { get; private set; }
 
         public Matrix TransformMatrix
         {
@@ -29,7 +29,7 @@ namespace GravityDefiedGame.Utilities
         public void Reset()
         {
             _position = Vector2.Zero;
-            Zoom = 1.0f;
+            Zoom = 3.0f;
         }
 
         public void CenterOn(Vector2 position)

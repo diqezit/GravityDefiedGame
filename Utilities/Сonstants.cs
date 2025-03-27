@@ -38,13 +38,13 @@ namespace GravityDefiedGame.Utilities
         {
             public static readonly BikeProperties Standard = new(
                 mass: 180.0f,                // Масса стандартного мотоцикла в кг
-                power: 10000.0f,             // Мощность двигателя в Н
-                brakeForce: 2000.0f,         // Сила торможения в Н
+                power: 13000.0f,             // Мощность двигателя в Н (увеличено для лучшего разгона и подъёма)
+                brakeForce: 12000.0f,        // Сила торможения в Н (увеличено для лучшего торможения)
                 drag: 0.35f,                 // Коэффициент сопротивления воздуха
-                maxLeanAngle: MathHelper.Pi / 2.5f,// Максимальный угол наклона
+                maxLeanAngle: MathHelper.Pi / 2.5f, // Максимальный угол наклона
                 leanSpeed: 6.0f,             // Скорость изменения наклона
-                friction: 1.0f,              // Базовый коэффициент трения
-                suspensionStrength: 8000.0f, // Жесткость подвески
+                friction: 1.3f,              // Базовый коэффициент трения (увеличено для лучшего сцепления)
+                suspensionStrength: 9000.0f, // Жесткость подвески (увеличено для устойчивости)
                 suspensionDamping: 1000.0f,  // Демпфирование подвески
                 suspensionRestLength: 25.0f, // Длина подвески в покое
                 maxSuspensionAngle: MathHelper.Pi / 12f // Максимальный угол отклонения подвески
@@ -52,13 +52,13 @@ namespace GravityDefiedGame.Utilities
 
             public static readonly BikeProperties Sport = new(
                 mass: 150.0f,                // Масса спортивного мотоцикла в кг
-                power: 14000.0f,             // Мощность двигателя в Н
-                brakeForce: 2400.0f,         // Сила торможения в Н
+                power: 18000.0f,             // Мощность двигателя в Н (увеличено для лучшего разгона)
+                brakeForce: 13600.0f,         // Сила торможения в Н (увеличено для лучшего торможения)
                 drag: 0.25f,                 // Коэффициент сопротивления воздуха
                 maxLeanAngle: MathHelper.Pi / 2f,  // Максимальный угол наклона
                 leanSpeed: 7.0f,             // Скорость изменения наклона
-                friction: 1.0f,              // Базовый коэффициент трения
-                suspensionStrength: 4500.0f, // Жесткость подвески
+                friction: 1.2f,              // Базовый коэффициент трения (увеличено для сцепления)
+                suspensionStrength: 5000.0f, // Жесткость подвески (увеличено для контроля)
                 suspensionDamping: 450.0f,   // Демпфирование подвески
                 suspensionRestLength: 20.0f, // Длина подвески в покое
                 maxSuspensionAngle: MathHelper.Pi / 5.14f // Максимальный угол отклонения подвески
@@ -66,28 +66,17 @@ namespace GravityDefiedGame.Utilities
 
             public static readonly BikeProperties OffRoad = new(
                 mass: 200.0f,                // Масса внедорожного мотоцикла в кг
-                power: 12000.0f,             // Мощность двигателя в Н
-                brakeForce: 1800.0f,         // Сила торможения в Н
+                power: 15000.0f,             // Мощность двигателя в Н (увеличено для подъёма в гору)
+                brakeForce: 10400.0f,         // Сила торможения в Н (увеличено для торможения)
                 drag: 0.45f,                 // Коэффициент сопротивления воздуха
                 maxLeanAngle: MathHelper.Pi / 3f,  // Максимальный угол наклона
                 leanSpeed: 5.5f,             // Скорость изменения наклона
-                friction: 1.0f,              // Базовый коэффициент трения
-                suspensionStrength: 5500.0f, // Жесткость подвески
+                friction: 1.5f,              // Базовый коэффициент трения (увеличено для максимального сцепления)
+                suspensionStrength: 6500.0f, // Жесткость подвески (увеличено для неровностей)
                 suspensionDamping: 550.0f,   // Демпфирование подвески
                 suspensionRestLength: 30.0f, // Длина подвески в покое
                 maxSuspensionAngle: MathHelper.Pi / 7.2f // Максимальный угол отклонения подвески
             );
-        }
-
-        public static class Debug
-        {
-            public const string
-                BikePhysicsTag = nameof(BikePhysics), // Тег для логирования физики мотоцикла
-                MotorcycleTag = nameof(Motorcycle);   // Тег для логирования мотоцикла
-
-            public const float
-                LogThrottle = 0.5f,          // Порог газа для логирования
-                EngineForceThreshold = 1.2f; // Порог силы двигателя для логирования
         }
 
         public static class Motorcycle
@@ -322,6 +311,10 @@ namespace GravityDefiedGame.Utilities
                 StabilizationFactorSpeedMultiplier = 0.8f, // Множитель стабилизации по скорости
                 StabilizationSpeedThreshold = 400.0f,   // Порог скорости для стабилизации
                 StabilizationTorqueMultiplier = 100.0f; // Множитель стабилизирующего момента
+
+            public const float ThrottleRotationEffect = 10.0f; // Ускорение заднего колеса от газа (рад/с^2)
+            public const float AirDeceleration = 2.0f;         // Замедление вращения в воздухе (рад/с^2)
+
 
             public const int StatusLogInterval = 100;  // Интервал логирования состояния
         }
