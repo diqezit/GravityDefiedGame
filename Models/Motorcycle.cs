@@ -15,23 +15,46 @@ using static GravityDefiedGame.Models.BikeGeom;
 
 namespace GravityDefiedGame.Models
 {
-    public class Motorcycle : PhysicsComponent
+    public interface IBikePhysicsData
+    {
+        Vector2 Position { get; }
+        Vector2 Velocity { get; }
+        float Angle { get; }
+        float WheelBase { get; }
+        float FrameHeight { get; }
+        BikeType BikeType { get; }
+        (Vector2 Front, Vector2 Rear) WheelPositions { get; }
+        (Vector2 Front, Vector2 Rear) AttachmentPoints { get; }
+        (float Front, float Rear) SuspensionOffsets { get; }
+        (float Front, float Rear) WheelRotations { get; }
+        float Throttle { get; }
+        float LeanAmount { get; }
+        bool IsInAir { get; }
+        bool IsInWheelie { get; }
+        bool IsInStoppie { get; }
+        float WheelieIntensity { get; }
+        float StoppieIntensity { get; }
+        float GetWheelRadius();
+    }
+
+    public class Motorcycle : PhysicsComponent, IBikePhysicsData
     {
         #region Private Fields
         private readonly BikePhysics _physics;
         private int _direction = 1;
         #endregion
 
-        #region Properties
-        // Свойства состояния мотоцикла
-        public float SuspensionRealMaxAngle { get; internal set; }
-        public bool EnforceSuspensionAngleLimits { get; set; } = true;
+        #region Properties - Основные физические свойства
         public Vector2 Position { get; internal set; }
         public Vector2 Velocity { get; internal set; }
         public float Angle { get; internal set; }
         public float AngularVelocity { get; internal set; }
+        public float WheelBase { get; internal set; } = DefaultWheelBase;
         public float FrameHeight { get; private set; }
+        public BikeType BikeType { get; private set; }
+        #endregion
 
+        #region Properties - Колеса и подвеска
         public Vector2 FrontWheelPosition { get; internal set; }
         public Vector2 RearWheelPosition { get; internal set; }
         public (Vector2 Front, Vector2 Rear) WheelPositions
@@ -39,9 +62,23 @@ namespace GravityDefiedGame.Models
             get => (FrontWheelPosition, RearWheelPosition);
             internal set => (FrontWheelPosition, RearWheelPosition) = value;
         }
-        public float FrontWheelAngularVelocity { get; set; }
-        public float RearWheelAngularVelocity { get; set; }
-        public float WheelBase { get; internal set; } = DefaultWheelBase;
+
+        public Vector2 FrontAttachmentPoint { get; set; }
+        public Vector2 RearAttachmentPoint { get; set; }
+        public (Vector2 Front, Vector2 Rear) AttachmentPoints
+        {
+            get => (FrontAttachmentPoint, RearAttachmentPoint);
+            internal set => (FrontAttachmentPoint, RearAttachmentPoint) = value;
+        }
+
+        public float FrontSuspensionOffset { get; set; }
+        public float RearSuspensionOffset { get; set; }
+        public (float Front, float Rear) SuspensionOffsets
+        {
+            get => (FrontSuspensionOffset, RearSuspensionOffset);
+            internal set => (FrontSuspensionOffset, RearSuspensionOffset) = value;
+        }
+
         public float FrontWheelRotation { get; internal set; }
         public float RearWheelRotation { get; internal set; }
         public (float Front, float Rear) WheelRotations
@@ -50,14 +87,30 @@ namespace GravityDefiedGame.Models
             internal set => (FrontWheelRotation, RearWheelRotation) = value;
         }
 
+        public float FrontWheelAngularVelocity { get; set; }
+        public float RearWheelAngularVelocity { get; set; }
+        #endregion
+
+        #region Properties - Состояние управления
         public float Throttle { get; internal set; }
         public float Brake { get; internal set; }
         public float LeanAmount { get; internal set; }
-        public BikeType BikeType { get; private set; }
+        public float SuspensionRealMaxAngle { get; internal set; }
+        public bool EnforceSuspensionAngleLimits { get; set; } = true;
+        public int Direction
+        {
+            get => _direction;
+            private set => _direction = value;
+        }
+        #endregion
+
+        #region Properties - Визуальные аспекты
         public Color BikeColor { get; private set; }
+        #endregion
+
+        #region Properties - Состояние мотоцикла
         public BikeState State { get; internal set; }
 
-        // Вычисляемые свойства состояния мотоцикла
         public bool IsCrashed
         {
             get => (State & BikeState.Crashed) == BikeState.Crashed;
@@ -95,30 +148,9 @@ namespace GravityDefiedGame.Models
 
         public float WheelieIntensity => IsInWheelie ? MathHelper.Min(1.0f, WheelieTime / 1.0f) : 0;
         public float StoppieIntensity => IsInStoppie ? MathHelper.Min(1.0f, StoppieTime / 0.5f) : 0;
-
-        public Vector2 FrontAttachmentPoint { get; set; }
-        public Vector2 RearAttachmentPoint { get; set; }
-        public (Vector2 Front, Vector2 Rear) AttachmentPoints
-        {
-            get => (FrontAttachmentPoint, RearAttachmentPoint);
-            internal set => (FrontAttachmentPoint, RearAttachmentPoint) = value;
-        }
-
-        public float FrontSuspensionOffset { get; set; }
-        public float RearSuspensionOffset { get; set; }
-        public (float Front, float Rear) SuspensionOffsets
-        {
-            get => (FrontSuspensionOffset, RearSuspensionOffset);
-            internal set => (FrontSuspensionOffset, RearSuspensionOffset) = value;
-        }
-
-        public int Direction
-        {
-            get => _direction;
-            private set => _direction = value;
-        }
         #endregion
 
+        #region Конструктор
         public Motorcycle(BikeType bikeType = BikeType.Standard)
         {
             _physics = new BikePhysics(this);
@@ -131,20 +163,23 @@ namespace GravityDefiedGame.Models
                 Info("Motorcycle", $"Created {bikeType} motorcycle");
             });
         }
+        #endregion
 
+        #region Приватные методы
         private void InitializeBikeProperties()
         {
             Log("Motorcycle", "initializing bike properties", () =>
             {
                 SuspensionRealMaxAngle = _physics.MaxSuspensionAngle;
                 _physics.InitializeProperties(BikeType);
-                BikeColor = new Color(200, 200, 200); // Серый цвет по умолчанию
+                BikeColor = new Color(200, 200, 200);
                 FrameHeight = _physics.WheelRadius * 1.5f;
                 Info("Motorcycle", $"Initialized {BikeType} motorcycle with wheel radius {_physics.WheelRadius:F2}");
             });
         }
+        #endregion
 
-        #region Public Methods
+        #region Публичные методы - Основные операции
         public void Reset()
         {
             Log("Motorcycle", "resetting motorcycle", () =>
@@ -164,6 +199,16 @@ namespace GravityDefiedGame.Models
             });
         }
 
+        public void Update(float deltaTime, Level level, CancellationToken cancellationToken = default)
+        {
+            Log("Motorcycle", "updating motorcycle", () =>
+            {
+                _physics.Update(deltaTime, level, cancellationToken);
+            });
+        }
+        #endregion
+
+        #region Публичные методы - Конфигурация
         public void SetBikeType(BikeType bikeType)
         {
             Log("Motorcycle", $"changing bike type to {bikeType}", () =>
@@ -189,7 +234,6 @@ namespace GravityDefiedGame.Models
             {
                 try
                 {
-                    // Обновляем цвет мотоцикла на основе текущей темы
                     BikeColor = ThemeManager.CurrentTheme.BikeColors[SkeletonLineType.MainFrame];
                     Debug("Motorcycle", $"Bike color updated from theme to {BikeColor}");
                 }
@@ -199,15 +243,9 @@ namespace GravityDefiedGame.Models
                 }
             });
         }
+        #endregion
 
-        public void Update(float deltaTime, Level level, CancellationToken cancellationToken = default)
-        {
-            Log("Motorcycle", "updating motorcycle", () =>
-            {
-                _physics.Update(deltaTime, level, cancellationToken);
-            });
-        }
-
+        #region Публичные методы - Управление
         public void ApplyThrottle(float amount)
         {
             Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
@@ -254,7 +292,9 @@ namespace GravityDefiedGame.Models
                 Debug("Motorcycle", $"Direction set to {direction}");
             });
         }
+        #endregion
 
+        #region Публичные методы - Получение данных
         public float GetWheelRadius() => _physics.WheelRadius;
 
         public Vector2 GetVisualCenter() =>
