@@ -1,5 +1,4 @@
 ﻿#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +8,7 @@ using static System.Math;
 using GravityDefiedGame.Views;
 using static GravityDefiedGame.Models.LevelConstants;
 using static GravityDefiedGame.Models.GeneratorConstants;
+using System.Threading;
 
 namespace GravityDefiedGame.Models
 {
@@ -49,7 +49,6 @@ namespace GravityDefiedGame.Models
         public Color BackgroundColor;
         public Color TerrainColor;
         public Color SafeZoneColor;
-
         public static LevelVisualProperties FromTheme() => new()
         {
             VerticalLineColor = ThemeManager.CurrentTheme.VerticalLineColor,
@@ -61,7 +60,6 @@ namespace GravityDefiedGame.Models
 
     public enum LevelTheme { Desert, Mountain, Arctic, Volcano }
     public enum TerrainSegmentType { Plateau, Spike, Depression, StepUp, StepDown, Wave, Jump }
-
     public record TerrainConfig(float Length, float TopOffset, float BottomOffset, int Difficulty);
 
     public static class LevelConstants
@@ -74,7 +72,6 @@ namespace GravityDefiedGame.Models
             TerrainLengthIncreasePerLevel = 500.0f,
             MaxTerrainLength = 10000.0f,
             FixedSafeZoneLength = 300.0f;
-
         public const int DefaultSeedMultiplier = 100;
     }
 
@@ -124,24 +121,116 @@ namespace GravityDefiedGame.Models
             TerrainTypeUnlockLevel = 5;
     }
 
+    public class SpatialTerrainIndex
+    {
+        private readonly Dictionary<int, int> _bucketToSegmentMap = [];
+        private readonly float _bucketSize;
+        private readonly int _bucketCount;
+        private readonly float _terrainLength;
+
+        public SpatialTerrainIndex(List<Level.TerrainPoint> points, float terrainLength, int bucketCount = 50)
+        {
+            _terrainLength = terrainLength;
+            _bucketCount = bucketCount;
+            _bucketSize = terrainLength / bucketCount;
+
+            for (int i = 0; i < points.Count - 1; i++)
+            {
+                int startBucket = GetBucketIndex(points[i].X);
+                int endBucket = GetBucketIndex(points[i + 1].X);
+
+                for (int bucket = startBucket; bucket <= endBucket; bucket++)
+                {
+                    if (!_bucketToSegmentMap.ContainsKey(bucket))
+                    {
+                        _bucketToSegmentMap[bucket] = i;
+                    }
+                }
+            }
+        }
+
+        public int GetSegmentIndex(float x)
+        {
+            int bucket = GetBucketIndex(x);
+            return _bucketToSegmentMap.TryGetValue(bucket, out int segmentIndex)
+                ? segmentIndex : GetFallbackSegmentIndex(x);
+        }
+
+        private int GetBucketIndex(float x)
+        {
+            int index = (int)(x / _bucketSize);
+            return Math.Clamp(index, 0, _bucketCount - 1);
+        }
+
+        private int GetFallbackSegmentIndex(float x)
+        {
+            if (x <= 0) return 0;
+            if (x >= _terrainLength) return _bucketToSegmentMap.Values.Max();
+
+            int bucket = GetBucketIndex(x);
+            int closestBucket = _bucketToSegmentMap.Keys
+                .OrderBy(k => Math.Abs(k - bucket)).First();
+
+            return _bucketToSegmentMap[closestBucket];
+        }
+    }
+
+    public class TerrainCache(int capacity = 100, float precision = 0.5f)
+    {
+        private class CacheEntry(float x, float y, long timestamp)
+        {
+            public float X { get; } = x; 
+            public float Y { get; } = y; 
+            public long LastAccessed { get; set; } = timestamp;
+        }
+
+        private readonly Dictionary<int, CacheEntry> _cache = [];
+        private long _accessCounter = 0;
+
+        public bool TryGetValue(float x, out float y)
+        {
+            int key = GetKey(x);
+
+            if (_cache.TryGetValue(key, out var entry))
+            {
+                entry.LastAccessed = Interlocked.Increment(ref _accessCounter);
+                y = entry.Y;
+                return true;
+            }
+
+            y = 0;
+            return false;
+        }
+
+        public void Add(float x, float y)
+        {
+            if (_cache.Count >= capacity)
+            {
+                var leastUsed = _cache.OrderBy(pair => pair.Value.LastAccessed).First();
+                _cache.Remove(leastUsed.Key);
+            }
+
+            int key = GetKey(x);
+            _cache[key] = new CacheEntry(x, y, Interlocked.Increment(ref _accessCounter));
+        }
+
+        private int GetKey(float x) => (int)Math.Round(x / precision);
+    }
+
     public class Level : PhysicsComponent, ILevelPhysics, ILevelVisualData
     {
-        public readonly struct TerrainPoint : IComparable<TerrainPoint>, IComparable<float>
+        public readonly struct TerrainPoint(
+            float x, 
+            float yTop, 
+            float yMiddle, 
+            float yBottom, 
+            bool isSafeZone) : IComparable<TerrainPoint>, IComparable<float>
         {
-            public float X { get; }
-            public float YTop { get; }
-            public float YMiddle { get; }
-            public float YBottom { get; }
-            public bool IsSafeZone { get; }
-
-            public TerrainPoint(float x, float yTop, float yMiddle, float yBottom, bool isSafeZone)
-            {
-                X = x;
-                YTop = yTop;
-                YMiddle = yMiddle;
-                YBottom = yBottom;
-                IsSafeZone = isSafeZone;
-            }
+            public float X { get; } = x; 
+            public float YTop { get; } = yTop; 
+            public float YMiddle { get; } = yMiddle; 
+            public float YBottom { get; } = yBottom; 
+            public bool IsSafeZone { get; } = isSafeZone;
 
             public int CompareTo(TerrainPoint other) => X.CompareTo(other.X);
             public int CompareTo(float x) => X.CompareTo(x);
@@ -162,6 +251,8 @@ namespace GravityDefiedGame.Models
         private int _currentSegmentIndex = 0;
         private float _lastQueryX = float.NaN;
         private float _lastGroundY = DefaultGroundY;
+        private readonly SpatialTerrainIndex _spatialIndex;
+        private readonly TerrainCache _terrainCache;
 
         public Color VerticalLineColor => _visualProperties.VerticalLineColor;
         public Color BackgroundColor => _visualProperties.BackgroundColor;
@@ -178,21 +269,32 @@ namespace GravityDefiedGame.Models
 
             int levelSeed = seed ?? (id * DefaultSeedMultiplier + DateTime.Now.Millisecond);
             GenerateLevel(levelSeed);
+
+            _terrainCache = new TerrainCache(100, 0.5f);
+            _spatialIndex = new SpatialTerrainIndex(TerrainPoints, Length);
         }
 
-        public Level() => _visualProperties = LevelVisualProperties.FromTheme();
+        public Level()
+        {
+            _visualProperties = LevelVisualProperties.FromTheme();
+            _terrainCache = new TerrainCache(100, 0.5f);
+            _spatialIndex = new SpatialTerrainIndex([], 0);
+        }
 
         public float GetGroundYAtX(float x)
         {
-            if (!float.IsNaN(_lastQueryX) && Abs(_lastQueryX - x) < float.Epsilon)
-                return _lastGroundY;
+            if (_terrainCache.TryGetValue(x, out float cachedY)) return cachedY;
+            if (!float.IsNaN(_lastQueryX) && Abs(_lastQueryX - x) < float.Epsilon) return _lastGroundY;
+            if (IsOutOfBounds(x)) return _lastGroundY = GetOutOfBoundsValue(x);
 
-            if (IsOutOfBounds(x))
-                return _lastGroundY = GetOutOfBoundsValue(x);
+            _currentSegmentIndex = _spatialIndex.GetSegmentIndex(x);
+            if (!IsInSegment(_currentSegmentIndex, x))
+                _currentSegmentIndex = FindTerrainSegmentIndexImproved(x);
 
-            UpdateSegmentIndex(x);
             _lastQueryX = x;
-            return _lastGroundY = InterpolateGroundY(x);
+            _lastGroundY = InterpolateGroundY(x);
+            _terrainCache.Add(x, _lastGroundY);
+            return _lastGroundY;
         }
 
         public bool IsInSafeZone(float x) =>
@@ -214,14 +316,7 @@ namespace GravityDefiedGame.Models
                 BaseTerrainLength + TerrainLengthIncreasePerLevel * Difficulty,
                 MaxTerrainLength
             );
-
-            var config = new TerrainConfig(
-                terrainLength,
-                PointOffset,
-                PointOffset,
-                Difficulty
-            );
-
+            var config = new TerrainConfig(terrainLength, PointOffset, PointOffset, Difficulty);
             (TerrainPoints, Length, StartPoint, FinishPoint, SafeZoneStartLength, SafeZoneEndLength) =
                 gen.GenerateTerrain(config);
         }
@@ -231,42 +326,13 @@ namespace GravityDefiedGame.Models
 
         private float GetOutOfBoundsValue(float x)
         {
-            if (TerrainPoints.Count == 0)
-                return DefaultGroundY;
-
-            return x < TerrainPoints[0].X
-                ? TerrainPoints[0].YMiddle
-                : TerrainPoints[^1].YMiddle;
-        }
-
-        private void UpdateSegmentIndex(float x)
-        {
-            if (TerrainPoints.Count < 2)
-            {
-                _currentSegmentIndex = 0;
-                return;
-            }
-
-            if (IsInSegment(_currentSegmentIndex, x))
-                return;
-
-            foreach (int idx in new[] { _currentSegmentIndex + 1, _currentSegmentIndex - 1 })
-            {
-                if (IsInSegment(idx, x))
-                {
-                    _currentSegmentIndex = idx;
-                    return;
-                }
-            }
-
-            _currentSegmentIndex = FindTerrainSegmentIndex(x);
+            if (TerrainPoints.Count == 0) return DefaultGroundY;
+            return x < TerrainPoints[0].X ? TerrainPoints[0].YMiddle : TerrainPoints[^1].YMiddle;
         }
 
         private bool IsInSegment(int idx, float x)
         {
-            if (idx < 0 || idx >= TerrainPoints.Count - 1)
-                return false;
-
+            if (idx < 0 || idx >= TerrainPoints.Count - 1) return false;
             var p1 = TerrainPoints[idx];
             var p2 = TerrainPoints[idx + 1];
             return x >= p1.X && x < p2.X;
@@ -279,28 +345,29 @@ namespace GravityDefiedGame.Models
 
             var p1 = TerrainPoints[_currentSegmentIndex];
             var p2 = TerrainPoints[_currentSegmentIndex + 1];
-
             float t = (x - p1.X) / (p2.X - p1.X);
             return p1.YMiddle + (p2.YMiddle - p1.YMiddle) * t;
         }
 
-        private int FindTerrainSegmentIndex(float x)
+        private int FindTerrainSegmentIndexImproved(float x)
         {
-            if (TerrainPoints.Count < 2)
-                return 0;
+            if (TerrainPoints.Count < 2) return 0;
+            if (x <= TerrainPoints[0].X) return 0;
+            if (x >= TerrainPoints[^1].X) return TerrainPoints.Count - 2;
 
-            if (x < TerrainPoints[0].X)
-                return 0;
+            float firstX = TerrainPoints[0].X;
+            float lastX = TerrainPoints[^1].X;
+            int pos = (int)((x - firstX) / (lastX - firstX) * (TerrainPoints.Count - 1));
+            pos = Math.Clamp(pos, 0, TerrainPoints.Count - 2);
 
-            if (x > TerrainPoints[^1].X)
-                return TerrainPoints.Count - 2;
+            if (x >= TerrainPoints[pos].X && x < TerrainPoints[pos + 1].X) return pos;
 
-            int left = 0, right = TerrainPoints.Count - 2;
+            int left = (x < TerrainPoints[pos].X) ? 0 : pos;
+            int right = (x < TerrainPoints[pos].X) ? pos : TerrainPoints.Count - 2;
 
             while (left <= right)
             {
                 int mid = left + (right - left) / 2;
-
                 if (x >= TerrainPoints[mid].X && x < TerrainPoints[mid + 1].X)
                     return mid;
                 else if (x < TerrainPoints[mid].X)
@@ -594,7 +661,8 @@ namespace GravityDefiedGame.Models
             return new Vector2(StartPointXOffset, baseY + StartPointYOffset);
         }
 
-        private static Vector2 CreateEndPoint(List<Level.TerrainPoint> pts, float baseY, float length, TerrainConfig config)
+        private static Vector2 CreateEndPoint(
+            List<Level.TerrainPoint> pts, float baseY, float length, TerrainConfig config)
         {
             pts.Add(new Level.TerrainPoint(
                 length, baseY - config.TopOffset, baseY, baseY + config.BottomOffset, true
@@ -603,8 +671,8 @@ namespace GravityDefiedGame.Models
             return new Vector2(length + FinishPointXOffset, baseY + FinishPointYOffset);
         }
 
-        private void GenerateSafeZone(List<Level.TerrainPoint> pts, float baseY, TerrainConfig config,
-                                     float startX, float length)
+        private void GenerateSafeZone(
+            List<Level.TerrainPoint> pts, float baseY, TerrainConfig config, float startX, float length)
         {
             int count = Max(
                 MinSafeZonePointCount,
@@ -625,8 +693,9 @@ namespace GravityDefiedGame.Models
             }
         }
 
-        private void GenerateTerrainPoints(List<Level.TerrainPoint> pts, TerrainConfig config,
-                                          float baseY, float length, float safeStart, float safeEnd)
+        private void GenerateTerrainPoints(
+            List<Level.TerrainPoint> pts, TerrainConfig config, float baseY,
+            float length, float safeStart, float safeEnd)
         {
             float midLen = length - safeStart - safeEnd;
             float lastY = baseY;
