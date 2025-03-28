@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using GravityDefiedGame.Controllers;
 using GravityDefiedGame.Models;
@@ -24,7 +25,6 @@ namespace GravityDefiedGame
         private FontSystem _fontSystem, _symbolFontSystem;
         private DynamicSpriteFont _uiFont, _titleFont, _unicodeFont;
         private Texture2D _pixelTexture, _gradientTexture, _logoTexture;
-        private List<Texture2D> _fogTextures = new List<Texture2D>();
         private readonly GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private GameController _gameController;
@@ -74,7 +74,6 @@ namespace GravityDefiedGame
             InitializeComponents();
 
             _gameController.LoadLevels();
-            _uiController.ShowMainMenu();
 
             Log("Game", "Content loaded", () => Info("Game", "LoadContent completed"));
         }
@@ -87,35 +86,6 @@ namespace GravityDefiedGame
 
             try { _logoTexture = Content.Load<Texture2D>("Textures/logo"); }
             catch { _logoTexture = null; Debug("Game", "Logo not found, text will be used instead"); }
-
-            _fogTextures.Clear();
-
-            for (int i = 1; i <= 3; i++)
-            {
-                try
-                {
-                    var fogTexture = Content.Load<Texture2D>($"Textures/fog{i}");
-                    _fogTextures.Add(fogTexture);
-                    Debug("Game", $"Loaded fog texture {i}");
-                }
-                catch
-                {
-                    Debug("Game", $"Fog texture {i} not found");
-                }
-            }
-
-            if (_fogTextures.Count == 0)
-            {
-                try
-                {
-                    var fogTexture = Content.Load<Texture2D>("Textures/fog");
-                    _fogTextures.Add(fogTexture);
-                }
-                catch
-                {
-                    Debug("Game", "No fog textures found, fog effects will be disabled");
-                }
-            }
         }
 
         private void InitializeFonts()
@@ -140,7 +110,7 @@ namespace GravityDefiedGame
             _uiController = new UIController(
                 this, _gameController, _spriteBatch,
                 _uiFont, _titleFont, _unicodeFont,
-                _pixelTexture, _gradientTexture, _logoTexture, _fogTextures,
+                _pixelTexture, _gradientTexture, _logoTexture,
                 SCREEN_WIDTH, SCREEN_HEIGHT);
         }
 
@@ -262,12 +232,6 @@ namespace GravityDefiedGame
             _pixelTexture?.Dispose();
             _gradientTexture?.Dispose();
             _logoTexture?.Dispose();
-
-            foreach (var texture in _fogTextures)
-            {
-                texture?.Dispose();
-            }
-            _fogTextures.Clear();
 
             ThemeManager.ThemeChanged -= OnThemeChanged;
 
