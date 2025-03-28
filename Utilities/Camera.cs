@@ -4,8 +4,8 @@ namespace GravityDefiedGame.Utilities
 {
     public class Camera : ICamera
     {
-        private int _screenWidth;
-        private int _screenHeight;
+        private readonly int _screenWidth;
+        private readonly int _screenHeight;
         private Vector2 _position;
         public float Zoom { get; private set; }
 

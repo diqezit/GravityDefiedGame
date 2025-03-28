@@ -25,7 +25,7 @@ namespace GravityDefiedGame
         private readonly GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private GameController _gameController;
-        private ICamera _camera;
+        private Camera _camera;
         private Renderer _renderer;
         private float _elapsedTime;
         private UIController _uiController;
