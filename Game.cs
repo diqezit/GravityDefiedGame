@@ -28,6 +28,8 @@ namespace GravityDefiedGame
         private DynamicSpriteFont _unicodeFont;
         private Texture2D _pixelTexture;
         private Texture2D _gradientTexture;
+        private Texture2D _logoTexture;
+        private Texture2D _fogTexture;
         private readonly GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private GameController _gameController;
@@ -82,6 +84,29 @@ namespace GravityDefiedGame
             _pixelTexture.SetData(new[] { Color.White });
             _gradientTexture = CreateGradientTexture(GraphicsDevice, SCREEN_WIDTH, SCREEN_HEIGHT);
 
+            // Загрузка дополнительных текстур для UI эффектов
+            try
+            {
+                _logoTexture = Content.Load<Texture2D>("Textures/logo");
+            }
+            catch
+            {
+                // Если логотип не найден, создаем пустую текстуру
+                _logoTexture = null;
+                Debug("Game", "Логотип не найден, будет использован текст");
+            }
+
+            try
+            {
+                _fogTexture = Content.Load<Texture2D>("Textures/fog");
+            }
+            catch
+            {
+                // Если текстура тумана не найдена, будет использован базовый эффект
+                _fogTexture = null;
+                Debug("Game", "Текстура тумана не найдена, будут использованы базовые эффекты");
+            }
+
             // Инициализация шрифтов
             _fontSystem = new FontSystem();
             _symbolFontSystem = new FontSystem();
@@ -108,6 +133,8 @@ namespace GravityDefiedGame
                 _unicodeFont,
                 _pixelTexture,
                 _gradientTexture,
+                _logoTexture,
+                _fogTexture,
                 SCREEN_WIDTH,
                 SCREEN_HEIGHT);
 
@@ -252,6 +279,8 @@ namespace GravityDefiedGame
             _renderCancellationTokenSource?.Dispose();
             _pixelTexture?.Dispose();
             _gradientTexture?.Dispose();
+            _logoTexture?.Dispose();
+            _fogTexture?.Dispose();
 
             ThemeManager.ThemeChanged -= OnThemeChanged;
 

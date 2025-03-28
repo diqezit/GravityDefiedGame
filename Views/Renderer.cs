@@ -1,5 +1,4 @@
 ﻿#nullable enable
-
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
@@ -12,22 +11,26 @@ using GravityDefiedGame.Utilities;
 using static GravityDefiedGame.Models.BikeGeom;
 using static GravityDefiedGame.Utilities.Logger;
 using static GravityDefiedGame.Models.DrawingComponent.DrawingConstants;
+using static GravityDefiedGame.Views.Renderer;
 
 namespace GravityDefiedGame.Views
 {
-    public class Renderer : DrawingComponent
+    public interface IRenderer
     {
-        #region Private Fields
+        void Initialize();
+        void Render(CancellationToken cancellationToken = default);
+        void UpdateColors(ColorSet colors);
+    }
+
+    public class Renderer : DrawingComponent, IRenderer
+    {
         private readonly SpriteBatch _spriteBatch;
         private readonly GraphicsDevice _graphicsDevice;
         private readonly Texture2D _pixelTexture;
         private readonly Camera _camera;
         private readonly GameController _gameController;
-        private readonly SkeletonRenderer _skeletonRenderer;
-        private readonly ShadowRenderer _shadowRenderer;
-        private readonly TerrainRenderer _terrainRenderer;
+        private readonly IRenderer[] _renderers;
         private ColorSet _colors;
-        #endregion
 
         public Renderer(SpriteBatch spriteBatch, GraphicsDevice graphicsDevice, GameController gameController, Camera camera)
         {
@@ -40,16 +43,22 @@ namespace GravityDefiedGame.Views
             _pixelTexture.SetData(new[] { Color.White });
 
             _colors = CreateColorSetFromTheme(ThemeManager.CurrentTheme);
-            _skeletonRenderer = new SkeletonRenderer(_spriteBatch, _pixelTexture, _camera, _colors.LineTypeColors);
-            _shadowRenderer = new ShadowRenderer(_spriteBatch, _pixelTexture, _camera, _gameController);
-            _terrainRenderer = new TerrainRenderer(_spriteBatch, _pixelTexture, _camera, _gameController, _colors);
+
+            var terrainRenderer = new TerrainRenderer(_spriteBatch, _pixelTexture, _camera, _gameController, _colors);
+            var shadowRenderer = new ShadowRenderer(_spriteBatch, _pixelTexture, _camera, _gameController);
+            var skeletonRenderer = new SkeletonRenderer(_spriteBatch, _pixelTexture, _camera, _colors.LineTypeColors);
+
+            _renderers = new IRenderer[] { terrainRenderer, shadowRenderer, skeletonRenderer };
 
             ThemeManager.ThemeChanged += OnThemeChanged;
+            Initialize();
+        }
 
+        public void Initialize()
+        {
             Log("Renderer", "Initializing renderer", () => {
-                _shadowRenderer.Initialize();
-                _skeletonRenderer.InitializeSkeletonLines();
-                _terrainRenderer.Initialize();
+                foreach (var renderer in _renderers)
+                    renderer.Initialize();
                 Info("Renderer", "Renderer initialized successfully");
             });
         }
@@ -57,8 +66,8 @@ namespace GravityDefiedGame.Views
         private void OnThemeChanged()
         {
             _colors = CreateColorSetFromTheme(ThemeManager.CurrentTheme);
-            _skeletonRenderer.UpdateLineColors(_colors.LineTypeColors);
-            _terrainRenderer.UpdateColors(_colors);
+            foreach (var renderer in _renderers)
+                renderer.UpdateColors(_colors);
         }
 
         private static ColorSet CreateColorSetFromTheme(ThemeSettings theme) => new(
@@ -74,25 +83,29 @@ namespace GravityDefiedGame.Views
             SafeZoneFill: new Color((byte)theme.SafeZoneColor.R, (byte)theme.SafeZoneColor.G, (byte)theme.SafeZoneColor.B, (byte)50)
         );
 
+        public void UpdateColors(ColorSet colors) => _colors = colors;
+
         public void Render(CancellationToken cancellationToken = default) =>
             Log("Renderer", "Rendering frame", () => {
                 if (cancellationToken.IsCancellationRequested) return;
 
-                _terrainRenderer.RenderTerrain(cancellationToken);
+                var terrainRenderer = _renderers[0] as TerrainRenderer;
+                terrainRenderer?.RenderTerrain(cancellationToken);
                 if (cancellationToken.IsCancellationRequested) return;
 
-                UpdateMotorcycleVisual(cancellationToken);
+                var motorcycle = _gameController.Motorcycle;
+                if (motorcycle is null) return;
+
+                var bikePhysicsData = BikeComponentFactory.CreatePhysicsData(motorcycle);
+                var bikeVisualData = BikeComponentFactory.CreateVisualData(motorcycle);
+                var (skeletonPoints, skeletonLines) = bikeVisualData.GetSkeleton();
+
+                var shadowRenderer = _renderers[1] as ShadowRenderer;
+                shadowRenderer?.UpdateShadow(skeletonPoints, skeletonLines, cancellationToken);
+
+                var skeletonRenderer = _renderers[2] as SkeletonRenderer;
+                skeletonRenderer?.UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
             });
-
-        private void UpdateMotorcycleVisual(CancellationToken cancellationToken)
-        {
-            var motorcycle = _gameController.Motorcycle;
-            if (motorcycle is null) return;
-
-            var (skeletonPoints, skeletonLines) = motorcycle.GetSkeleton();
-            _skeletonRenderer.UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
-            _shadowRenderer.UpdateShadow(skeletonPoints, skeletonLines, cancellationToken);
-        }
 
         public record ColorSet(
             Dictionary<SkeletonLineType, Color> LineTypeColors,
@@ -108,7 +121,7 @@ namespace GravityDefiedGame.Views
         );
 
         #region TerrainRenderer
-        public class TerrainRenderer
+        public class TerrainRenderer : DrawingComponent, IRenderer
         {
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
@@ -133,6 +146,8 @@ namespace GravityDefiedGame.Views
 
             public void UpdateColors(ColorSet colors) =>
                 _colors = colors;
+
+            public void Render(CancellationToken cancellationToken = default) { }
 
             public void RenderTerrain(CancellationToken cancellationToken)
             {
@@ -210,9 +225,7 @@ namespace GravityDefiedGame.Views
 
                 float minX = MathHelper.Min(topPoint1.X, topPoint2.X);
                 float maxX = MathHelper.Max(topPoint1.X, topPoint2.X);
-
                 float pixelStep = 5.0f;
-
                 minX = (float)Math.Floor(minX / pixelStep) * pixelStep;
 
                 for (float x = minX; x <= maxX; x += pixelStep)
@@ -242,7 +255,6 @@ namespace GravityDefiedGame.Views
                 for (int layer = 0; layer < layerCount; layer++)
                 {
                     float layerDepth = (float)layer / layerCount;
-
                     int pixelsInLayer = 1 + (int)(layerDepth * 3);
 
                     for (int i = 0; i < pixelsInLayer; i++)
@@ -257,13 +269,9 @@ namespace GravityDefiedGame.Views
                         byte r = (byte)Math.Max(0, baseColor.R - darkenAmount);
                         byte g = (byte)Math.Max(0, baseColor.G - darkenAmount);
                         byte b = (byte)Math.Max(0, baseColor.B - darkenAmount);
-
                         byte alpha = (byte)Math.Min(255, baseColor.A + (int)(layerDepth * 80));
-
                         Color pixelColor = new Color(r, g, b, alpha);
-
                         float pixelSize = 2.0f - layerDepth * 0.8f;
-
                         float offsetX = (float)(rand.NextDouble() - 0.5) * 2.0f;
 
                         _spriteBatch.Draw(
@@ -327,11 +335,8 @@ namespace GravityDefiedGame.Views
 
                 direction /= length;
                 Vector2 normal = new Vector2(-direction.Y, direction.X);
-
                 Vector2 lightDir = Vector2.Normalize(new Vector2(-0.5f, -1.0f));
-
                 float lightIntensity = Math.Max(0, Vector2.Dot(normal, -lightDir));
-
                 Color highlightColor = new Color(
                     (byte)Math.Min(255, lightColor.R + 50),
                     (byte)Math.Min(255, lightColor.G + 50),
@@ -414,7 +419,7 @@ namespace GravityDefiedGame.Views
         #endregion
 
         #region ShadowRenderer
-        public class ShadowRenderer
+        public class ShadowRenderer : DrawingComponent, IRenderer
         {
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
@@ -438,6 +443,10 @@ namespace GravityDefiedGame.Views
 
             public void Initialize() =>
                 Info("ShadowRenderer", "Shadow initialized");
+
+            public void UpdateColors(ColorSet colors) { }
+
+            public void Render(CancellationToken cancellationToken = default) { }
 
             public void UpdateShadow(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines, CancellationToken cancellationToken) =>
                 Log("ShadowRenderer", "Updating shadow", () => {
@@ -481,7 +490,6 @@ namespace GravityDefiedGame.Views
             {
                 if (shadowPoints.Count < 2) return;
 
-                // Сначала рисуем более темную основную тень
                 for (int i = 0; i < shadowPoints.Count - 1; i++)
                 {
                     var worldPoint1 = shadowPoints[i];
@@ -505,14 +513,12 @@ namespace GravityDefiedGame.Views
                     }
                 }
 
-                // Затем добавляем пиксельные детали для ретро-эффекта
                 for (int i = 0; i < shadowPoints.Count; i++)
                 {
                     var point = shadowPoints[i];
                     int seed = (int)(point.X * 1000 + point.Y * 10);
                     Random rand = new Random(seed);
 
-                    // Основной пиксель тени
                     _spriteBatch.Draw(
                         _pixelTexture,
                         point,
@@ -530,7 +536,6 @@ namespace GravityDefiedGame.Views
                         0f
                     );
 
-                    // Создаем 3D-эффект добавляя пиксели с разной прозрачностью
                     int pixelCount = 3 + rand.Next(3);
                     for (int j = 0; j < pixelCount; j++)
                     {
@@ -538,7 +543,6 @@ namespace GravityDefiedGame.Views
                         float angle = (float)(rand.NextDouble() * Math.PI * 2);
                         float offsetX = (float)Math.Cos(angle) * distance;
                         float offsetY = (float)Math.Sin(angle) * distance;
-
                         float alpha = 0.6f - (j * 0.15f);
 
                         _spriteBatch.Draw(
@@ -559,7 +563,6 @@ namespace GravityDefiedGame.Views
                         );
                     }
 
-                    // Добавляем случайные точки для создания эффекта шума
                     if (rand.NextDouble() > 0.7f)
                     {
                         for (int k = 0; k < 2; k++)
@@ -594,7 +597,6 @@ namespace GravityDefiedGame.Views
                 var shadowPoint = CalculateShadowPoint(wheelPosition);
                 if (!PhysicsComponent.IsValidPoint(shadowPoint)) return;
 
-                // Основная тень колеса
                 _spriteBatch.Draw(
                     _pixelTexture,
                     shadowPoint,
@@ -615,17 +617,14 @@ namespace GravityDefiedGame.Views
                 int seed = (int)(shadowPoint.X * 1000);
                 Random rand = new Random(seed);
 
-                // Создаем эффект элипса для имитации 3D-тени
                 int pixelCount = 8;
                 for (int i = 0; i < pixelCount; i++)
                 {
                     float angle = ((float)i / pixelCount) * MathHelper.TwoPi;
                     float radiusX = 4.0f + (float)rand.NextDouble() * 1.0f;
                     float radiusY = 2.0f + (float)rand.NextDouble() * 0.5f;
-
                     float offsetX = (float)Math.Cos(angle) * radiusX;
                     float offsetY = (float)Math.Sin(angle) * radiusY;
-
                     float distance = Vector2.Distance(Vector2.Zero, new Vector2(offsetX, offsetY)) / 5.0f;
                     float alpha = 0.7f - distance;
 
@@ -649,7 +648,6 @@ namespace GravityDefiedGame.Views
                     );
                 }
 
-                // Добавляем пиксельные детали
                 for (int i = 0; i < 4; i++)
                 {
                     float offsetX = (float)(rand.NextDouble() - 0.5) * 6.0f;
@@ -781,7 +779,6 @@ namespace GravityDefiedGame.Views
 
                 float centerX = sumX / framePoints.Count;
                 float centerY = sumY / framePoints.Count;
-
                 float scale = 1.0f - ShadowScaleFactor * framePoints.Count;
                 return (centerX, centerY, float.IsNaN(scale) || scale <= 0 ? 0.5f : scale);
             }
@@ -835,7 +832,7 @@ namespace GravityDefiedGame.Views
         #endregion
 
         #region SkeletonRenderer
-        public class SkeletonRenderer
+        public class SkeletonRenderer : DrawingComponent, IRenderer
         {
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
@@ -850,11 +847,13 @@ namespace GravityDefiedGame.Views
                 _lineTypeColors = lineTypeColors;
             }
 
-            public void InitializeSkeletonLines() =>
+            public void Initialize() =>
                 Info("SkeletonRenderer", "Skeleton lines initialized");
 
-            public void UpdateLineColors(Dictionary<SkeletonLineType, Color> newColors) =>
-                _lineTypeColors = newColors;
+            public void UpdateColors(ColorSet colors) =>
+                _lineTypeColors = colors.LineTypeColors;
+
+            public void Render(CancellationToken cancellationToken = default) { }
 
             public void UpdateSkeletonVisuals(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines) =>
                 Log("SkeletonRenderer", "Updating skeleton visuals", () => {
@@ -880,9 +879,6 @@ namespace GravityDefiedGame.Views
                         }
                     }
                 });
-
-            public void DrawSkeleton(List<SkeletonPoint> skeletonPoints, List<SkeletonLine> skeletonLines) =>
-                UpdateSkeletonVisuals(skeletonPoints, skeletonLines);
 
             private Color GetColorForLineType(SkeletonLineType lineType) =>
                 _lineTypeColors.TryGetValue(lineType, out var color) ? color : _lineTypeColors[SkeletonLineType.MainFrame];
