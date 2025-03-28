@@ -268,20 +268,17 @@ namespace GravityDefiedGame.Models
         #region Публичные методы - Управление
         public void ApplyThrottle(float amount)
         {
-            Log("Motorcycle", $"applying throttle: {amount:F2}", () =>
+            Throttle = MathHelper.Clamp(amount, 0f, 1f);
+            if (Direction == -1)
             {
-                Throttle = MathHelper.Clamp(amount, 0f, 1f);
-                if (Direction == -1)
-                {
-                    IsMovingBackward = true;
-                    _physics.ApplyThrottle(amount * Direction);
-                }
-                else
-                {
-                    IsMovingBackward = false;
-                    _physics.ApplyThrottle(amount);
-                }
-            });
+                IsMovingBackward = true;
+                _physics.ApplyThrottle(amount * Direction); 
+            }
+            else
+            {
+                IsMovingBackward = false;
+                _physics.ApplyThrottle(amount); 
+            }
         }
 
         public void ApplyBrake(float amount)

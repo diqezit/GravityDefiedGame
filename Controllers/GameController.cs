@@ -88,9 +88,9 @@ namespace GravityDefiedGame.Controllers
             {
                 ["W"] = () =>
                 {
-                    if (!_input.IsThrottlePressed)
+                    if (!_input.IsForwardPressed)
                     {
-                        _input.IsThrottlePressed = true;
+                        _input.IsForwardPressed = true;
                         Motorcycle.SetDirection(1);
                         Motorcycle.ApplyThrottle(Constants.FullThrottle);
                         Debug("GameController", "Throttle applied forward");
@@ -98,9 +98,9 @@ namespace GravityDefiedGame.Controllers
                 },
                 ["S"] = () =>
                 {
-                    if (!_input.IsBrakePressed)
+                    if (!_input.IsBackwardPressed)
                     {
-                        _input.IsBrakePressed = true;
+                        _input.IsBackwardPressed = true;
                         Motorcycle.SetDirection(-1);
                         Motorcycle.ApplyThrottle(Constants.FullThrottle);
                         Debug("GameController", "Throttle applied backward");
@@ -123,15 +123,6 @@ namespace GravityDefiedGame.Controllers
                         UpdateLeanState();
                         Debug("GameController", "Leaning right");
                     }
-                },
-                ["Space"] = () =>
-                {
-                    if (!_input.IsBrakePressed)
-                    {
-                        _input.IsBrakePressed = true;
-                        Motorcycle.ApplyBrake(Constants.FullBrake);
-                        Debug("GameController", "Brake applied");
-                    }
                 }
             };
 
@@ -139,13 +130,13 @@ namespace GravityDefiedGame.Controllers
             {
                 ["W"] = () =>
                 {
-                    _input.IsThrottlePressed = false;
+                    _input.IsForwardPressed = false;
                     Motorcycle.ApplyThrottle(Constants.NoInput);
                     Debug("GameController", "Throttle released");
                 },
                 ["S"] = () =>
                 {
-                    _input.IsBrakePressed = false;
+                    _input.IsBackwardPressed = false;
                     Motorcycle.ApplyThrottle(Constants.NoInput);
                     Debug("GameController", "Backward throttle released");
                 },
@@ -160,12 +151,6 @@ namespace GravityDefiedGame.Controllers
                     _input.IsLeaningRight = false;
                     UpdateLeanState();
                     Debug("GameController", "Right lean released");
-                },
-                ["Space"] = () =>
-                {
-                    _input.IsBrakePressed = false;
-                    Motorcycle.ApplyBrake(Constants.NoInput);
-                    Debug("GameController", "Brake released");
                 }
             };
 
@@ -257,33 +242,6 @@ namespace GravityDefiedGame.Controllers
 
             CurrentGameState = GameState.Playing;
             OnGameEvent(GameEventType.LevelStart, $"Level {levelId} started");
-        }
-
-        public void StartNextLevel()
-        {
-            int nextLevelId = (CurrentLevel?.Id ?? 0) + 1;
-            if (nextLevelId <= Levels.Count)
-            {
-                StartLevel(nextLevelId);
-            }
-            else
-            {
-                CurrentGameState = GameState.MainMenu;
-                OnGameEvent(GameEventType.GameComplete, "Congratulations! All levels completed!");
-            }
-        }
-
-        public void RestartLevel()
-        {
-            if (CurrentLevel is null)
-            {
-                Warning("GameController", "Cannot restart level: no current level");
-                return;
-            }
-
-            StartLevel(CurrentLevel.Id);
-            OnGameEvent(GameEventType.LevelRestart, "Level restarted");
-            Info("GameController", $"Level {CurrentLevel.Id} restarted");
         }
 
         public void PauseGame()
@@ -450,12 +408,10 @@ namespace GravityDefiedGame.Controllers
         {
             if (CurrentGameState == GameState.Playing)
             {
-                // Оставляем только WASD и Space
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.W, "W");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.S, "S");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.A, "A");
                 CheckKeyState(keyboardState, previousKeyboardState, Keys.D, "D");
-                CheckKeyState(keyboardState, previousKeyboardState, Keys.Space, "Space");
             }
         }
 
@@ -594,13 +550,13 @@ namespace GravityDefiedGame.Controllers
     // Состояние ввода
     public sealed record InputState
     {
-        public bool IsThrottlePressed { get; set; }
-        public bool IsBrakePressed { get; set; }
+        public bool IsForwardPressed { get; set; } 
+        public bool IsBackwardPressed { get; set; } 
         public bool IsLeaningLeft { get; set; }
         public bool IsLeaningRight { get; set; }
 
         public void Reset() =>
-            (IsThrottlePressed, IsBrakePressed, IsLeaningLeft, IsLeaningRight) = (false, false, false, false);
+            (IsForwardPressed, IsBackwardPressed, IsLeaningLeft, IsLeaningRight) = (false, false, false, false);
     }
     #endregion
 }
