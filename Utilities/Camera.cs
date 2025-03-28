@@ -2,12 +2,15 @@
 
 namespace GravityDefiedGame.Utilities
 {
-    public class Camera
+    public class Camera : ICamera
     {
         private int _screenWidth;
         private int _screenHeight;
         private Vector2 _position;
         public float Zoom { get; private set; }
+
+        private const float MinZoom = 0.5f;
+        private const float MaxZoom = 5.0f;
 
         public Matrix TransformMatrix
         {
@@ -39,7 +42,12 @@ namespace GravityDefiedGame.Utilities
 
         public void Update(Vector2 targetPosition)
         {
-            _position = Vector2.Lerp(_position, targetPosition, 0.1f); // Плавное движение
+            _position = Vector2.Lerp(_position, targetPosition, 0.1f);
+        }
+
+        public void AdjustZoom(float delta)
+        {
+            Zoom = MathHelper.Clamp(Zoom + delta, MinZoom, MaxZoom);
         }
 
         // преобразования координат из мировых в экранные
@@ -55,5 +63,17 @@ namespace GravityDefiedGame.Utilities
             Vector2 viewCenter = new Vector2(_screenWidth / 2, _screenHeight / 2);
             return _position + (screenPosition - viewCenter) / Zoom;
         }
+    }
+
+    public interface ICamera
+    {
+        float Zoom { get; }
+        Matrix TransformMatrix { get; }
+        void Reset();
+        void CenterOn(Vector2 position);
+        void Update(Vector2 targetPosition);
+        void AdjustZoom(float delta);
+        Vector2 TransformToScreen(Vector2 worldPosition);
+        Vector2 TransformToWorld(Vector2 screenPosition);
     }
 }

@@ -28,54 +28,54 @@ namespace GravityDefiedGame.Views
         public static class Animation
         {
             public const float
-                ButtonScaleSpeed = 10f,     // Animation speed for button scaling
-                BackgroundSpeed = 20f,      // Background scrolling speed
-                HoverScale = 1.1f,          // Scale factor when hovering buttons
-                FadeSpeed = 2.0f,           // Screen fade in/out speed
-                IntroFadeSpeed = 1.2f,      // Intro sequence fade speed
-                LoadingBarSpeed = 0.6f,     // Loading bar fill speed
-                FogAnimationSpeed = 1.5f,   // Fog effect animation speed
-                SmokeAnimationSpeed = 15f,  // Smoke effect animation speed
-                SmokeParticleLifespan = 3.0f; // Smoke particle lifetime in seconds
+                ButtonScaleSpeed = 10f,
+                BackgroundSpeed = 20f,
+                HoverScale = 1.1f,
+                FadeSpeed = 2.0f,
+                IntroFadeSpeed = 1.2f,
+                LoadingBarSpeed = 0.6f,
+                FogAnimationSpeed = 1.5f,
+                SmokeAnimationSpeed = 15f,
+                SmokeParticleLifespan = 3.0f;
         }
 
         public static class Visual
         {
             public const int
-                BorderThin = 2,             // Thin border width
-                BorderThick = 3,            // Thick border width
-                Padding = 5,                // Standard UI padding
-                TitleOffset = 30,           // Title text vertical offset
-                MainTextOffset = 100,       // Main text vertical offset
-                SubtitleOffset = 120,       // Subtitle vertical offset
-                LoadingBarHeight = 6,       // Height of loading progress bar
-                LoadingBarWidth = 400,      // Width of loading progress bar
-                LoadingBarPadding = 20,     // Padding around loading bar
-                SmokeParticleCount = 100,   // Total smoke particle count
-                SmokeLowerLayerCount = 60,  // Particles in lower layer
-                SmokeMiddleLayerCount = 30, // Particles in middle layer
-                SmokeUpperLayerCount = 20;  // Particles in upper layer
+                BorderThin = 2,
+                BorderThick = 3,
+                Padding = 5,
+                TitleOffset = 30,
+                MainTextOffset = 100,
+                SubtitleOffset = 120,
+                LoadingBarHeight = 6,
+                LoadingBarWidth = 400,
+                LoadingBarPadding = 20,
+                SmokeParticleCount = 100,
+                SmokeLowerLayerCount = 60,
+                SmokeMiddleLayerCount = 30,
+                SmokeUpperLayerCount = 20;
 
             public const float
-                ShadowOffset = 2f,          // Text shadow offset
-                ShadowOpacity = 0.5f;       // Text shadow opacity
+                ShadowOffset = 2f,
+                ShadowOpacity = 0.5f;
         }
 
         public static class Layout
         {
             public const float
-                MenuWidthStandard = 0.6f,   // Standard menu width (% of screen)
-                MenuHeightStandard = 0.7f,  // Standard menu height (% of screen)
-                MenuWidthWide = 0.7f,       // Wide menu width (% of screen)
-                ButtonWidthMain = 0.25f,    // Main button width (% of screen)
-                ButtonWidthSmall = 0.15f,   // Small button width (% of screen)
-                ButtonWidthNav = 0.08f;     // Navigation button width (% of screen)
+                MenuWidthStandard = 0.6f,
+                MenuHeightStandard = 0.7f,
+                MenuWidthWide = 0.7f,
+                ButtonWidthMain = 0.25f,
+                ButtonWidthSmall = 0.15f,
+                ButtonWidthNav = 0.08f;
 
             public const int
-                ButtonSpacing = 30,         // Vertical space between buttons
-                ButtonHeight = 60,          // Standard button height
-                NavButtonOffset = 20,       // Navigation button horizontal offset
-                ButtonGroupSpacing = 50;    // Space between button groups
+                ButtonSpacing = 30,
+                ButtonHeight = 60,
+                NavButtonOffset = 20,
+                ButtonGroupSpacing = 50;
         }
     }
 
@@ -101,8 +101,8 @@ namespace GravityDefiedGame.Views
 
     public class UIController
     {
-        #region Fields
         private readonly Game _game;
+        private readonly ICamera _camera;
         private readonly SpriteBatch _spriteBatch;
         private readonly (
             DynamicSpriteFont standard,
@@ -127,7 +127,7 @@ namespace GravityDefiedGame.Views
         ) _selection = (0, 0, 0, 0);
 
         private float _backgroundOffset = 0f;
-        private bool _showSmokeEffect = true;
+        private readonly bool _showSmokeEffect = true;
         private (string text, Vector2 position) _tooltip = (string.Empty, Vector2.Zero);
         private Controllers.GameController _gameController = null!;
 
@@ -151,24 +151,25 @@ namespace GravityDefiedGame.Views
         private bool _isSplashScreenActive = true;
         private bool _isCameraCentered = false;
         private float _cameraWaitTimer = 0f;
-        private UIDrawer _drawer;
-        #endregion
+        private readonly UIDrawer _drawer;
 
         public UIController(
-           Game game,
-           Controllers.GameController gameController,
-           SpriteBatch spriteBatch,
-           DynamicSpriteFont standardFont,
-           DynamicSpriteFont titleFont,
-           DynamicSpriteFont unicodeFont,
-           Texture2D pixelTexture,
-           Texture2D gradientTexture,
-           Texture2D? logoTexture,
-           int screenWidth,
-           int screenHeight)
+            Game game,
+            Controllers.GameController gameController,
+            ICamera camera,
+            SpriteBatch spriteBatch,
+            DynamicSpriteFont standardFont,
+            DynamicSpriteFont titleFont,
+            DynamicSpriteFont unicodeFont,
+            Texture2D pixelTexture,
+            Texture2D gradientTexture,
+            Texture2D? logoTexture,
+            int screenWidth,
+            int screenHeight)
         {
             _game = game;
             _gameController = gameController;
+            _camera = camera;
             _spriteBatch = spriteBatch;
             _fonts = (standardFont, titleFont, unicodeFont);
             _textures = (pixelTexture, gradientTexture, logoTexture);
@@ -190,7 +191,6 @@ namespace GravityDefiedGame.Views
             _loadingProgress = 0f;
         }
 
-        #region Initialization
         private void InitializeUI()
         {
             var (width, height) = _screenSize;
@@ -392,9 +392,7 @@ namespace GravityDefiedGame.Views
 
             Info("UIController", "UI initialized");
         }
-        #endregion
 
-        #region Input
         public void HandleInput(Controllers.GameController gameController, float elapsedTime)
         {
             var keyboardState = Keyboard.GetState();
@@ -410,7 +408,7 @@ namespace GravityDefiedGame.Views
                                     mouseState.LeftButton == ButtonState.Pressed ||
                                     mouseState.RightButton == ButtonState.Pressed))
                 {
-                    StartTransition(TransitionState.FadeOut, Controllers.GameState.MainMenu);
+                    StartTransition(TransitionState.FadeOut, MainMenu);
                 }
 
                 UpdateTransitionState(elapsedTime);
@@ -436,24 +434,33 @@ namespace GravityDefiedGame.Views
             {
                 switch (gameController.CurrentGameState)
                 {
-                    case Controllers.GameState.Playing:
+                    case Playing:
                         _gameController.PauseGame();
                         break;
-                    case Controllers.GameState.Paused:
+                    case Paused:
                         _gameController.ResumeGame();
                         break;
-                    case Controllers.GameState.BikeSelection:
-                    case Controllers.GameState.LevelSelection:
-                    case Controllers.GameState.ThemeSelection:
-                    case Controllers.GameState.GameOver:
-                    case Controllers.GameState.LevelComplete:
-                        StartTransition(TransitionState.FadeOut, Controllers.GameState.MainMenu);
+                    case BikeSelection:
+                    case LevelSelection:
+                    case ThemeSelection:
+                    case GameOver:
+                    case LevelComplete:
+                        StartTransition(TransitionState.FadeOut, MainMenu);
                         break;
                 }
             }
 
             if (gameController.CurrentGameState == Controllers.GameState.Playing)
+            {
                 gameController.HandleInput(keyboardState, _previousInputState.keyboard);
+
+                int scrollDelta = mouseState.ScrollWheelValue - _previousInputState.mouse.ScrollWheelValue;
+                if (scrollDelta != 0)
+                {
+                    float zoomChange = (scrollDelta / 120f) * 0.1f;
+                    _camera.AdjustZoom(zoomChange);
+                }
+            }
 
             HandleMouseInput(mouseState, elapsedTime);
 
@@ -490,9 +497,7 @@ namespace GravityDefiedGame.Views
                 }
             }
         }
-        #endregion
 
-        #region Transitions and Animation
         private void UpdateTransitionState(float elapsedTime)
         {
             _transitionTimer += elapsedTime;
@@ -537,13 +542,13 @@ namespace GravityDefiedGame.Views
                         {
                             _isSplashScreenActive = false;
                             _gameController.EnterMainMenu();
-                            StartTransition(TransitionState.FadeIn, Controllers.GameState.MainMenu);
+                            StartTransition(TransitionState.FadeIn, MainMenu);
                         }
                         else if (_nextGameState == Controllers.GameState.Playing && _nextLevelId > 0)
                         {
                             _gameController.StartLevel(_nextLevelId);
                             _cameraWaitTimer = 0f;
-                            StartTransition(TransitionState.FadeIn, Controllers.GameState.Playing);
+                            StartTransition(TransitionState.FadeIn, Playing);
                         }
                         else
                         {
@@ -574,35 +579,33 @@ namespace GravityDefiedGame.Views
         {
             switch (_nextGameState)
             {
-                case Controllers.GameState.MainMenu:
+                case MainMenu:
                     _gameController.EnterMainMenu();
                     break;
 
-                case Controllers.GameState.BikeSelection:
+                case BikeSelection:
                     _gameController.EnterBikeSelection();
                     var bikes = Enum.GetValues<BikeType>();
                     _gameController.SetBikeType(bikes[_selection.bikeIndex]);
                     _gameController.SetBikeColor(_bikeColors[_selection.colorIndex].color);
                     break;
 
-                case Controllers.GameState.LevelSelection:
+                case LevelSelection:
                     _gameController.EnterLevelSelection();
                     _gameController.SelectLevel(_selection.levelIndex + 1);
                     break;
 
-                case Controllers.GameState.ThemeSelection:
+                case ThemeSelection:
                     _gameController.EnterThemeSelection();
                     break;
 
-                case Controllers.GameState.Playing:
+                case Playing:
                     if (_nextLevelId > 0)
                         _gameController.StartLevel(_nextLevelId);
                     break;
             }
         }
-        #endregion
 
-        #region Selection Methods
         private void ChangeBike(int direction)
         {
             var bikes = Enum.GetValues<BikeType>();
@@ -632,9 +635,7 @@ namespace GravityDefiedGame.Views
             SetTheme(_selection.themeIndex);
             ShowMessage($"Theme changed to {CurrentTheme.Name}");
         }
-        #endregion
 
-        #region UI Drawing
         public void DrawUI(Controllers.GameController gameController)
         {
             if (_isSplashScreenActive)
@@ -652,24 +653,24 @@ namespace GravityDefiedGame.Views
             UpdateButtonVisibility(gameController.CurrentGameState);
 
             bool isMenuState = gameController.CurrentGameState is
-                Controllers.GameState.MainMenu or
-                Controllers.GameState.BikeSelection or
-                Controllers.GameState.LevelSelection or
-                Controllers.GameState.ThemeSelection or
-                Controllers.GameState.LevelComplete or
-                Controllers.GameState.GameOver or
-                Controllers.GameState.Paused;
+                MainMenu or
+                BikeSelection or
+                LevelSelection or
+                ThemeSelection or
+                LevelComplete or
+                GameOver or
+                Paused;
 
             if (isMenuState)
             {
                 _drawer.DrawAnimatedBackground(_backgroundOffset, CurrentTheme.BackgroundColor);
 
                 if (_showSmokeEffect && gameController.CurrentGameState is
-                    Controllers.GameState.MainMenu or
-                    Controllers.GameState.BikeSelection or
-                    Controllers.GameState.LevelSelection or
-                    Controllers.GameState.ThemeSelection or
-                    Controllers.GameState.LevelComplete)
+                    MainMenu or
+                    BikeSelection or
+                    LevelSelection or
+                    ThemeSelection or
+                    LevelComplete)
                 {
                     _drawer.DrawSmokeEffect();
                 }
@@ -697,13 +698,13 @@ namespace GravityDefiedGame.Views
 
             switch (state)
             {
-                case Controllers.GameState.MainMenu:
+                case MainMenu:
                     _buttons["play"].IsVisible = true;
                     _buttons["theme"].IsVisible = true;
                     _buttons["exit"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.BikeSelection:
+                case BikeSelection:
                     _buttons["selectBike"].IsVisible = true;
                     _buttons["nextBike"].IsVisible = true;
                     _buttons["prevBike"].IsVisible = true;
@@ -712,35 +713,35 @@ namespace GravityDefiedGame.Views
                     _buttons["back"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.LevelSelection:
+                case LevelSelection:
                     _buttons["startLevel"].IsVisible = true;
                     _buttons["nextLevel"].IsVisible = true;
                     _buttons["prevLevel"].IsVisible = true;
                     _buttons["back"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.ThemeSelection:
+                case ThemeSelection:
                     _buttons["nextTheme"].IsVisible = true;
                     _buttons["prevTheme"].IsVisible = true;
                     _buttons["confirmTheme"].IsVisible = true;
                     _buttons["back"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.Playing:
+                case Playing:
                     _buttons["pause"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.Paused:
+                case Paused:
                     _buttons["mainMenu"].IsVisible = true;
                     _buttons["restart"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.GameOver:
+                case GameOver:
                     _buttons["mainMenu"].IsVisible = true;
                     _buttons["restart"].IsVisible = true;
                     break;
 
-                case Controllers.GameState.LevelComplete:
+                case LevelComplete:
                     _buttons["mainMenu"].IsVisible = true;
                     _buttons["restart"].IsVisible = true;
                     _buttons["continue"].IsVisible = true;
@@ -752,56 +753,59 @@ namespace GravityDefiedGame.Views
         {
             switch (gameController.CurrentGameState)
             {
-                case Controllers.GameState.MainMenu:
+                case MainMenu:
                     _drawer.DrawMainMenu();
                     break;
-                case Controllers.GameState.BikeSelection:
+                case BikeSelection:
                     _drawer.DrawBikeSelectionMenu(_selection.bikeIndex, _selection.colorIndex, _bikeColors);
                     break;
-                case Controllers.GameState.LevelSelection:
+                case LevelSelection:
                     _drawer.DrawLevelSelectionMenu(_selection.levelIndex, _gameController.Levels);
                     break;
-                case Controllers.GameState.ThemeSelection:
+                case ThemeSelection:
                     _drawer.DrawThemeSelectionMenu(_selection.themeIndex, AvailableThemes);
                     break;
-                case Controllers.GameState.Playing:
-                    _drawer.DrawInfoPanel(gameController.CurrentLevel?.Name, gameController.GameTime, gameController.Motorcycle.Direction);
+                case Playing:
+                    _drawer.DrawInfoPanel(
+                        gameController.CurrentLevel?.Name,
+                        gameController.GameTime,
+                        gameController.Motorcycle.Direction,
+                        _camera.Zoom
+                    );
                     break;
-                case Controllers.GameState.Paused:
+                case Paused:
                     _drawer.DrawPauseMenu(gameController.CurrentLevel?.Name, gameController.GameTime);
                     break;
-                case Controllers.GameState.GameOver:
+                case GameOver:
                     _drawer.DrawGameOverMenu(gameController.CurrentLevel?.Name, gameController.GameTime);
                     break;
-                case Controllers.GameState.LevelComplete:
+                case LevelComplete:
                     _drawer.DrawLevelCompleteMenu(gameController.CurrentLevel?.Name, gameController.GameTime);
                     break;
             }
         }
-        #endregion
 
-        #region Navigation
         public void ShowMainMenu()
         {
-            StartTransition(TransitionState.FadeOut, Controllers.GameState.MainMenu);
+            StartTransition(TransitionState.FadeOut, MainMenu);
             Info("UIController", "Main menu displayed");
         }
 
         private void ShowBikeSelection()
         {
-            StartTransition(TransitionState.FadeOut, Controllers.GameState.BikeSelection);
+            StartTransition(TransitionState.FadeOut, BikeSelection);
             Info("UIController", "Bike selection menu displayed");
         }
 
         private void ShowLevelSelection()
         {
-            StartTransition(TransitionState.FadeOut, Controllers.GameState.LevelSelection);
+            StartTransition(TransitionState.FadeOut, LevelSelection);
             Info("UIController", "Level selection menu displayed");
         }
 
         public void ShowThemeSelection()
         {
-            StartTransition(TransitionState.FadeOut, Controllers.GameState.ThemeSelection);
+            StartTransition(TransitionState.FadeOut, ThemeSelection);
             Info("UIController", "Theme selection menu displayed");
         }
 
@@ -816,8 +820,7 @@ namespace GravityDefiedGame.Views
             _isCameraCentered = false;
             Info("UIController", $"{(isRestart ? "Restarting" : "Starting")} level {levelId} with transition");
         }
-        #endregion
 
-        public void ShowMessage(string message) => Debug("UIController", $"Message: {message}");
+        public static void ShowMessage(string message) => Debug("UIController", $"Message: {message}");
     }
 }

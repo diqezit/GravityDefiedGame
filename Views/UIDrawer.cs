@@ -584,11 +584,12 @@ namespace GravityDefiedGame.Views
             _fonts.standard.DrawText(_spriteBatch, label, new Vector2(x, y + size + 2), Color.LightGray);
         }
 
-        public void DrawInfoPanel(string? levelName, TimeSpan gameTime, int direction)
+        public void DrawInfoPanel(string? levelName, TimeSpan gameTime, int direction, float zoom) 
         {
             string levelNameText = levelName ?? "Level";
             string timeText = $"Time: {gameTime.Minutes:00}:{gameTime.Seconds:00}";
             string directionText = direction == 1 ? "Forward" : "Backward";
+            string zoomText = $"Zoom: {zoom:F1}x";
 
             Rectangle infoPanelRect = new Rectangle(10, 10, (int)(_screenSize.width * 0.25f), (int)(_screenSize.height * 0.15f));
             _spriteBatch.Draw(_textures.pixel, infoPanelRect, new Color(0, 0, 0, 150));
@@ -597,6 +598,7 @@ namespace GravityDefiedGame.Views
             _fonts.standard.DrawText(_spriteBatch, $"Level: {levelNameText}", new Vector2(20, 20), Color.White);
             _fonts.standard.DrawText(_spriteBatch, timeText, new Vector2(20, 45), Color.White);
             _fonts.standard.DrawText(_spriteBatch, $"Direction: {directionText}", new Vector2(20, 70), Color.White);
+            _fonts.standard.DrawText(_spriteBatch, zoomText, new Vector2(20, 95), Color.White); 
 
             string controlsText = "W: Forward | S: Backward | Space: Brake | A/D: Lean | ESC: Pause";
             Vector2 controlsSize = _fonts.standard.MeasureString(controlsText);

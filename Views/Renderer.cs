@@ -27,12 +27,12 @@ namespace GravityDefiedGame.Views
         private readonly SpriteBatch _spriteBatch;
         private readonly GraphicsDevice _graphicsDevice;
         private readonly Texture2D _pixelTexture;
-        private readonly Camera _camera;
+        private readonly ICamera _camera;
         private readonly GameController _gameController;
         private readonly IRenderer[] _renderers;
         private ColorSet _colors;
 
-        public Renderer(SpriteBatch spriteBatch, GraphicsDevice graphicsDevice, GameController gameController, Camera camera)
+        public Renderer(SpriteBatch spriteBatch, GraphicsDevice graphicsDevice, GameController gameController, ICamera camera)
         {
             _spriteBatch = spriteBatch ?? throw new ArgumentNullException(nameof(spriteBatch));
             _graphicsDevice = graphicsDevice ?? throw new ArgumentNullException(nameof(graphicsDevice));
@@ -125,12 +125,12 @@ namespace GravityDefiedGame.Views
         {
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
-            private readonly Camera _camera;
+            private readonly ICamera _camera;
             private readonly GameController _gameController;
             private readonly Random _random;
             private ColorSet _colors;
 
-            public TerrainRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera,
+            public TerrainRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, ICamera camera,
                                  GameController gameController, ColorSet colors)
             {
                 _spriteBatch = spriteBatch;
@@ -423,7 +423,7 @@ namespace GravityDefiedGame.Views
         {
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
-            private readonly Camera _camera;
+            private readonly ICamera _camera;
             private readonly GameController _gameController;
             private readonly Random _random;
 
@@ -432,7 +432,7 @@ namespace GravityDefiedGame.Views
             private const int ShadowInterpolationSteps = 6;
             private const float ShadowPixelSize = 2.5f;
 
-            public ShadowRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera, GameController gameController)
+            public ShadowRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, ICamera camera, GameController gameController)
             {
                 _spriteBatch = spriteBatch;
                 _pixelTexture = pixelTexture;
@@ -836,10 +836,10 @@ namespace GravityDefiedGame.Views
         {
             private readonly SpriteBatch _spriteBatch;
             private readonly Texture2D _pixelTexture;
-            private readonly Camera _camera;
+            private readonly ICamera _camera;
             private Dictionary<SkeletonLineType, Color> _lineTypeColors;
 
-            public SkeletonRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, Camera camera, Dictionary<SkeletonLineType, Color> lineTypeColors)
+            public SkeletonRenderer(SpriteBatch spriteBatch, Texture2D pixelTexture, ICamera camera, Dictionary<SkeletonLineType, Color> lineTypeColors)
             {
                 _spriteBatch = spriteBatch;
                 _pixelTexture = pixelTexture;

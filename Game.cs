@@ -16,24 +16,20 @@ namespace GravityDefiedGame
 {
     public class Game : Microsoft.Xna.Framework.Game
     {
-        #region Constants
         private const float MAX_DELTA_TIME = 0.1f;
         private const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 700;
-        #endregion
 
-        #region Fields
         private FontSystem _fontSystem, _symbolFontSystem;
         private DynamicSpriteFont _uiFont, _titleFont, _unicodeFont;
         private Texture2D _pixelTexture, _gradientTexture, _logoTexture;
         private readonly GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private GameController _gameController;
-        private Camera _camera;
+        private ICamera _camera;
         private Renderer _renderer;
         private float _elapsedTime;
         private UIController _uiController;
         private CancellationTokenSource _renderCancellationTokenSource;
-        #endregion
 
         public Game()
         {
@@ -108,8 +104,8 @@ namespace GravityDefiedGame
         {
             _renderer = new Renderer(_spriteBatch, GraphicsDevice, _gameController, _camera);
             _uiController = new UIController(
-                this, _gameController, _spriteBatch,
-                _uiFont, _titleFont, _unicodeFont,
+                this, _gameController, _camera,
+                _spriteBatch, _uiFont, _titleFont, _unicodeFont,
                 _pixelTexture, _gradientTexture, _logoTexture,
                 SCREEN_WIDTH, SCREEN_HEIGHT);
         }
@@ -220,7 +216,7 @@ namespace GravityDefiedGame
                 case GameEventType.BikeChanged:
                 case GameEventType.CheckpointReached:
                 case GameEventType.Error:
-                    _uiController.ShowMessage(e.Message);
+                    UIController.ShowMessage(e.Message);
                     break;
             }
         }
