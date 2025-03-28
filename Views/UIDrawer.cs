@@ -7,11 +7,10 @@ using System.Linq;
 using FontStashSharp;
 using static GravityDefiedGame.Views.UI;
 using static GravityDefiedGame.Models.BikeGeom;
+using static GravityDefiedGame.Views.ThemeManager;
 using GravityDefiedGame.Utilities;
 using GravityDefiedGame.Controllers;
 using static GravityDefiedGame.Utilities.Logger;
-using GravityDefiedGame.Views;
-using GravityDefiedGame.Models;
 
 namespace GravityDefiedGame.Views
 {
@@ -52,24 +51,16 @@ namespace GravityDefiedGame.Views
             _smokeParticles.Clear();
 
             for (int i = 0; i < Visual.SmokeLowerLayerCount; i++)
-            {
                 _smokeParticles.Add(new UISmoke(_random, _screenSize.width, _screenSize.height, SmokeLayer.Lower));
-            }
 
             for (int i = 0; i < Visual.SmokeMiddleLayerCount; i++)
-            {
                 _smokeParticles.Add(new UISmoke(_random, _screenSize.width, _screenSize.height, SmokeLayer.Middle));
-            }
 
             for (int i = 0; i < Visual.SmokeUpperLayerCount; i++)
-            {
                 _smokeParticles.Add(new UISmoke(_random, _screenSize.width, _screenSize.height, SmokeLayer.Upper));
-            }
 
             foreach (var particle in _smokeParticles)
-            {
                 particle.LifeTime = _random.Next(100) / 100f * particle.MaxLifeTime;
-            }
 
             Info("UIDrawer", "Smoke particles initialized");
         }
@@ -83,19 +74,18 @@ namespace GravityDefiedGame.Views
                 _smokeParticles[i].Update(elapsedTime, _perlinNoise, _screenSize.width);
 
                 if (_smokeParticles[i].IsExpired())
-                {
                     _smokeParticles.RemoveAt(i);
-                }
             }
 
             while (_smokeParticles.Count < Visual.SmokeParticleCount)
             {
-                SmokeLayer layer;
-                int lowerCount = _smokeParticles.Count(p => p.Layer == SmokeLayer.Lower);
-                int middleCount = _smokeParticles.Count(p => p.Layer == SmokeLayer.Middle);
-                int upperCount = _smokeParticles.Count(p => p.Layer == SmokeLayer.Upper);
+                var (lowerCount, middleCount, upperCount) = (
+                    _smokeParticles.Count(p => p.Layer == SmokeLayer.Lower),
+                    _smokeParticles.Count(p => p.Layer == SmokeLayer.Middle),
+                    _smokeParticles.Count(p => p.Layer == SmokeLayer.Upper)
+                );
 
-                layer = lowerCount < Visual.SmokeLowerLayerCount
+                SmokeLayer layer = lowerCount < Visual.SmokeLowerLayerCount
                     ? SmokeLayer.Lower
                     : middleCount < Visual.SmokeMiddleLayerCount
                         ? SmokeLayer.Middle
@@ -107,13 +97,10 @@ namespace GravityDefiedGame.Views
             }
         }
 
-        public void DrawSmokeEffect()
-        {
-            foreach (var particle in _smokeParticles.OrderBy(p => p.Layer))
-            {
-                particle.Draw(_spriteBatch, _textures.pixel);
-            }
-        }
+        public void DrawSmokeEffect() =>
+            _smokeParticles.OrderBy(p => p.Layer)
+                          .ToList()
+                          .ForEach(p => p.Draw(_spriteBatch, _textures.pixel));
 
         public void DrawSplashScreen(float fadeAlpha, float loadingProgress, float transitionTimer, bool introComplete)
         {
@@ -131,11 +118,9 @@ namespace GravityDefiedGame.Views
                 float starBrightness = (float)Math.Sin(i * 0.39f + transitionTimer * 2.0f) * 0.5f + 0.5f;
 
                 if (x > 0 && x < _screenSize.width && y > 0 && y < _screenSize.height)
-                {
                     _spriteBatch.Draw(_textures.pixel,
                         new Rectangle(x, y, 2, 2),
                         Color.White * (0.3f * starBrightness));
-                }
             }
 
             float logoScale = 1.0f + (float)Math.Sin(transitionTimer) * 0.03f;
@@ -174,13 +159,13 @@ namespace GravityDefiedGame.Views
             string messageText = introComplete ? "Press any key to continue" : "Loading game...";
             Vector2 messageTextSize = _fonts.standard.MeasureString(messageText);
 
-            float messageAlpha = introComplete ?
-                0.7f + 0.3f * (float)Math.Sin(transitionTimer * 2.5f) :
-                1.0f;
+            float messageAlpha = introComplete
+                ? 0.7f + 0.3f * (float)Math.Sin(transitionTimer * 2.5f)
+                : 1.0f;
 
-            Color messageColor = introComplete ?
-                Color.Lerp(Color.White, Color.Goldenrod, (float)Math.Sin(transitionTimer) * 0.5f + 0.5f) :
-                Color.White;
+            Color messageColor = introComplete
+                ? Color.Lerp(Color.White, Color.Goldenrod, (float)Math.Sin(transitionTimer) * 0.5f + 0.5f)
+                : Color.White;
 
             Vector2 scaledPosition = new Vector2(
                 (_screenSize.width - messageTextSize.X) / 2,
@@ -263,31 +248,24 @@ namespace GravityDefiedGame.Views
                 Color.LightGray);
         }
 
-        private string GetLoadingStageText(float progress)
+        private string GetLoadingStageText(float progress) => progress switch
         {
-            if (progress < 0.25f)
-                return "Initializing level...";
-            else if (progress < 0.5f)
-                return "Generating terrain...";
-            else if (progress < 0.75f)
-                return "Preparing physics...";
-            else
-                return "Almost ready...";
-        }
+            < 0.25f => "Initializing level...",
+            < 0.5f => "Generating terrain...",
+            < 0.75f => "Preparing physics...",
+            _ => "Almost ready..."
+        };
 
         public void DrawTransitionOverlay(float fadeAlpha, TransitionState transitionState, GameState nextGameState, bool isSplashScreenActive, float transitionTimer)
         {
-            // Плавное затемнение/осветление экрана
             _spriteBatch.Draw(_textures.pixel,
                 new Rectangle(0, 0, _screenSize.width, _screenSize.height),
                 new Color(0, 0, 0, fadeAlpha));
 
-            // Добавляем эффект при переходе между уровнями
             if (transitionState == TransitionState.FadeIn &&
                 nextGameState == GameState.Playing &&
                 !isSplashScreenActive && fadeAlpha < 0.95f && fadeAlpha > 0.05f)
             {
-                // Добавляем эффект "расходящихся кругов" при появлении нового уровня
                 int centerX = _screenSize.width / 2;
                 int centerY = _screenSize.height / 2;
                 float pulseSize = (1.0f - fadeAlpha) * 200.0f;
@@ -298,19 +276,11 @@ namespace GravityDefiedGame.Views
                     float ringSize = pulseSize * (1.0f + i * 0.5f);
 
                     if (ringSize > 0)
-                    {
-                        DrawCircle(
-                            centerX,
-                            centerY,
-                            (int)ringSize,
-                            Color.White * ringAlpha,
-                            3);
-                    }
+                        DrawCircle(centerX, centerY, (int)ringSize, Color.White * ringAlpha, 3);
                 }
             }
         }
 
-        // Вспомогательный метод для рисования круга
         private void DrawCircle(int centerX, int centerY, int radius, Color color, int thickness)
         {
             const int segments = 32;
@@ -325,9 +295,7 @@ namespace GravityDefiedGame.Views
             }
 
             for (int i = 0; i < segments; i++)
-            {
                 DrawLine(points[i], points[i + 1], color, thickness);
-            }
         }
 
         private void DrawLine(Vector2 start, Vector2 end, Color color, int thickness)
@@ -381,6 +349,9 @@ namespace GravityDefiedGame.Views
 
         public void DrawButton(UIButton button)
         {
+            if (!button.IsVisible)
+                return;
+
             Color buttonColor = button.IsHovered ? button.HoverColor : button.BaseColor;
 
             Rectangle scaledBounds = new Rectangle(
@@ -428,6 +399,7 @@ namespace GravityDefiedGame.Views
                 _screenSize.height / 2 - (int)(_screenSize.height * heightRatio / 2),
                 (int)(_screenSize.width * widthRatio),
                 (int)(_screenSize.height * heightRatio));
+
         private void DrawTitle(string title, int yPosition, Color color)
         {
             Vector2 titleSize = _fonts.title.MeasureString(title);
@@ -470,7 +442,7 @@ namespace GravityDefiedGame.Views
                     new Vector2(x, menuRect.Y + Visual.SubtitleOffset),
                     Color.LightGoldenrodYellow);
 
-                string themeText = $"Current Theme: {ThemeManager.CurrentTheme.Name}";
+                string themeText = $"Current Theme: {CurrentTheme.Name}";
                 Vector2 themeSize = _fonts.standard.MeasureString(themeText);
                 _fonts.standard.DrawText(_spriteBatch, themeText,
                     new Vector2((_screenSize.width - themeSize.X) / 2, menuRect.Y + 160),
@@ -839,7 +811,8 @@ namespace GravityDefiedGame.Views
 
         public void Draw(SpriteBatch spriteBatch, Texture2D pixelTexture)
         {
-            if (Opacity <= 0.01f) return;
+            if (Opacity <= 0.01f)
+                return;
 
             int pixelSize = 3;
             int gridSize = (int)(Size / pixelSize);
@@ -853,7 +826,8 @@ namespace GravityDefiedGame.Views
                     float ny = (y - halfGrid) / halfGrid;
                     float distFromCenter = Vector2.Distance(new Vector2(nx, ny), Vector2.Zero);
 
-                    if (distFromCenter > 1.2f) continue;
+                    if (distFromCenter > 1.2f)
+                        continue;
 
                     float influence = 0;
                     foreach (var node in CloudNodes)
@@ -863,13 +837,15 @@ namespace GravityDefiedGame.Views
                     }
 
                     influence = MathHelper.Clamp(influence * 0.7f, 0, 1);
-                    if (influence < 0.1f) continue;
+                    if (influence < 0.1f)
+                        continue;
 
                     float noiseValue = SimplexNoise(nx * 3f + SeedValue, ny * 3f + SeedValue, LifeTime * 0.1f);
                     float density = influence * (0.7f + noiseValue * 0.3f * DensityVariation);
                     float alpha = density * Opacity;
 
-                    if (alpha < 0.05f) continue;
+                    if (alpha < 0.05f)
+                        continue;
 
                     Color pixelColor = new(
                         (byte)MathHelper.Clamp(BaseColor.R + (noiseValue * 15), 220, 255),
@@ -919,9 +895,7 @@ namespace GravityDefiedGame.Views
             }
 
             for (int i = 0; i < GradientSizeTable; i++)
-            {
                 _perm[i] = (byte)i;
-            }
 
             for (int i = 0; i < GradientSizeTable; i++)
             {
@@ -930,14 +904,14 @@ namespace GravityDefiedGame.Views
             }
 
             for (int i = 0; i < GradientSizeTable; i++)
-            {
                 _perm[GradientSizeTable + i] = _perm[i];
-            }
         }
 
-        private static double Lerp(double a, double b, double t) => a + t * (b - a);
+        private static double Lerp(double a, double b, double t) =>
+            a + t * (b - a);
 
-        private static double Fade(double t) => t * t * t * (t * (t * 6 - 15) + 10);
+        private static double Fade(double t) =>
+            t * t * t * (t * (t * 6 - 15) + 10);
 
         private double Grad(int hash, double x, double y, double z)
         {

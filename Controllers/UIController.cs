@@ -10,6 +10,7 @@ using FontStashSharp;
 using static GravityDefiedGame.Controllers.GameState;
 using static GravityDefiedGame.Utilities.Logger;
 using static GravityDefiedGame.Models.BikeGeom;
+using static GravityDefiedGame.Views.ThemeManager;
 using GravityDefiedGame.Utilities;
 
 namespace GravityDefiedGame.Views
@@ -27,54 +28,54 @@ namespace GravityDefiedGame.Views
         public static class Animation
         {
             public const float
-                ButtonScaleSpeed = 10f,
-                BackgroundSpeed = 20f,
-                HoverScale = 1.1f,
-                FadeSpeed = 2.0f,
-                IntroFadeSpeed = 1.2f,
-                LoadingBarSpeed = 0.6f,
-                FogAnimationSpeed = 1.5f,
-                SmokeAnimationSpeed = 15f,
-                SmokeParticleLifespan = 3.0f;
+                ButtonScaleSpeed = 10f,     // Animation speed for button scaling
+                BackgroundSpeed = 20f,      // Background scrolling speed
+                HoverScale = 1.1f,          // Scale factor when hovering buttons
+                FadeSpeed = 2.0f,           // Screen fade in/out speed
+                IntroFadeSpeed = 1.2f,      // Intro sequence fade speed
+                LoadingBarSpeed = 0.6f,     // Loading bar fill speed
+                FogAnimationSpeed = 1.5f,   // Fog effect animation speed
+                SmokeAnimationSpeed = 15f,  // Smoke effect animation speed
+                SmokeParticleLifespan = 3.0f; // Smoke particle lifetime in seconds
         }
 
         public static class Visual
         {
             public const int
-                BorderThin = 2,
-                BorderThick = 3,
-                Padding = 5,
-                TitleOffset = 30,
-                MainTextOffset = 100,
-                SubtitleOffset = 120,
-                LoadingBarHeight = 6,
-                LoadingBarWidth = 400,
-                LoadingBarPadding = 20,
-                SmokeParticleCount = 100,
-                SmokeLowerLayerCount = 60,
-                SmokeMiddleLayerCount = 30,
-                SmokeUpperLayerCount = 20;
+                BorderThin = 2,             // Thin border width
+                BorderThick = 3,            // Thick border width
+                Padding = 5,                // Standard UI padding
+                TitleOffset = 30,           // Title text vertical offset
+                MainTextOffset = 100,       // Main text vertical offset
+                SubtitleOffset = 120,       // Subtitle vertical offset
+                LoadingBarHeight = 6,       // Height of loading progress bar
+                LoadingBarWidth = 400,      // Width of loading progress bar
+                LoadingBarPadding = 20,     // Padding around loading bar
+                SmokeParticleCount = 100,   // Total smoke particle count
+                SmokeLowerLayerCount = 60,  // Particles in lower layer
+                SmokeMiddleLayerCount = 30, // Particles in middle layer
+                SmokeUpperLayerCount = 20;  // Particles in upper layer
 
             public const float
-                ShadowOffset = 2f,
-                ShadowOpacity = 0.5f;
+                ShadowOffset = 2f,          // Text shadow offset
+                ShadowOpacity = 0.5f;       // Text shadow opacity
         }
 
         public static class Layout
         {
             public const float
-                MenuWidthStandard = 0.6f,
-                MenuHeightStandard = 0.7f,
-                MenuWidthWide = 0.7f,
-                ButtonWidthMain = 0.25f,
-                ButtonWidthSmall = 0.15f,
-                ButtonWidthNav = 0.08f;
+                MenuWidthStandard = 0.6f,   // Standard menu width (% of screen)
+                MenuHeightStandard = 0.7f,  // Standard menu height (% of screen)
+                MenuWidthWide = 0.7f,       // Wide menu width (% of screen)
+                ButtonWidthMain = 0.25f,    // Main button width (% of screen)
+                ButtonWidthSmall = 0.15f,   // Small button width (% of screen)
+                ButtonWidthNav = 0.08f;     // Navigation button width (% of screen)
 
             public const int
-                ButtonSpacing = 30,
-                ButtonHeight = 60,
-                NavButtonOffset = 20,
-                ButtonGroupSpacing = 50;
+                ButtonSpacing = 30,         // Vertical space between buttons
+                ButtonHeight = 60,          // Standard button height
+                NavButtonOffset = 20,       // Navigation button horizontal offset
+                ButtonGroupSpacing = 50;    // Space between button groups
         }
     }
 
@@ -344,13 +345,13 @@ namespace GravityDefiedGame.Views
                 ),
 
                 ["restart"] = (
-    new Rectangle(centerX - smallWidth - spacing * 2, centerY + groupSpacing, smallWidth, btnHeight),
-    "Restart",
-    () => StartGameWithTransition(_gameController.CurrentLevel.Id, true),
-    new Color(50, 50, 50),
-    Color.DarkGray,
-    "Restart the current level"
-),
+                    new Rectangle(centerX - smallWidth - spacing * 2, centerY + groupSpacing, smallWidth, btnHeight),
+                    "Restart",
+                    () => StartGameWithTransition(_gameController.CurrentLevel!.Id, true),
+                    new Color(50, 50, 50),
+                    Color.DarkGray,
+                    "Restart the current level"
+                ),
 
                 ["mainMenu"] = (
                     new Rectangle(centerX - smallWidth / 2, centerY + groupSpacing, smallWidth, btnHeight),
@@ -362,13 +363,13 @@ namespace GravityDefiedGame.Views
                 ),
 
                 ["continue"] = (
-    new Rectangle(centerX + spacing * 2, centerY + groupSpacing, smallWidth, btnHeight),
-    "Continue",
-    () => StartGameWithTransition(_gameController.CurrentLevel.Id + 1),
-    new Color(0, 80, 0),
-    Color.DarkGreen,
-    "Proceed to the next level"
-),
+                    new Rectangle(centerX + spacing * 2, centerY + groupSpacing, smallWidth, btnHeight),
+                    "Continue",
+                    () => StartGameWithTransition(_gameController.CurrentLevel!.Id + 1),
+                    new Color(0, 80, 0),
+                    Color.DarkGreen,
+                    "Proceed to the next level"
+                ),
 
                 ["back"] = (
                     new Rectangle(spacing, spacing, navWidth, btnHeight),
@@ -401,14 +402,13 @@ namespace GravityDefiedGame.Views
             _gameController = gameController;
 
             _backgroundOffset = (_backgroundOffset + UI.Animation.BackgroundSpeed * elapsedTime) % _screenSize.width;
-
             _drawer.UpdateSmokeParticles(elapsedTime);
 
             if (_isSplashScreenActive)
             {
                 if (_introComplete && (keyboardState.GetPressedKeys().Length > 0 ||
-                    mouseState.LeftButton == ButtonState.Pressed ||
-                    mouseState.RightButton == ButtonState.Pressed))
+                                    mouseState.LeftButton == ButtonState.Pressed ||
+                                    mouseState.RightButton == ButtonState.Pressed))
                 {
                     StartTransition(TransitionState.FadeOut, Controllers.GameState.MainMenu);
                 }
@@ -500,25 +500,17 @@ namespace GravityDefiedGame.Views
             switch (_transitionState)
             {
                 case TransitionState.FadeIn:
-                    // Если камера еще не центрирована и мы переходим к игре
                     if (!_isCameraCentered && _nextGameState == Controllers.GameState.Playing)
                     {
-                        // Даем время камере центрироваться
                         _cameraWaitTimer += elapsedTime;
 
-                        // Ждем фиксированное время (0.5 секунды), чтобы камера успела центрироваться
-                        // CenterOn вызывается в другом месте кода при запуске уровня
                         if (_cameraWaitTimer >= 0.5f)
-                        {
                             _isCameraCentered = true;
-                        }
 
-                        // Удерживаем полное затемнение пока камера не центрирована
                         _fadeAlpha = 1.0f;
                         return;
                     }
 
-                    // Когда камера центрирована, начинаем осветление
                     _fadeAlpha = Math.Max(0, _fadeAlpha - UI.Animation.FadeSpeed * elapsedTime);
                     if (_fadeAlpha <= 0)
                     {
@@ -529,15 +521,11 @@ namespace GravityDefiedGame.Views
                                 _loadingProgress = Math.Min(1.0f, _loadingProgress + UI.Animation.LoadingBarSpeed * elapsedTime);
 
                                 if (_loadingProgress >= 1.0f)
-                                {
                                     _introComplete = true;
-                                }
                             }
                         }
                         else
-                        {
                             _transitionState = TransitionState.None;
-                        }
                     }
                     break;
 
@@ -553,12 +541,8 @@ namespace GravityDefiedGame.Views
                         }
                         else if (_nextGameState == Controllers.GameState.Playing && _nextLevelId > 0)
                         {
-                            // Начинаем следующий уровень сразу, без экрана загрузки
                             _gameController.StartLevel(_nextLevelId);
-
-                            // Сбрасываем таймер ожидания камеры
                             _cameraWaitTimer = 0f;
-
                             StartTransition(TransitionState.FadeIn, Controllers.GameState.Playing);
                         }
                         else
@@ -593,24 +577,26 @@ namespace GravityDefiedGame.Views
                 case Controllers.GameState.MainMenu:
                     _gameController.EnterMainMenu();
                     break;
+
                 case Controllers.GameState.BikeSelection:
                     _gameController.EnterBikeSelection();
                     var bikes = Enum.GetValues<BikeType>();
                     _gameController.SetBikeType(bikes[_selection.bikeIndex]);
                     _gameController.SetBikeColor(_bikeColors[_selection.colorIndex].color);
                     break;
+
                 case Controllers.GameState.LevelSelection:
                     _gameController.EnterLevelSelection();
                     _gameController.SelectLevel(_selection.levelIndex + 1);
                     break;
+
                 case Controllers.GameState.ThemeSelection:
                     _gameController.EnterThemeSelection();
                     break;
+
                 case Controllers.GameState.Playing:
                     if (_nextLevelId > 0)
-                    {
                         _gameController.StartLevel(_nextLevelId);
-                    }
                     break;
             }
         }
@@ -641,10 +627,10 @@ namespace GravityDefiedGame.Views
 
         private void ChangeTheme(int direction)
         {
-            var themes = ThemeManager.AvailableThemes;
+            var themes = AvailableThemes;
             _selection.themeIndex = (_selection.themeIndex + direction + themes.Count) % themes.Count;
-            ThemeManager.SetTheme(_selection.themeIndex);
-            ShowMessage($"Theme changed to {ThemeManager.CurrentTheme.Name}");
+            SetTheme(_selection.themeIndex);
+            ShowMessage($"Theme changed to {CurrentTheme.Name}");
         }
         #endregion
 
@@ -676,7 +662,7 @@ namespace GravityDefiedGame.Views
 
             if (isMenuState)
             {
-                _drawer.DrawAnimatedBackground(_backgroundOffset, ThemeManager.CurrentTheme.BackgroundColor);
+                _drawer.DrawAnimatedBackground(_backgroundOffset, CurrentTheme.BackgroundColor);
 
                 if (_showSmokeEffect && gameController.CurrentGameState is
                     Controllers.GameState.MainMenu or
@@ -690,15 +676,15 @@ namespace GravityDefiedGame.Views
             }
 
             DrawScreen(gameController);
+
             foreach (var button in _buttons.Values.Where(b => b.IsVisible))
                 _drawer.DrawButton(button);
+
             if (!string.IsNullOrEmpty(_tooltip.text))
                 _drawer.DrawTooltip(_tooltip.text, _tooltip.position);
 
             if (_transitionState != TransitionState.None)
-            {
                 _drawer.DrawTransitionOverlay(_fadeAlpha, _transitionState, _nextGameState, _isSplashScreenActive, _transitionTimer);
-            }
         }
 
         private void UpdateButtonVisibility(Controllers.GameState state)
@@ -776,7 +762,7 @@ namespace GravityDefiedGame.Views
                     _drawer.DrawLevelSelectionMenu(_selection.levelIndex, _gameController.Levels);
                     break;
                 case Controllers.GameState.ThemeSelection:
-                    _drawer.DrawThemeSelectionMenu(_selection.themeIndex, ThemeManager.AvailableThemes);
+                    _drawer.DrawThemeSelectionMenu(_selection.themeIndex, AvailableThemes);
                     break;
                 case Controllers.GameState.Playing:
                     _drawer.DrawInfoPanel(gameController.CurrentLevel?.Name, gameController.GameTime, gameController.Motorcycle.Direction);
