@@ -20,6 +20,7 @@ namespace GravityDefiedGame.Models
         Vector2 Position { get; }
         Vector2 Velocity { get; }
         float Angle { get; }
+        float AngularVelocity { get; }
         float WheelBase { get; }
         float FrameHeight { get; }
         BikeType BikeType { get; }
@@ -28,20 +29,40 @@ namespace GravityDefiedGame.Models
         (float Front, float Rear) SuspensionOffsets { get; }
         (float Front, float Rear) WheelRotations { get; }
         float Throttle { get; }
+        float Brake { get; }
         float LeanAmount { get; }
+        int Direction { get; }
+        BikeState State { get; }
+        bool IsCrashed { get; }
         bool IsInAir { get; }
+        bool WasInAir { get; }
         bool IsInWheelie { get; }
         bool IsInStoppie { get; }
+        bool IsMovingBackward { get; }
+        float WheelieTime { get; }
+        float StoppieTime { get; }
         float WheelieIntensity { get; }
         float StoppieIntensity { get; }
         float GetWheelRadius();
+        Vector2 GetVisualCenter();
+        List<Vector2> GetFramePoints();
     }
 
-    public class Motorcycle : PhysicsComponent, IBikePhysicsData
+    public interface IBikeVisualData
+    {
+        Color BikeColor { get; }
+        BikeType BikeType { get; }
+        void SetBikeColor(Color color);
+        void UpdateFromTheme();
+        (List<SkeletonPoint> Points, List<SkeletonLine> Lines) GetSkeleton();
+    }
+
+    public class Motorcycle : PhysicsComponent, IBikePhysicsData, IBikeVisualData
     {
         #region Private Fields
-        private readonly BikePhysics _physics;
+        private BikePhysics _physics;
         private int _direction = 1;
+        private Color _bikeColor;
         #endregion
 
         #region Properties - Основные физические свойства
@@ -105,7 +126,7 @@ namespace GravityDefiedGame.Models
         #endregion
 
         #region Properties - Визуальные аспекты
-        public Color BikeColor { get; private set; }
+        public Color BikeColor => _bikeColor;
         #endregion
 
         #region Properties - Состояние мотоцикла
@@ -153,11 +174,11 @@ namespace GravityDefiedGame.Models
         #region Конструктор
         public Motorcycle(BikeType bikeType = BikeType.Standard)
         {
-            _physics = new BikePhysics(this);
-
             Log("Motorcycle", "initializing motorcycle", () =>
             {
                 BikeType = bikeType;
+                _bikeColor = new Color(200, 200, 200);
+                _physics = new BikePhysics(this);
                 InitializeBikeProperties();
                 Reset();
                 Info("Motorcycle", $"Created {bikeType} motorcycle");
@@ -172,7 +193,6 @@ namespace GravityDefiedGame.Models
             {
                 SuspensionRealMaxAngle = _physics.MaxSuspensionAngle;
                 _physics.InitializeProperties(BikeType);
-                BikeColor = new Color(200, 200, 200);
                 FrameHeight = _physics.WheelRadius * 1.5f;
                 Info("Motorcycle", $"Initialized {BikeType} motorcycle with wheel radius {_physics.WheelRadius:F2}");
             });
@@ -223,7 +243,7 @@ namespace GravityDefiedGame.Models
         {
             Log("Motorcycle", "setting bike color", () =>
             {
-                BikeColor = color;
+                _bikeColor = color;
                 Debug("Motorcycle", $"Bike color set to {color}");
             });
         }
@@ -234,8 +254,8 @@ namespace GravityDefiedGame.Models
             {
                 try
                 {
-                    BikeColor = ThemeManager.CurrentTheme.BikeColors[SkeletonLineType.MainFrame];
-                    Debug("Motorcycle", $"Bike color updated from theme to {BikeColor}");
+                    _bikeColor = ThemeManager.CurrentTheme.BikeColors[SkeletonLineType.MainFrame];
+                    Debug("Motorcycle", $"Bike color updated from theme to {_bikeColor}");
                 }
                 catch (Exception ex)
                 {
@@ -304,7 +324,21 @@ namespace GravityDefiedGame.Models
 
         public List<Vector2> GetFramePoints() => _physics.GetFramePoints();
 
-        public (List<SkeletonPoint> Points, List<SkeletonLine> Lines) GetSkeleton() => _physics.GetSkeleton();
+        public (List<SkeletonPoint> Points, List<SkeletonLine> Lines) GetSkeleton()
+        {
+            var geom = new BikeGeom(this);
+            return geom.GetSkeleton();
+        }
         #endregion
+    }
+
+    public class BikeComponentFactory
+    {
+        public static IBikePhysicsData CreatePhysicsData(Motorcycle bike) => bike;
+
+        public static IBikeVisualData CreateVisualData(Motorcycle bike) => bike;
+
+        public static BikeGeom CreateGeometryComponent(IBikePhysicsData physicsData)
+            => new BikeGeom(physicsData);
     }
 }

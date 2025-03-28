@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿#nullable enable
+
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using System;
@@ -12,6 +14,7 @@ namespace GravityDefiedGame.Models
 {
     public class BikeGeom : DrawingComponent
     {
+        #region Constants
         private static class GeomConstants
         {
             public const float
@@ -47,17 +50,25 @@ namespace GravityDefiedGame.Models
                 EngineWidth = 20.0f,
                 EngineHeight = 15.0f;
         }
+        #endregion
 
+        #region Fields
         private readonly IBikePhysicsData _bikeData;
+        #endregion
 
+        #region Types
         public record struct SkeletonPoint(Vector2 Position, SkeletonPointType Type);
         public enum SkeletonPointType { FrontWheel, RearWheel, FrontSuspension, RearSuspension, Frame, Seat, Handlebar, Exhaust, Wheel, Engine, Chain, ShockAbsorber, Fork }
 
         public record struct SkeletonLine(int StartPointIndex, int EndPointIndex, SkeletonLineType Type);
         public enum SkeletonLineType { MainFrame, Suspension, Wheel, Seat, Handlebar, Exhaust, Engine, Chain, ShockAbsorber, Fork }
+        #endregion
 
+        #region Constructor
         public BikeGeom(IBikePhysicsData bikeData) => _bikeData = bikeData;
+        #endregion
 
+        #region Helper Methods
         private float GetScaleFactor() => _bikeData.BikeType switch
         {
             BikeType.Sport => 0.9f,
@@ -133,7 +144,9 @@ namespace GravityDefiedGame.Models
                 basePoint.X + (float)sinAngle * offset * multiplier,
                 basePoint.Y - (float)cosAngle * offset * multiplier
             );
+        #endregion
 
+        #region Main Methods
         public (List<SkeletonPoint> Points, List<SkeletonLine> Lines) GetSkeleton()
         {
             var points = new List<SkeletonPoint>();
@@ -427,7 +440,7 @@ namespace GravityDefiedGame.Models
             float halfHeight = GeomConstants.EngineHeight / 2;
             Vector2 engineSprocket = Offset(engineCenter, -halfWidth, halfHeight, _bikeData.Angle);
 
-            float wheelRadius = _bikeData.GetWheelRadius() * 0.7f;
+            float wheelRadius = _bikeData.GetWheelRadius();
             float sprocketRadius = wheelRadius * 0.3f;
             float rearSprocketRadius = wheelRadius * 0.5f;
             int segmentCount = 8;
@@ -627,5 +640,6 @@ namespace GravityDefiedGame.Models
                 lines.Add(new SkeletonLine(idx, idx + 1, SkeletonLineType.ShockAbsorber));
             }
         }
+        #endregion
     }
 }

@@ -13,90 +13,134 @@ using static GravityDefiedGame.Models.Level.LevelGenerator.TerrainSegmentType;
 
 namespace GravityDefiedGame.Models
 {
-    #region Constants
+    public interface ILevelPhysics
+    {
+        int Id { get; }
+        string Name { get; }
+        int Difficulty { get; }
+        List<Level.TerrainPoint> TerrainPoints { get; }
+        Vector2 StartPoint { get; }
+        Vector2 FinishPoint { get; }
+        float Length { get; }
+        LevelTheme Theme { get; }
+        float SafeZoneStartLength { get; }
+        float SafeZoneEndLength { get; }
+        float GetGroundYAtX(float x);
+        bool IsInSafeZone(float x);
+        float CalculateSlopeAngle(float x);
+        bool IsFinishReached(Vector2 pos);
+    }
+
+    public interface ILevelVisualData
+    {
+        Color VerticalLineColor { get; }
+        Color BackgroundColor { get; }
+        Color TerrainColor { get; }
+        Color SafeZoneColor { get; }
+        List<Level.TerrainPoint> TerrainPoints { get; }
+        Vector2 StartPoint { get; }
+        Vector2 FinishPoint { get; }
+        float Length { get; }
+        LevelTheme Theme { get; }
+    }
+
+    public struct LevelVisualProperties
+    {
+        public Color VerticalLineColor;
+        public Color BackgroundColor;
+        public Color TerrainColor;
+        public Color SafeZoneColor;
+
+        public static LevelVisualProperties FromTheme()
+        {
+            return new LevelVisualProperties
+            {
+                VerticalLineColor = ThemeManager.CurrentTheme.VerticalLineColor,
+                BackgroundColor = ThemeManager.CurrentTheme.BackgroundColor,
+                TerrainColor = ThemeManager.CurrentTheme.TerrainColor,
+                SafeZoneColor = ThemeManager.CurrentTheme.SafeZoneColor
+            };
+        }
+    }
 
     public static class LevelConstants
     {
         public const float
-            DefaultGroundY = 500.0f,          // Стандартная высота земли
-            FinishReachDistance = 50.0f,      // Дистанция для регистрации финиша
-            DeltaX = 0.1f,                    // Шаг для расчета наклона
-            InterpolationFactor = 1.0f;       // Фактор интерполяции
+            DefaultGroundY = 500.0f,
+            FinishReachDistance = 50.0f,
+            DeltaX = 0.1f,
+            InterpolationFactor = 1.0f;
 
-        public const int DefaultSeedMultiplier = 100; // Множитель для генерации семени
+        public const int DefaultSeedMultiplier = 100;
 
         public const float
-            BaseTerrainLength = 3000.0f,          // Базовая длина ландшафта
-            TerrainLengthIncreasePerLevel = 500.0f, // Увеличение длины ландшафта на уровень
-            MaxTerrainLength = 10000.0f;          // Максимальная длина ландшафта
+            BaseTerrainLength = 3000.0f,
+            TerrainLengthIncreasePerLevel = 500.0f,
+            MaxTerrainLength = 10000.0f;
 
-        public const float FixedSafeZoneLength = 300.0f; // Фиксированная длина безопасной зоны
+        public const float FixedSafeZoneLength = 300.0f;
     }
 
     public static class GeneratorConstants
     {
-        public const float DefaultTerrainHeight = 500.0f; // Стандартная высота ландшафта
+        public const float DefaultTerrainHeight = 500.0f;
 
         public const float
-            BaseSpikeHeight = 50.0f,          // Базовая высота пика
-            SpikeHeightIncreasePerLevel = 10.0f, // Увеличение высоты пика на уровень
-            MaxSpikeHeight = 200.0f,          // Максимальная высота пика
-            SpikeHeightFactor = 0.5f,         // Фактор высоты пика
-            SpikeMidFactor = 0.7f;            // Средний фактор пика
+            BaseSpikeHeight = 50.0f,
+            SpikeHeightIncreasePerLevel = 10.0f,
+            MaxSpikeHeight = 200.0f,
+            SpikeHeightFactor = 0.5f,
+            SpikeMidFactor = 0.7f;
 
         public const float
-            BaseDepressionDepth = 30.0f,      // Базовая глубина впадины
-            DepressionDepthIncreasePerLevel = 7.5f, // Увеличение глубины впадины на уровень
-            MaxDepressionDepth = 150.0f;      // Максимальная глубина впадины
+            BaseDepressionDepth = 30.0f,
+            DepressionDepthIncreasePerLevel = 7.5f,
+            MaxDepressionDepth = 150.0f;
 
         public const float
-            SmoothingFactor = 0.7f,           // Фактор сглаживания
-            BasePreviousPointWeight = 0.3f,   // Базовый вес предыдущей точки
-            PreviousPointWeightDecreasePerLevel = 0.02f, // Уменьшение веса предыдущей точки на уровень
-            MinPreviousPointWeight = 0.1f,    // Минимальный вес предыдущей точки
-            GaussianFactor = 2.0f;            // Фактор гауссовского распределения
+            SmoothingFactor = 0.7f,
+            BasePreviousPointWeight = 0.3f,
+            PreviousPointWeightDecreasePerLevel = 0.02f,
+            MinPreviousPointWeight = 0.1f,
+            GaussianFactor = 2.0f;
 
         public const float
-            StartZonePercent = 0.1f,          // Процент начальной зоны
-            EndZonePercent = 0.9f;            // Процент конечной зоны
+            StartZonePercent = 0.1f,
+            EndZonePercent = 0.9f;
 
         public const float
-            PointOffset = 50.0f,              // Смещение точки
-            StartPointXOffset = 100.0f,       // X-смещение стартовой точки
-            StartPointYOffset = -80.0f,       // Y-смещение стартовой точки
-            FinishPointXOffset = -100.0f,     // X-смещение финишной точки
-            FinishPointYOffset = -50.0f;      // Y-смещение финишной точки
+            PointOffset = 50.0f,
+            StartPointXOffset = 100.0f,
+            StartPointYOffset = -80.0f,
+            FinishPointXOffset = -100.0f,
+            FinishPointYOffset = -50.0f;
 
         public const int
-            BasePointCount = 60,              // Базовое количество точек
-            PointCountIncreasePerLevel = 5,   // Увеличение количества точек на уровень
-            MaxPointCount = 120,              // Максимальное количество точек
-            BaseSegmentCount = 5,             // Базовое количество сегментов
-            SegmentCountIncreasePerLevel = 1, // Увеличение количества сегментов на уровень
-            MaxSegmentCount = 15,             // Максимальное количество сегментов
-            MinSafeZonePointCount = 3,        // Минимальное количество точек в безопасной зоне
-            PointCountReductionFactor = 5;    // Фактор уменьшения количества точек
+            BasePointCount = 60,
+            PointCountIncreasePerLevel = 5,
+            MaxPointCount = 120,
+            BaseSegmentCount = 5,
+            SegmentCountIncreasePerLevel = 1,
+            MaxSegmentCount = 15,
+            MinSafeZonePointCount = 3,
+            PointCountReductionFactor = 5;
 
         public const int
-            MinTerrainTypeCount = 3,          // Минимальное количество типов ландшафта
-            MaxTerrainTypeCount = 7,          // Максимальное количество типов ландшафта
-            TerrainTypeUnlockLevel = 5;       // Уровень разблокировки типов ландшафта
+            MinTerrainTypeCount = 3,
+            MaxTerrainTypeCount = 7,
+            TerrainTypeUnlockLevel = 5;
 
         public const float
-            SegmentDifficultyThreshold = 5,   // Порог сложности сегмента
-            SegmentDifficultyChance = 0.2f,   // Шанс сложного сегмента
-            SegmentDifficultyDivisor = 10.0f, // Делитель сложности сегмента
-            FinalPlateauChance = 0.7f;        // Шанс финального плато
+            SegmentDifficultyThreshold = 5,
+            SegmentDifficultyChance = 0.2f,
+            SegmentDifficultyDivisor = 10.0f,
+            FinalPlateauChance = 0.7f;
 
         public const float
-            NoiseThreshold = 3,               // Порог шума
-            NoiseAmplitudeFactor = 5.0f,      // Фактор амплитуды шума
-            MaxNoiseAmplitude = 25.0f;        // Максимальная амплитуда шума
+            NoiseThreshold = 3,
+            NoiseAmplitudeFactor = 5.0f,
+            MaxNoiseAmplitude = 25.0f;
     }
-
-    #endregion
-
-    #region Types
 
     public record TerrainConfig(
         float Length,
@@ -107,12 +151,8 @@ namespace GravityDefiedGame.Models
 
     public enum LevelTheme { Desert, Mountain, Arctic, Volcano }
 
-    #endregion
-
-    public class Level : PhysicsComponent
+    public class Level : PhysicsComponent, ILevelPhysics, ILevelVisualData
     {
-        #region Structs
-
         public readonly struct TerrainPoint : IComparable<TerrainPoint>, IComparable<float>
         {
             public float X { get; }
@@ -135,10 +175,6 @@ namespace GravityDefiedGame.Models
             public int CompareTo(float x) => X.CompareTo(x);
         }
 
-        #endregion
-
-        #region Properties
-
         public int Id { get; internal set; }
         public string Name { get; internal set; } = string.Empty;
         public int Difficulty { get; internal set; }
@@ -150,18 +186,16 @@ namespace GravityDefiedGame.Models
         public float SafeZoneStartLength { get; private set; }
         public float SafeZoneEndLength { get; private set; }
 
-        public Color VerticalLineColor => ThemeManager.CurrentTheme.VerticalLineColor;
-        public Color BackgroundColor => ThemeManager.CurrentTheme.BackgroundColor;
-        public Color TerrainColor => ThemeManager.CurrentTheme.TerrainColor;
-        public Color SafeZoneColor => ThemeManager.CurrentTheme.SafeZoneColor;
+        private LevelVisualProperties _visualProperties;
+
+        public Color VerticalLineColor => _visualProperties.VerticalLineColor;
+        public Color BackgroundColor => _visualProperties.BackgroundColor;
+        public Color TerrainColor => _visualProperties.TerrainColor;
+        public Color SafeZoneColor => _visualProperties.SafeZoneColor;
 
         private int _currentSegmentIndex = 0;
         private float _lastQueryX = float.NaN;
         private float _lastGroundY = DefaultGroundY;
-
-        #endregion
-
-        #region Constructors
 
         public Level(int id, string name, int? seed = null, int? difficulty = null)
         {
@@ -169,16 +203,16 @@ namespace GravityDefiedGame.Models
             Name = name;
             Difficulty = difficulty ?? id;
             Theme = (LevelTheme)(id % Enum.GetValues(typeof(LevelTheme)).Length);
+            _visualProperties = LevelVisualProperties.FromTheme();
 
             int levelSeed = seed ?? (id * DefaultSeedMultiplier + DateTime.Now.Millisecond);
             GenerateLevel(levelSeed);
         }
 
-        public Level() { }
-
-        #endregion
-
-        #region Public Methods
+        public Level()
+        {
+            _visualProperties = LevelVisualProperties.FromTheme();
+        }
 
         public float GetGroundYAtX(float x)
         {
@@ -202,9 +236,10 @@ namespace GravityDefiedGame.Models
         public bool IsFinishReached(Vector2 pos) =>
             Vector2.Distance(pos, FinishPoint) <= FinishReachDistance;
 
-        #endregion
-
-        #region Private Methods
+        public void UpdateVisualProperties(LevelVisualProperties visualProps)
+        {
+            _visualProperties = visualProps;
+        }
 
         private void GenerateLevel(int seed)
         {
@@ -316,14 +351,8 @@ namespace GravityDefiedGame.Models
             return Min(Max(0, left), TerrainPoints.Count - 2);
         }
 
-        #endregion
-
-        #region LevelGenerator
-
         public class LevelGenerator
         {
-            #region Types
-
             public enum TerrainSegmentType
             {
                 Plateau, Spike, Depression, StepUp, StepDown, Wave, Jump
@@ -399,10 +428,6 @@ namespace GravityDefiedGame.Models
                 }
             }
 
-            #endregion
-
-            #region Fields
-
             private readonly Random _rand;
             private readonly List<(TerrainSegmentType Type, SegmentParameters? Parameters)> _segments = new();
             private readonly int _difficulty;
@@ -414,10 +439,6 @@ namespace GravityDefiedGame.Models
             private readonly int _terrainTypeCount;
             private readonly ISegmentSelection _segment;
             private readonly float[] _segmentBoundaries;
-
-            #endregion
-
-            #region Constructor
 
             public LevelGenerator(int seed, int difficulty, ISegmentSelection segment)
             {
@@ -471,10 +492,6 @@ namespace GravityDefiedGame.Models
 
                 GenerateSegmentTypes();
             }
-
-            #endregion
-
-            #region Private Methods
 
             private void GenerateSegmentTypes()
             {
@@ -651,15 +668,11 @@ namespace GravityDefiedGame.Models
                 return value;
             }
 
-            #endregion
-
-            #region Public Methods
-
             public (List<Level.TerrainPoint> Points, float Length, Vector2 StartPoint, Vector2 FinishPoint,
                    float SafeZoneStart, float SafeZoneEnd) GenerateTerrain(TerrainConfig config)
             {
                 float length = config.Length;
-                var pts = new List<Level.TerrainPoint>(capacity: _pointCount + 10); 
+                var pts = new List<Level.TerrainPoint>(capacity: _pointCount + 10);
                 float baseY = DefaultTerrainHeight;
                 float safeZoneLength = FixedSafeZoneLength;
 
@@ -754,14 +767,15 @@ namespace GravityDefiedGame.Models
                     lastY = y;
                 }
             }
-
-            #endregion
         }
-
-        #endregion
     }
 
-    #region Segment Selection
+    public class LevelComponentFactory
+    {
+        public static ILevelPhysics CreatePhysicsData(Level level) => level;
+
+        public static ILevelVisualData CreateVisualData(Level level) => level;
+    }
 
     public interface ISegmentSelection
     {
@@ -788,7 +802,7 @@ namespace GravityDefiedGame.Models
                 excludedTypes.Add(previousSegments[currentIndex - 1]);
 
             var nextType = GetRandomSegmentType(rand, terrainTypeCount, excludedTypes);
-            
+
             if (difficulty > SegmentDifficultyThreshold &&
                 rand.NextDouble() < SegmentDifficultyChance * (difficulty / SegmentDifficultyDivisor))
             {
@@ -798,24 +812,22 @@ namespace GravityDefiedGame.Models
 
             return nextType;
         }
-        
+
         private Level.LevelGenerator.TerrainSegmentType GetRandomSegmentType(
-            Random rand, 
-            int terrainTypeCount, 
+            Random rand,
+            int terrainTypeCount,
             HashSet<Level.LevelGenerator.TerrainSegmentType> excludedTypes)
         {
             if (excludedTypes.Count >= terrainTypeCount)
                 return (Level.LevelGenerator.TerrainSegmentType)rand.Next(terrainTypeCount);
-                
+
             Level.LevelGenerator.TerrainSegmentType type;
             do
             {
                 type = (Level.LevelGenerator.TerrainSegmentType)rand.Next(terrainTypeCount);
             } while (excludedTypes.Contains(type));
-            
+
             return type;
         }
     }
-    
-    #endregion
 }

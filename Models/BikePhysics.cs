@@ -675,7 +675,7 @@ namespace GravityDefiedGame.Models
 
         private (bool IsCollision, Vector2 CollisionPoint, float MaxPenetration) DetectFrameCollision(Level level)
         {
-            var framePoints = _bike.GetFramePoints();
+            var framePoints = _physics.GetFramePoints();
             bool frameCollision = false;
             Vector2 collisionPoint = default;
             float maxPenetration = 0;
@@ -709,7 +709,6 @@ namespace GravityDefiedGame.Models
         private readonly InputComponent _inputComponent;
         private readonly KinematicsComponent _kinematicsComponent;
         private readonly ValidationComponent _validationComponent;
-        private readonly BikeGeom _geometryComponent;
         private readonly TrigCache _trigCache = new();
         private const float MaxAllowedPenetration = 5.0f;
 
@@ -776,7 +775,6 @@ namespace GravityDefiedGame.Models
             _inputComponent = new InputComponent(bike);
             _kinematicsComponent = new KinematicsComponent(bike, this);
             _validationComponent = new ValidationComponent(bike, this);
-            _geometryComponent = new BikeGeom(bike);
         }
 
         public void InitializeProperties(BikeType bikeType)
@@ -833,14 +831,28 @@ namespace GravityDefiedGame.Models
         }
 
         public void SetBikeType(BikeType bikeType) => InitializeProperties(bikeType);
-
-        // Простые делегаты к компонентам
         public void ApplyThrottle(float amount) => _inputComponent.ApplyThrottle(amount);
         public void ApplyBrake(float amount) => _inputComponent.ApplyBrake(amount);
         public void Lean(float direction) => _inputComponent.Lean(direction);
-        public List<Vector2> GetFramePoints() => _geometryComponent.GetFramePoints();
-        public (List<BikeGeom.SkeletonPoint> Points, List<BikeGeom.SkeletonLine> Lines) GetSkeleton() =>
-            _geometryComponent.GetSkeleton();
+
+        public List<Vector2> GetFramePoints()
+        {
+            var (cosAngle, sinAngle) = GetTrigsFromAngle(_bike.Angle);
+            float halfWheelBase = _bike.WheelBase / 2;
+            float frameHeight = _bike.FrameHeight * 0.8f;
+
+            return new List<Vector2>
+            {
+                new Vector2(
+                    _bike.Position.X + halfWheelBase * 0.7f * (float)cosAngle - frameHeight * (float)sinAngle,
+                    _bike.Position.Y + halfWheelBase * 0.7f * (float)sinAngle + frameHeight * (float)cosAngle
+                ),
+                new Vector2(
+                    _bike.Position.X - halfWheelBase * 0.7f * (float)cosAngle - frameHeight * (float)sinAngle,
+                    _bike.Position.Y - halfWheelBase * 0.7f * (float)sinAngle + frameHeight * (float)cosAngle
+                )
+            };
+        }
 
         public void Update(float deltaTime, Level level, CancellationToken cancellationToken = default)
         {
@@ -1205,11 +1217,11 @@ namespace GravityDefiedGame.Models
                 _bike.WheelPositions = (
                     new Vector2(
                         _bike.AttachmentPoints.Front.X + frontSuspOffset * (float)cosFrontAngle,
-                        frontGroundY + _physics.WheelRadius 
+                        frontGroundY + _physics.WheelRadius
                     ),
                     new Vector2(
                         _bike.AttachmentPoints.Rear.X + rearSuspOffset * (float)cosRearAngle,
-                        rearGroundY + _physics.WheelRadius 
+                        rearGroundY + _physics.WheelRadius
                     )
                 );
 
@@ -1286,7 +1298,7 @@ namespace GravityDefiedGame.Models
             {
                 var (cosAngle, sinAngle) = _physics.GetBikeTrigs();
                 float groundSpeed = Vector2.Dot(_bike.Velocity, new Vector2((float)cosAngle, (float)sinAngle));
-                float desiredOmega = groundSpeed / _physics.WheelRadius; 
+                float desiredOmega = groundSpeed / _physics.WheelRadius;
 
                 if (_bike.IsInAir)
                 {
@@ -1303,7 +1315,7 @@ namespace GravityDefiedGame.Models
                 {
                     _bike.FrontWheelAngularVelocity = desiredOmega;
 
-                    float maxFrictionTorque = CalculateMaxFrictionTorque(true); 
+                    float maxFrictionTorque = CalculateMaxFrictionTorque(true);
                     float engineTorque = _bike.Throttle * _physics.EnginePower * _physics.WheelRadius;
 
                     float netTorque = engineTorque - Sign(_bike.RearWheelAngularVelocity - desiredOmega) * maxFrictionTorque;

@@ -177,32 +177,40 @@ namespace GravityDefiedGame.Models
             );
         }
 
-        public static void AddRectangle(
-            List<SkeletonPoint> points,
-            List<SkeletonLine> lines,
-            Vector2 start,
-            float width,
-            float height,
-            float angle,
-            SkeletonPointType pointType,
-            SkeletonLineType lineType)
+        public static void AddRectangle(List<SkeletonPoint> points, List<SkeletonLine> lines, Vector2 origin, float width, float height, float angle,
+                                 SkeletonPointType pointType, SkeletonLineType lineType)
         {
             int startIndex = points.Count;
 
-            points.Add(new SkeletonPoint(start, pointType));
-            points.Add(new SkeletonPoint(PhysicsComponent.Offset(start, width, 0, angle), pointType));
-            points.Add(new SkeletonPoint(PhysicsComponent.Offset(start, width, height, angle), pointType));
-            points.Add(new SkeletonPoint(PhysicsComponent.Offset(start, 0, height, angle), pointType));
+            points.Add(new SkeletonPoint(origin, pointType));
+            points.Add(new SkeletonPoint(Offset(origin, width, 0, angle), pointType));
+            points.Add(new SkeletonPoint(Offset(origin, width, height, angle), pointType));
+            points.Add(new SkeletonPoint(Offset(origin, 0, height, angle), pointType));
 
             AddRectangleLines(lines, startIndex, lineType);
         }
 
-        public static void AddRectangleLines(List<SkeletonLine> lines, int startIndex, SkeletonLineType type)
+        public static void AddRectangleLines(List<SkeletonLine> lines, int startIndex, SkeletonLineType lineType)
         {
-            lines.Add(new SkeletonLine(startIndex, startIndex + 1, type));
-            lines.Add(new SkeletonLine(startIndex + 1, startIndex + 2, type));
-            lines.Add(new SkeletonLine(startIndex + 2, startIndex + 3, type));
-            lines.Add(new SkeletonLine(startIndex + 3, startIndex, type));
+            lines.Add(new SkeletonLine(startIndex, startIndex + 1, lineType));
+            lines.Add(new SkeletonLine(startIndex + 1, startIndex + 2, lineType));
+            lines.Add(new SkeletonLine(startIndex + 2, startIndex + 3, lineType));
+            lines.Add(new SkeletonLine(startIndex + 3, startIndex, lineType));
+        }
+
+        protected internal static Vector2 Offset(Vector2 point, float dx, float dy, float angle)
+        {
+            float s = (float)Math.Sin(angle);
+            float c = (float)Math.Cos(angle);
+            return new Vector2(
+                point.X + dx * c - dy * s,
+                point.Y + dx * s + dy * c
+            );
+        }
+
+        protected internal static (double cos, double sin) GetTrigsFromAngle(float angle)
+        {
+            return (Math.Cos(angle), Math.Sin(angle));
         }
     }
 }
