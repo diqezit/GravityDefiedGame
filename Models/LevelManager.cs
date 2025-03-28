@@ -9,7 +9,6 @@ using static System.Math;
 using GravityDefiedGame.Views;
 using static GravityDefiedGame.Models.LevelConstants;
 using static GravityDefiedGame.Models.GeneratorConstants;
-using static GravityDefiedGame.Models.Level.LevelGenerator.TerrainSegmentType;
 
 namespace GravityDefiedGame.Models
 {
@@ -51,17 +50,19 @@ namespace GravityDefiedGame.Models
         public Color TerrainColor;
         public Color SafeZoneColor;
 
-        public static LevelVisualProperties FromTheme()
+        public static LevelVisualProperties FromTheme() => new()
         {
-            return new LevelVisualProperties
-            {
-                VerticalLineColor = ThemeManager.CurrentTheme.VerticalLineColor,
-                BackgroundColor = ThemeManager.CurrentTheme.BackgroundColor,
-                TerrainColor = ThemeManager.CurrentTheme.TerrainColor,
-                SafeZoneColor = ThemeManager.CurrentTheme.SafeZoneColor
-            };
-        }
+            VerticalLineColor = ThemeManager.CurrentTheme.VerticalLineColor,
+            BackgroundColor = ThemeManager.CurrentTheme.BackgroundColor,
+            TerrainColor = ThemeManager.CurrentTheme.TerrainColor,
+            SafeZoneColor = ThemeManager.CurrentTheme.SafeZoneColor
+        };
     }
+
+    public enum LevelTheme { Desert, Mountain, Arctic, Volcano }
+    public enum TerrainSegmentType { Plateau, Spike, Depression, StepUp, StepDown, Wave, Jump }
+
+    public record TerrainConfig(float Length, float TopOffset, float BottomOffset, int Difficulty);
 
     public static class LevelConstants
     {
@@ -69,51 +70,45 @@ namespace GravityDefiedGame.Models
             DefaultGroundY = 500.0f,
             FinishReachDistance = 50.0f,
             DeltaX = 0.1f,
-            InterpolationFactor = 1.0f;
-
-        public const int DefaultSeedMultiplier = 100;
-
-        public const float
             BaseTerrainLength = 3000.0f,
             TerrainLengthIncreasePerLevel = 500.0f,
-            MaxTerrainLength = 10000.0f;
+            MaxTerrainLength = 10000.0f,
+            FixedSafeZoneLength = 300.0f;
 
-        public const float FixedSafeZoneLength = 300.0f;
+        public const int DefaultSeedMultiplier = 100;
     }
 
     public static class GeneratorConstants
     {
-        public const float DefaultTerrainHeight = 500.0f;
-
         public const float
+            DefaultTerrainHeight = 500.0f,
             BaseSpikeHeight = 50.0f,
             SpikeHeightIncreasePerLevel = 10.0f,
             MaxSpikeHeight = 200.0f,
             SpikeHeightFactor = 0.5f,
-            SpikeMidFactor = 0.7f;
-
-        public const float
+            SpikeMidFactor = 0.7f,
             BaseDepressionDepth = 30.0f,
             DepressionDepthIncreasePerLevel = 7.5f,
-            MaxDepressionDepth = 150.0f;
-
-        public const float
+            MaxDepressionDepth = 150.0f,
             SmoothingFactor = 0.7f,
             BasePreviousPointWeight = 0.3f,
             PreviousPointWeightDecreasePerLevel = 0.02f,
             MinPreviousPointWeight = 0.1f,
-            GaussianFactor = 2.0f;
-
-        public const float
+            GaussianFactor = 2.0f,
             StartZonePercent = 0.1f,
-            EndZonePercent = 0.9f;
-
-        public const float
+            EndZonePercent = 0.9f,
             PointOffset = 50.0f,
             StartPointXOffset = 100.0f,
             StartPointYOffset = -80.0f,
             FinishPointXOffset = -100.0f,
-            FinishPointYOffset = -50.0f;
+            FinishPointYOffset = -50.0f,
+            SegmentDifficultyThreshold = 5,
+            SegmentDifficultyChance = 0.2f,
+            SegmentDifficultyDivisor = 10.0f,
+            FinalPlateauChance = 0.7f,
+            NoiseThreshold = 3,
+            NoiseAmplitudeFactor = 5.0f,
+            MaxNoiseAmplitude = 25.0f;
 
         public const int
             BasePointCount = 60,
@@ -123,33 +118,11 @@ namespace GravityDefiedGame.Models
             SegmentCountIncreasePerLevel = 1,
             MaxSegmentCount = 15,
             MinSafeZonePointCount = 3,
-            PointCountReductionFactor = 5;
-
-        public const int
+            PointCountReductionFactor = 5,
             MinTerrainTypeCount = 3,
             MaxTerrainTypeCount = 7,
             TerrainTypeUnlockLevel = 5;
-
-        public const float
-            SegmentDifficultyThreshold = 5,
-            SegmentDifficultyChance = 0.2f,
-            SegmentDifficultyDivisor = 10.0f,
-            FinalPlateauChance = 0.7f;
-
-        public const float
-            NoiseThreshold = 3,
-            NoiseAmplitudeFactor = 5.0f,
-            MaxNoiseAmplitude = 25.0f;
     }
-
-    public record TerrainConfig(
-        float Length,
-        float TopOffset,
-        float BottomOffset,
-        int Difficulty
-    );
-
-    public enum LevelTheme { Desert, Mountain, Arctic, Volcano }
 
     public class Level : PhysicsComponent, ILevelPhysics, ILevelVisualData
     {
@@ -171,7 +144,6 @@ namespace GravityDefiedGame.Models
             }
 
             public int CompareTo(TerrainPoint other) => X.CompareTo(other.X);
-
             public int CompareTo(float x) => X.CompareTo(x);
         }
 
@@ -187,15 +159,14 @@ namespace GravityDefiedGame.Models
         public float SafeZoneEndLength { get; private set; }
 
         private LevelVisualProperties _visualProperties;
+        private int _currentSegmentIndex = 0;
+        private float _lastQueryX = float.NaN;
+        private float _lastGroundY = DefaultGroundY;
 
         public Color VerticalLineColor => _visualProperties.VerticalLineColor;
         public Color BackgroundColor => _visualProperties.BackgroundColor;
         public Color TerrainColor => _visualProperties.TerrainColor;
         public Color SafeZoneColor => _visualProperties.SafeZoneColor;
-
-        private int _currentSegmentIndex = 0;
-        private float _lastQueryX = float.NaN;
-        private float _lastGroundY = DefaultGroundY;
 
         public Level(int id, string name, int? seed = null, int? difficulty = null)
         {
@@ -209,14 +180,11 @@ namespace GravityDefiedGame.Models
             GenerateLevel(levelSeed);
         }
 
-        public Level()
-        {
-            _visualProperties = LevelVisualProperties.FromTheme();
-        }
+        public Level() => _visualProperties = LevelVisualProperties.FromTheme();
 
         public float GetGroundYAtX(float x)
         {
-            if (!float.IsNaN(_lastQueryX) && Math.Abs(_lastQueryX - x) < float.Epsilon)
+            if (!float.IsNaN(_lastQueryX) && Abs(_lastQueryX - x) < float.Epsilon)
                 return _lastGroundY;
 
             if (IsOutOfBounds(x))
@@ -236,17 +204,14 @@ namespace GravityDefiedGame.Models
         public bool IsFinishReached(Vector2 pos) =>
             Vector2.Distance(pos, FinishPoint) <= FinishReachDistance;
 
-        public void UpdateVisualProperties(LevelVisualProperties visualProps)
-        {
+        public void UpdateVisualProperties(LevelVisualProperties visualProps) =>
             _visualProperties = visualProps;
-        }
 
         private void GenerateLevel(int seed)
         {
-            var gen = new LevelGenerator(seed, Difficulty, new SegmentSelection());
-            float terrainLength = (float)Min(
-                BaseTerrainLength +
-                TerrainLengthIncreasePerLevel * Difficulty,
+            var gen = new LevelGenerator(seed, Difficulty);
+            float terrainLength = Min(
+                BaseTerrainLength + TerrainLengthIncreasePerLevel * Difficulty,
                 MaxTerrainLength
             );
 
@@ -269,13 +234,9 @@ namespace GravityDefiedGame.Models
             if (TerrainPoints.Count == 0)
                 return DefaultGroundY;
 
-            if (x < TerrainPoints[0].X)
-                return TerrainPoints[0].YMiddle;
-
-            if (x > TerrainPoints[^1].X)
-                return TerrainPoints[^1].YMiddle;
-
-            return DefaultGroundY;
+            return x < TerrainPoints[0].X
+                ? TerrainPoints[0].YMiddle
+                : TerrainPoints[^1].YMiddle;
         }
 
         private void UpdateSegmentIndex(float x)
@@ -350,484 +311,345 @@ namespace GravityDefiedGame.Models
 
             return Min(Max(0, left), TerrainPoints.Count - 2);
         }
+    }
 
-        public class LevelGenerator
+    public class LevelGenerator
+    {
+        private readonly Random _rand;
+        private readonly int _difficulty;
+        private readonly float _spikeHeight;
+        private readonly float _depressionDepth;
+        private readonly float _previousPointWeight;
+        private readonly int _segmentCount;
+        private readonly int _pointCount;
+        private readonly int _terrainTypeCount;
+        private readonly float[] _segmentBoundaries;
+        private readonly List<(TerrainSegmentType Type, object? Parameters)> _segments = new();
+
+        public LevelGenerator(int seed, int difficulty)
         {
-            public enum TerrainSegmentType
-            {
-                Plateau, Spike, Depression, StepUp, StepDown, Wave, Jump
-            }
-
-            public abstract class SegmentParameters { }
-
-            public class SpikeParameters : SegmentParameters
-            {
-                public float Height { get; }
-                public float Pos { get; }
-
-                public SpikeParameters(float height, float pos)
-                {
-                    Height = height;
-                    Pos = pos;
-                }
-            }
-
-            public class DepressionParameters : SegmentParameters
-            {
-                public float Depth { get; }
-                public float Pos { get; }
-
-                public DepressionParameters(float depth, float pos)
-                {
-                    Depth = depth;
-                    Pos = pos;
-                }
-            }
-
-            public class StepUpParameters : SegmentParameters
-            {
-                public float Height { get; }
-
-                public StepUpParameters(float height)
-                {
-                    Height = height;
-                }
-            }
-
-            public class StepDownParameters : SegmentParameters
-            {
-                public float Depth { get; }
-
-                public StepDownParameters(float depth)
-                {
-                    Depth = depth;
-                }
-            }
-
-            public class WaveParameters : SegmentParameters
-            {
-                public float Amplitude { get; }
-                public float Frequency { get; }
-
-                public WaveParameters(float amplitude, float frequency)
-                {
-                    Amplitude = amplitude;
-                    Frequency = frequency;
-                }
-            }
-
-            public class JumpParameters : SegmentParameters
-            {
-                public float Height { get; }
-                public float JumpPos { get; }
-
-                public JumpParameters(float height, float jumpPos)
-                {
-                    Height = height;
-                    JumpPos = jumpPos;
-                }
-            }
-
-            private readonly Random _rand;
-            private readonly List<(TerrainSegmentType Type, SegmentParameters? Parameters)> _segments = new();
-            private readonly int _difficulty;
-            private readonly float _spikeHeight;
-            private readonly float _depressionDepth;
-            private readonly float _previousPointWeight;
-            private readonly int _segmentCount;
-            private readonly int _pointCount;
-            private readonly int _terrainTypeCount;
-            private readonly ISegmentSelection _segment;
-            private readonly float[] _segmentBoundaries;
-
-            public LevelGenerator(int seed, int difficulty, ISegmentSelection segment)
-            {
-                _rand = new Random(seed);
-                _difficulty = Max(1, difficulty);
-                _segment = segment ?? throw new ArgumentNullException(nameof(segment));
-
-                _spikeHeight = (float)Min(
-                    BaseSpikeHeight +
-                    SpikeHeightIncreasePerLevel * _difficulty,
-                    MaxSpikeHeight
-                );
-
-                _depressionDepth = (float)Min(
-                    BaseDepressionDepth +
-                    DepressionDepthIncreasePerLevel * _difficulty,
-                    MaxDepressionDepth
-                );
-
-                _previousPointWeight = (float)Max(
-                    BasePreviousPointWeight -
-                    PreviousPointWeightDecreasePerLevel * _difficulty,
-                    MinPreviousPointWeight
-                );
-
-                int baseSegments = BaseSegmentCount +
-                                  SegmentCountIncreasePerLevel * _difficulty;
-                int variation = _rand.Next(-2, 3);
-                _segmentCount = Max(1, Min(baseSegments + variation, MaxSegmentCount));
-
-                _pointCount = Min(
-                    BasePointCount +
-                    PointCountIncreasePerLevel * _difficulty,
-                    MaxPointCount
-                );
-
-                _terrainTypeCount = Min(
-                    MinTerrainTypeCount +
-                    (_difficulty / TerrainTypeUnlockLevel),
-                    MaxTerrainTypeCount
-                );
-
-                _segmentBoundaries = new float[_segmentCount + 1];
-                _segmentBoundaries[0] = 0f;
-
-                for (int i = 1; i < _segmentCount; i++)
-                    _segmentBoundaries[i] = (float)_rand.NextDouble();
-
-                _segmentBoundaries[_segmentCount] = 1f;
-                Array.Sort(_segmentBoundaries);
-
-                GenerateSegmentTypes();
-            }
-
-            private void GenerateSegmentTypes()
-            {
-                _segments.Clear();
-                _segments.Add((Plateau, null));
-
-                for (int i = 1; i < _segmentCount; i++)
-                {
-                    TerrainSegmentType nextType = _segment.SelectSegment(
-                        _segments.Select(s => s.Type).ToList(),
-                        i,
-                        _terrainTypeCount,
-                        _rand,
-                        _difficulty
-                    );
-
-                    _segments.Add((nextType, GenerateParameters(nextType)));
-                }
-
-                if (_segments.Count > 2 && _rand.NextDouble() < FinalPlateauChance)
-                    _segments[^1] = (Plateau, null);
-            }
-
-            private SegmentParameters? GenerateParameters(TerrainSegmentType type)
-            {
-                switch (type)
-                {
-                    case Plateau:
-                        return null;
-
-                    case Spike:
-                        return new SpikeParameters(
-                            (float)(_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _spikeHeight,
-                            (float)_rand.NextDouble()
-                        );
-
-                    case Depression:
-                        return new DepressionParameters(
-                            (float)(_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _depressionDepth,
-                            (float)_rand.NextDouble()
-                        );
-
-                    case StepUp:
-                        return new StepUpParameters(
-                            (float)_rand.NextDouble() * _spikeHeight * SpikeMidFactor
-                        );
-
-                    case StepDown:
-                        return new StepDownParameters(
-                            (float)_rand.NextDouble() * _depressionDepth * SpikeMidFactor
-                        );
-
-                    case Wave:
-                        return new WaveParameters(
-                            (float)_rand.NextDouble() * _spikeHeight * 0.5f,
-                            2 + (float)_rand.NextDouble() * 2
-                        );
-
-                    case Jump:
-                        return new JumpParameters(
-                            (float)_rand.NextDouble() * _spikeHeight,
-                            0.3f + (float)_rand.NextDouble() * 0.4f
-                        );
-
-                    default:
-                        throw new ArgumentException($"Неизвестный тип сегмента: {type}");
-                }
-            }
-
-            private float GetRawTerrainHeight(float baseY, float progress)
-            {
-                int segmentIndex = FindSegmentIndex(progress);
-                float segStart = _segmentBoundaries[segmentIndex];
-                float segEnd = _segmentBoundaries[segmentIndex + 1];
-
-                float segmentProgress = (progress - segStart) / (segEnd - segStart);
-                segmentProgress = (segmentProgress + (float)(_rand.NextDouble() * 0.3)) % 1.0f;
-
-                var (type, parameters) = _segments[segmentIndex];
-                return baseY + ApplyVariation(type, parameters, segmentProgress);
-            }
-
-            private int FindSegmentIndex(float progress)
-            {
-                int index = Array.BinarySearch(_segmentBoundaries, progress);
-
-                if (index < 0)
-                    index = ~index - 1;
-
-                return Max(0, Min(index, _segmentBoundaries.Length - 2));
-            }
-
-            private float ApplyVariation(TerrainSegmentType type, SegmentParameters? parameters, float progress)
-            {
-                switch (type)
-                {
-                    case Plateau:
-                        return 0;
-
-                    case Spike:
-                        {
-                            var p = (SpikeParameters)parameters!;
-                            return p.Height * (float)Exp(-GaussianFactor * Pow(progress - p.Pos, 2));
-                        }
-
-                    case Depression:
-                        {
-                            var p = (DepressionParameters)parameters!;
-                            return -p.Depth * (float)Exp(-GaussianFactor * Pow(progress - p.Pos, 2));
-                        }
-
-                    case StepUp:
-                        {
-                            var p = (StepUpParameters)parameters!;
-                            return p.Height * (float)Min(1.0, progress * 2);
-                        }
-
-                    case StepDown:
-                        {
-                            var p = (StepDownParameters)parameters!;
-                            return -p.Depth * (float)Min(1.0, progress * 2);
-                        }
-
-                    case Wave:
-                        {
-                            var p = (WaveParameters)parameters!;
-                            return p.Amplitude * (float)Sin((p.Frequency * progress + _rand.NextDouble()) * PI);
-                        }
-
-                    case Jump:
-                        {
-                            var p = (JumpParameters)parameters!;
-                            return progress > p.JumpPos ? p.Height : 0;
-                        }
-
-                    default:
-                        throw new ArgumentException($"Неизвестный тип сегмента: {type}");
-                }
-            }
-
-            private static float ApplyTransitions(float y, float baseY, float progress)
-            {
-                if (progress < StartZonePercent)
-                    return baseY + (y - baseY) * (progress / StartZonePercent);
-
-                if (progress > EndZonePercent)
-                {
-                    float normalizedProgress = (progress - EndZonePercent) / (1 - EndZonePercent);
-                    return y + (baseY - y) * normalizedProgress;
-                }
-
-                return y;
-            }
-
-            private float CalculateTerrainHeight(float baseY, float progress, float lastY)
-            {
-                float raw = GetRawTerrainHeight(baseY, progress);
-                float trans = ApplyTransitions(raw, baseY, progress);
-                float smoothValue = lastY * _previousPointWeight + trans * SmoothingFactor;
-                return ApplyNoise(smoothValue);
-            }
-
-            private float ApplyNoise(float value)
-            {
-                if (_difficulty > NoiseThreshold)
-                {
-                    float noiseAmplitude = (float)Min(
-                        NoiseAmplitudeFactor * (_difficulty - NoiseThreshold),
-                        MaxNoiseAmplitude
-                    );
-
-                    value += (float)(_rand.NextDouble() * 2 - 1) * noiseAmplitude;
-                }
-                return value;
-            }
-
-            public (List<Level.TerrainPoint> Points, float Length, Vector2 StartPoint, Vector2 FinishPoint,
-                   float SafeZoneStart, float SafeZoneEnd) GenerateTerrain(TerrainConfig config)
-            {
-                float length = config.Length;
-                var pts = new List<Level.TerrainPoint>(capacity: _pointCount + 10);
-                float baseY = DefaultTerrainHeight;
-                float safeZoneLength = FixedSafeZoneLength;
-
-                Vector2 startPoint = CreateStartPoint(pts, baseY, config);
-                GenerateSafeZone(pts, baseY, config, 0, safeZoneLength);
-                GenerateTerrainPoints(pts, config, baseY, length, safeZoneLength, safeZoneLength);
-                GenerateSafeZone(pts, baseY, config, length - safeZoneLength, safeZoneLength);
-                Vector2 finishPoint = CreateEndPoint(pts, baseY, length, config);
-
-                return (pts, length, startPoint, finishPoint, safeZoneLength, safeZoneLength);
-            }
-
-            private static Vector2 CreateStartPoint(List<Level.TerrainPoint> pts, float baseY, TerrainConfig config)
-            {
-                pts.Add(new Level.TerrainPoint(
-                    x: 0,
-                    yTop: baseY - config.TopOffset,
-                    yMiddle: baseY,
-                    yBottom: baseY + config.BottomOffset,
-                    isSafeZone: true
-                ));
-
-                return new Vector2(
-                    StartPointXOffset,
-                    baseY + StartPointYOffset
-                );
-            }
-
-            private static Vector2 CreateEndPoint(List<Level.TerrainPoint> pts, float baseY, float length, TerrainConfig config)
-            {
-                pts.Add(new Level.TerrainPoint(
-                    x: length,
-                    yTop: baseY - config.TopOffset,
-                    yMiddle: baseY,
-                    yBottom: baseY + config.BottomOffset,
-                    isSafeZone: true
-                ));
-
-                return new Vector2(
-                    length + FinishPointXOffset,
-                    baseY + FinishPointYOffset
-                );
-            }
-
-            private void GenerateSafeZone(List<Level.TerrainPoint> pts, float baseY, TerrainConfig config,
-                                         float startX, float length)
-            {
-                int count = Max(
-                    MinSafeZonePointCount,
-                    (int)(length / config.Length * _pointCount * 0.5)
-                );
-
-                float step = length / count;
-
-                for (int i = 1; i <= count; i++)
-                {
-                    pts.Add(new Level.TerrainPoint(
-                        x: startX + i * step,
-                        yTop: baseY - config.TopOffset,
-                        yMiddle: baseY,
-                        yBottom: baseY + config.BottomOffset,
-                        isSafeZone: true
-                    ));
-                }
-            }
-
-            private void GenerateTerrainPoints(List<Level.TerrainPoint> pts, TerrainConfig config,
-                                              float baseY, float length, float safeStart, float safeEnd)
-            {
-                float midLen = length - safeStart - safeEnd;
-                float lastY = baseY;
-
-                int count = _pointCount - pts.Count - PointCountReductionFactor;
-                count = Max(1, count);
-
-                float step = midLen / count;
-
-                for (int i = 1; i <= count; i++)
-                {
-                    float progress = (float)i / count;
-                    float x = safeStart + i * step;
-                    float y = CalculateTerrainHeight(baseY, progress, lastY);
-
-                    pts.Add(new Level.TerrainPoint(
-                        x: x,
-                        yTop: y - config.TopOffset,
-                        yMiddle: y,
-                        yBottom: y + config.BottomOffset,
-                        isSafeZone: false
-                    ));
-
-                    lastY = y;
-                }
-            }
+            _rand = new Random(seed);
+            _difficulty = Max(1, difficulty);
+
+            _spikeHeight = Min(
+                BaseSpikeHeight + SpikeHeightIncreasePerLevel * _difficulty,
+                MaxSpikeHeight
+            );
+
+            _depressionDepth = Min(
+                BaseDepressionDepth + DepressionDepthIncreasePerLevel * _difficulty,
+                MaxDepressionDepth
+            );
+
+            _previousPointWeight = Max(
+                BasePreviousPointWeight - PreviousPointWeightDecreasePerLevel * _difficulty,
+                MinPreviousPointWeight
+            );
+
+            int baseSegments = BaseSegmentCount + SegmentCountIncreasePerLevel * _difficulty;
+            int variation = _rand.Next(-2, 3);
+            _segmentCount = Max(1, Min(baseSegments + variation, MaxSegmentCount));
+
+            _pointCount = Min(
+                BasePointCount + PointCountIncreasePerLevel * _difficulty,
+                MaxPointCount
+            );
+
+            _terrainTypeCount = Min(
+                MinTerrainTypeCount + (_difficulty / TerrainTypeUnlockLevel),
+                MaxTerrainTypeCount
+            );
+
+            _segmentBoundaries = new float[_segmentCount + 1];
+            _segmentBoundaries[0] = 0f;
+            for (int i = 1; i < _segmentCount; i++)
+                _segmentBoundaries[i] = (float)_rand.NextDouble();
+            _segmentBoundaries[_segmentCount] = 1f;
+            Array.Sort(_segmentBoundaries);
+
+            GenerateSegmentTypes();
         }
-    }
 
-    public class LevelComponentFactory
-    {
-        public static ILevelPhysics CreatePhysicsData(Level level) => level;
-
-        public static ILevelVisualData CreateVisualData(Level level) => level;
-    }
-
-    public interface ISegmentSelection
-    {
-        Level.LevelGenerator.TerrainSegmentType SelectSegment(
-            List<Level.LevelGenerator.TerrainSegmentType> previousSegments,
-            int currentIndex,
-            int terrainTypeCount,
-            Random rand,
-            int difficulty);
-    }
-
-    public class SegmentSelection : ISegmentSelection
-    {
-        public Level.LevelGenerator.TerrainSegmentType SelectSegment(
-            List<Level.LevelGenerator.TerrainSegmentType> previousSegments,
-            int currentIndex,
-            int terrainTypeCount,
-            Random rand,
-            int difficulty)
+        private void GenerateSegmentTypes()
         {
-            var excludedTypes = new HashSet<Level.LevelGenerator.TerrainSegmentType>();
+            _segments.Clear();
+            _segments.Add((TerrainSegmentType.Plateau, null));
 
-            if (currentIndex > 0 && previousSegments.Count > 0)
-                excludedTypes.Add(previousSegments[currentIndex - 1]);
-
-            var nextType = GetRandomSegmentType(rand, terrainTypeCount, excludedTypes);
-
-            if (difficulty > SegmentDifficultyThreshold &&
-                rand.NextDouble() < SegmentDifficultyChance * (difficulty / SegmentDifficultyDivisor))
+            for (int i = 1; i < _segmentCount; i++)
             {
-                excludedTypes.Add(Level.LevelGenerator.TerrainSegmentType.Plateau);
-                nextType = GetRandomSegmentType(rand, terrainTypeCount, excludedTypes);
+                TerrainSegmentType nextType = SelectSegment(i);
+                _segments.Add((nextType, GenerateParameters(nextType)));
+            }
+
+            if (_segments.Count > 2 && _rand.NextDouble() < FinalPlateauChance)
+                _segments[^1] = (TerrainSegmentType.Plateau, null);
+        }
+
+        private TerrainSegmentType SelectSegment(int currentIndex)
+        {
+            var excludedTypes = new HashSet<TerrainSegmentType>();
+
+            if (currentIndex > 0 && _segments.Count > 0)
+                excludedTypes.Add(_segments[currentIndex - 1].Type);
+
+            var nextType = GetRandomSegmentType(excludedTypes);
+
+            if (_difficulty > SegmentDifficultyThreshold &&
+                _rand.NextDouble() < SegmentDifficultyChance * (_difficulty / SegmentDifficultyDivisor))
+            {
+                excludedTypes.Add(TerrainSegmentType.Plateau);
+                nextType = GetRandomSegmentType(excludedTypes);
             }
 
             return nextType;
         }
 
-        private Level.LevelGenerator.TerrainSegmentType GetRandomSegmentType(
-            Random rand,
-            int terrainTypeCount,
-            HashSet<Level.LevelGenerator.TerrainSegmentType> excludedTypes)
+        private TerrainSegmentType GetRandomSegmentType(HashSet<TerrainSegmentType> excludedTypes)
         {
-            if (excludedTypes.Count >= terrainTypeCount)
-                return (Level.LevelGenerator.TerrainSegmentType)rand.Next(terrainTypeCount);
+            if (excludedTypes.Count >= _terrainTypeCount)
+                return (TerrainSegmentType)_rand.Next(_terrainTypeCount);
 
-            Level.LevelGenerator.TerrainSegmentType type;
+            TerrainSegmentType type;
             do
             {
-                type = (Level.LevelGenerator.TerrainSegmentType)rand.Next(terrainTypeCount);
+                type = (TerrainSegmentType)_rand.Next(_terrainTypeCount);
             } while (excludedTypes.Contains(type));
 
             return type;
+        }
+
+        private object? GenerateParameters(TerrainSegmentType type)
+        {
+            switch (type)
+            {
+                case TerrainSegmentType.Plateau:
+                    return null;
+
+                case TerrainSegmentType.Spike:
+                    return new
+                    {
+                        Height = (float)(_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _spikeHeight,
+                        Pos = (float)_rand.NextDouble()
+                    };
+
+                case TerrainSegmentType.Depression:
+                    return new
+                    {
+                        Depth = (float)(_rand.NextDouble() * SpikeHeightFactor + SpikeHeightFactor) * _depressionDepth,
+                        Pos = (float)_rand.NextDouble()
+                    };
+
+                case TerrainSegmentType.StepUp:
+                    return new { Height = (float)_rand.NextDouble() * _spikeHeight * SpikeMidFactor };
+
+                case TerrainSegmentType.StepDown:
+                    return new { Depth = (float)_rand.NextDouble() * _depressionDepth * SpikeMidFactor };
+
+                case TerrainSegmentType.Wave:
+                    return new
+                    {
+                        Amplitude = (float)_rand.NextDouble() * _spikeHeight * 0.5f,
+                        Frequency = 2 + (float)_rand.NextDouble() * 2
+                    };
+
+                case TerrainSegmentType.Jump:
+                    return new
+                    {
+                        Height = (float)_rand.NextDouble() * _spikeHeight,
+                        JumpPos = 0.3f + (float)_rand.NextDouble() * 0.4f
+                    };
+
+                default:
+                    throw new ArgumentException($"Неизвестный тип сегмента: {type}");
+            }
+        }
+
+        private float GetRawTerrainHeight(float baseY, float progress)
+        {
+            int segmentIndex = FindSegmentIndex(progress);
+            float segStart = _segmentBoundaries[segmentIndex];
+            float segEnd = _segmentBoundaries[segmentIndex + 1];
+
+            float segmentProgress = (progress - segStart) / (segEnd - segStart);
+            segmentProgress = (segmentProgress + (float)(_rand.NextDouble() * 0.3)) % 1.0f;
+
+            var (type, parameters) = _segments[segmentIndex];
+            return baseY + ApplyVariation(type, parameters, segmentProgress);
+        }
+
+        private int FindSegmentIndex(float progress)
+        {
+            int index = Array.BinarySearch(_segmentBoundaries, progress);
+            if (index < 0) index = ~index - 1;
+            return Max(0, Min(index, _segmentBoundaries.Length - 2));
+        }
+
+        private float ApplyVariation(TerrainSegmentType type, object? parameters, float progress)
+        {
+            switch (type)
+            {
+                case TerrainSegmentType.Plateau:
+                    return 0;
+
+                case TerrainSegmentType.Spike:
+                    {
+                        dynamic p = parameters!;
+                        return p.Height * (float)Exp(-GaussianFactor * Pow(progress - p.Pos, 2));
+                    }
+
+                case TerrainSegmentType.Depression:
+                    {
+                        dynamic p = parameters!;
+                        return -p.Depth * (float)Exp(-GaussianFactor * Pow(progress - p.Pos, 2));
+                    }
+
+                case TerrainSegmentType.StepUp:
+                    {
+                        dynamic p = parameters!;
+                        return p.Height * (float)Min(1.0, progress * 2);
+                    }
+
+                case TerrainSegmentType.StepDown:
+                    {
+                        dynamic p = parameters!;
+                        return -p.Depth * (float)Min(1.0, progress * 2);
+                    }
+
+                case TerrainSegmentType.Wave:
+                    {
+                        dynamic p = parameters!;
+                        return p.Amplitude * (float)Sin((p.Frequency * progress + _rand.NextDouble()) * PI);
+                    }
+
+                case TerrainSegmentType.Jump:
+                    {
+                        dynamic p = parameters!;
+                        return progress > p.JumpPos ? p.Height : 0;
+                    }
+
+                default:
+                    throw new ArgumentException($"Неизвестный тип сегмента: {type}");
+            }
+        }
+
+        private static float ApplyTransitions(float y, float baseY, float progress)
+        {
+            if (progress < StartZonePercent)
+                return baseY + (y - baseY) * (progress / StartZonePercent);
+
+            if (progress > EndZonePercent)
+            {
+                float normalizedProgress = (progress - EndZonePercent) / (1 - EndZonePercent);
+                return y + (baseY - y) * normalizedProgress;
+            }
+
+            return y;
+        }
+
+        private float CalculateTerrainHeight(float baseY, float progress, float lastY)
+        {
+            float raw = GetRawTerrainHeight(baseY, progress);
+            float trans = ApplyTransitions(raw, baseY, progress);
+            float smoothValue = lastY * _previousPointWeight + trans * SmoothingFactor;
+            return ApplyNoise(smoothValue);
+        }
+
+        private float ApplyNoise(float value)
+        {
+            if (_difficulty > NoiseThreshold)
+            {
+                float noiseAmplitude = Min(
+                    NoiseAmplitudeFactor * (_difficulty - NoiseThreshold),
+                    MaxNoiseAmplitude
+                );
+
+                value += (float)(_rand.NextDouble() * 2 - 1) * noiseAmplitude;
+            }
+            return value;
+        }
+
+        public (List<Level.TerrainPoint> Points, float Length, Vector2 StartPoint, Vector2 FinishPoint,
+               float SafeZoneStart, float SafeZoneEnd) GenerateTerrain(TerrainConfig config)
+        {
+            float length = config.Length;
+            var pts = new List<Level.TerrainPoint>(_pointCount + 10);
+            float baseY = DefaultTerrainHeight;
+            float safeZoneLength = FixedSafeZoneLength;
+
+            Vector2 startPoint = CreateStartPoint(pts, baseY, config);
+            GenerateSafeZone(pts, baseY, config, 0, safeZoneLength);
+            GenerateTerrainPoints(pts, config, baseY, length, safeZoneLength, safeZoneLength);
+            GenerateSafeZone(pts, baseY, config, length - safeZoneLength, safeZoneLength);
+            Vector2 finishPoint = CreateEndPoint(pts, baseY, length, config);
+
+            return (pts, length, startPoint, finishPoint, safeZoneLength, safeZoneLength);
+        }
+
+        private static Vector2 CreateStartPoint(List<Level.TerrainPoint> pts, float baseY, TerrainConfig config)
+        {
+            pts.Add(new Level.TerrainPoint(
+                0, baseY - config.TopOffset, baseY, baseY + config.BottomOffset, true
+            ));
+
+            return new Vector2(StartPointXOffset, baseY + StartPointYOffset);
+        }
+
+        private static Vector2 CreateEndPoint(List<Level.TerrainPoint> pts, float baseY, float length, TerrainConfig config)
+        {
+            pts.Add(new Level.TerrainPoint(
+                length, baseY - config.TopOffset, baseY, baseY + config.BottomOffset, true
+            ));
+
+            return new Vector2(length + FinishPointXOffset, baseY + FinishPointYOffset);
+        }
+
+        private void GenerateSafeZone(List<Level.TerrainPoint> pts, float baseY, TerrainConfig config,
+                                     float startX, float length)
+        {
+            int count = Max(
+                MinSafeZonePointCount,
+                (int)(length / config.Length * _pointCount * 0.5)
+            );
+
+            float step = length / count;
+
+            for (int i = 1; i <= count; i++)
+            {
+                pts.Add(new Level.TerrainPoint(
+                    startX + i * step,
+                    baseY - config.TopOffset,
+                    baseY,
+                    baseY + config.BottomOffset,
+                    true
+                ));
+            }
+        }
+
+        private void GenerateTerrainPoints(List<Level.TerrainPoint> pts, TerrainConfig config,
+                                          float baseY, float length, float safeStart, float safeEnd)
+        {
+            float midLen = length - safeStart - safeEnd;
+            float lastY = baseY;
+
+            int count = Max(1, _pointCount - pts.Count - PointCountReductionFactor);
+            float step = midLen / count;
+
+            for (int i = 1; i <= count; i++)
+            {
+                float progress = (float)i / count;
+                float x = safeStart + i * step;
+                float y = CalculateTerrainHeight(baseY, progress, lastY);
+
+                pts.Add(new Level.TerrainPoint(
+                    x,
+                    y - config.TopOffset,
+                    y,
+                    y + config.BottomOffset,
+                    false
+                ));
+
+                lastY = y;
+            }
         }
     }
 }
