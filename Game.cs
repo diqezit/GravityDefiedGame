@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using GravityDefiedGame.Controllers;
 using GravityDefiedGame.Models;
@@ -16,20 +17,14 @@ namespace GravityDefiedGame
     {
         #region Constants
         private const float MAX_DELTA_TIME = 0.1f;
-        private const int SCREEN_WIDTH = 1000;
-        private const int SCREEN_HEIGHT = 700;
+        private const int SCREEN_WIDTH = 1000, SCREEN_HEIGHT = 700;
         #endregion
 
         #region Fields
-        private FontSystem _fontSystem;
-        private FontSystem _symbolFontSystem;
-        private DynamicSpriteFont _uiFont;
-        private DynamicSpriteFont _titleFont;
-        private DynamicSpriteFont _unicodeFont;
-        private Texture2D _pixelTexture;
-        private Texture2D _gradientTexture;
-        private Texture2D _logoTexture;
-        private Texture2D _fogTexture;
+        private FontSystem _fontSystem, _symbolFontSystem;
+        private DynamicSpriteFont _uiFont, _titleFont, _unicodeFont;
+        private Texture2D _pixelTexture, _gradientTexture, _logoTexture;
+        private List<Texture2D> _fogTextures = new List<Texture2D>();
         private readonly GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private GameController _gameController;
@@ -53,7 +48,7 @@ namespace GravityDefiedGame
 
             _gameController = new GameController();
             _gameController.GameEvent += GameController_GameEvent;
-            Log("Game", "Инициализация игры началась", () => Info("Game", "Конструктор завершен"));
+            Log("Game", "Game initialization started", () => Info("Game", "Constructor completed"));
         }
 
         protected override void Initialize()
@@ -64,95 +59,102 @@ namespace GravityDefiedGame
             ThemeManager.ThemeChanged += OnThemeChanged;
 
             base.Initialize();
-            Log("Game", "Игра инициализирована", () => Info("Game", "Initialize завершен"));
+            Log("Game", "Game initialized", () => Info("Game", "Initialize completed"));
         }
 
-        private void OnThemeChanged()
-        {
-            if (_gameController?.Motorcycle != null)
-            {
-                _gameController.Motorcycle.UpdateFromTheme();
-            }
-        }
+        private void OnThemeChanged() =>
+            _gameController?.Motorcycle?.UpdateFromTheme();
 
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            // Инициализация текстур
-            _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
-            _pixelTexture.SetData(new[] { Color.White });
-            _gradientTexture = CreateGradientTexture(GraphicsDevice, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-            // Загрузка дополнительных текстур для UI эффектов
-            try
-            {
-                _logoTexture = Content.Load<Texture2D>("Textures/logo");
-            }
-            catch
-            {
-                // Если логотип не найден, создаем пустую текстуру
-                _logoTexture = null;
-                Debug("Game", "Логотип не найден, будет использован текст");
-            }
-
-            try
-            {
-                _fogTexture = Content.Load<Texture2D>("Textures/fog");
-            }
-            catch
-            {
-                // Если текстура тумана не найдена, будет использован базовый эффект
-                _fogTexture = null;
-                Debug("Game", "Текстура тумана не найдена, будут использованы базовые эффекты");
-            }
-
-            // Инициализация шрифтов
-            _fontSystem = new FontSystem();
-            _symbolFontSystem = new FontSystem();
-
-            using (var regularFont = TitleContainer.OpenStream("Content/Fonts/NotoSans-Regular.ttf"))
-            using (var symbolFont = TitleContainer.OpenStream("Content/Fonts/NotoSansSymbols-VariableFont_wght.ttf"))
-            {
-                _fontSystem.AddFont(regularFont);
-                _symbolFontSystem.AddFont(symbolFont);
-            }
-
-            _uiFont = _fontSystem.GetFont(20);
-            _titleFont = _fontSystem.GetFont(40);
-            _unicodeFont = _symbolFontSystem.GetFont(24);
-
-            // Инициализация компонентов
-            _renderer = new Renderer(_spriteBatch, GraphicsDevice, _gameController, _camera);
-            _uiController = new UIController(
-                this,
-                _gameController,
-                _spriteBatch,
-                _uiFont,
-                _titleFont,
-                _unicodeFont,
-                _pixelTexture,
-                _gradientTexture,
-                _logoTexture,
-                _fogTexture,
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT);
+            InitializeTextures();
+            InitializeFonts();
+            InitializeComponents();
 
             _gameController.LoadLevels();
             _uiController.ShowMainMenu();
 
-            Log("Game", "Контент загружен", () => Info("Game", "LoadContent завершен"));
+            Log("Game", "Content loaded", () => Info("Game", "LoadContent completed"));
         }
 
-        private Texture2D CreateGradientTexture(GraphicsDevice graphicsDevice, int width, int height)
+        private void InitializeTextures()
         {
-            Texture2D texture = new Texture2D(graphicsDevice, width, height);
-            Color[] data = new Color[width * height];
+            _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
+            _pixelTexture.SetData(new[] { Color.White });
+            _gradientTexture = CreateGradientTexture(GraphicsDevice, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+            try { _logoTexture = Content.Load<Texture2D>("Textures/logo"); }
+            catch { _logoTexture = null; Debug("Game", "Logo not found, text will be used instead"); }
+
+            _fogTextures.Clear();
+
+            for (int i = 1; i <= 3; i++)
+            {
+                try
+                {
+                    var fogTexture = Content.Load<Texture2D>($"Textures/fog{i}");
+                    _fogTextures.Add(fogTexture);
+                    Debug("Game", $"Loaded fog texture {i}");
+                }
+                catch
+                {
+                    Debug("Game", $"Fog texture {i} not found");
+                }
+            }
+
+            if (_fogTextures.Count == 0)
+            {
+                try
+                {
+                    var fogTexture = Content.Load<Texture2D>("Textures/fog");
+                    _fogTextures.Add(fogTexture);
+                }
+                catch
+                {
+                    Debug("Game", "No fog textures found, fog effects will be disabled");
+                }
+            }
+        }
+
+        private void InitializeFonts()
+        {
+            _fontSystem = new FontSystem();
+            _symbolFontSystem = new FontSystem();
+
+            using var regularFont = TitleContainer.OpenStream("Content/Fonts/NotoSans-Regular.ttf");
+            using var symbolFont = TitleContainer.OpenStream("Content/Fonts/NotoSansSymbols-VariableFont_wght.ttf");
+
+            _fontSystem.AddFont(regularFont);
+            _symbolFontSystem.AddFont(symbolFont);
+
+            _uiFont = _fontSystem.GetFont(20);
+            _titleFont = _fontSystem.GetFont(40);
+            _unicodeFont = _symbolFontSystem.GetFont(24);
+        }
+
+        private void InitializeComponents()
+        {
+            _renderer = new Renderer(_spriteBatch, GraphicsDevice, _gameController, _camera);
+            _uiController = new UIController(
+                this, _gameController, _spriteBatch,
+                _uiFont, _titleFont, _unicodeFont,
+                _pixelTexture, _gradientTexture, _logoTexture, _fogTextures,
+                SCREEN_WIDTH, SCREEN_HEIGHT);
+        }
+
+        private static Texture2D CreateGradientTexture(GraphicsDevice graphicsDevice, int width, int height)
+        {
+            var texture = new Texture2D(graphicsDevice, width, height);
+            var data = new Color[width * height];
+            var startColor = new Color(20, 20, 50);
+            var endColor = new Color(80, 80, 120);
 
             for (int y = 0; y < height; y++)
             {
                 float t = (float)y / height;
-                var color = Color.Lerp(new Color(20, 20, 50), new Color(80, 80, 120), t);
+                var color = Color.Lerp(startColor, endColor, t);
 
                 for (int x = 0; x < width; x++)
                 {
@@ -179,8 +181,8 @@ namespace GravityDefiedGame
 
                 base.Update(gameTime);
             }
-            catch (OperationCanceledException) { Debug("Game", "Обновление отменено"); }
-            catch (Exception ex) { Error("Game", $"Ошибка обновления: {ex.Message}"); }
+            catch (OperationCanceledException) { Debug("Game", "Update canceled"); }
+            catch (Exception ex) { Error("Game", $"Update error: {ex.Message}"); }
         }
 
         protected override void Draw(GameTime gameTime)
@@ -188,17 +190,12 @@ namespace GravityDefiedGame
             try
             {
                 GraphicsDevice.Clear(ThemeManager.CurrentTheme.BackgroundColor);
-
-                // Отрисовка игрового мира с учетом камеры
                 DrawGameWorld();
-
-                // Отрисовка UI
                 DrawUserInterface();
-
                 base.Draw(gameTime);
             }
-            catch (OperationCanceledException) { Debug("Game", "Отрисовка отменена"); }
-            catch (Exception ex) { Error("Game", $"Ошибка отрисовки: {ex.Message}"); }
+            catch (OperationCanceledException) { Debug("Game", "Rendering canceled"); }
+            catch (Exception ex) { Error("Game", $"Rendering error: {ex.Message}"); }
         }
 
         private void DrawGameWorld()
@@ -211,38 +208,23 @@ namespace GravityDefiedGame
                     _renderer.Render(_renderCancellationTokenSource.Token);
                 }
             }
-            catch (Exception ex)
-            {
-                Error("Game", $"Error rendering game: {ex.Message}");
-            }
-            finally
-            {
-                _spriteBatch.End();
-            }
+            catch (Exception ex) { Error("Game", $"Error rendering game: {ex.Message}"); }
+            finally { _spriteBatch.End(); }
         }
 
         private void DrawUserInterface()
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
-            try
-            {
-                _uiController.DrawUI(_gameController);
-            }
-            catch (Exception ex)
-            {
-                Error("Game", $"Error rendering UI: {ex.Message}");
-            }
-            finally
-            {
-                _spriteBatch.End();
-            }
+            try { _uiController.DrawUI(_gameController); }
+            catch (Exception ex) { Error("Game", $"Error rendering UI: {ex.Message}"); }
+            finally { _spriteBatch.End(); }
         }
 
         private void UpdateCamera()
         {
             if (_gameController.Motorcycle != null)
             {
-                Vector2 visualCenter = _gameController.Motorcycle.GetVisualCenter();
+                var visualCenter = _gameController.Motorcycle.GetVisualCenter();
 
                 if (IsValidPosition(visualCenter))
                 {
@@ -280,12 +262,17 @@ namespace GravityDefiedGame
             _pixelTexture?.Dispose();
             _gradientTexture?.Dispose();
             _logoTexture?.Dispose();
-            _fogTexture?.Dispose();
+
+            foreach (var texture in _fogTextures)
+            {
+                texture?.Dispose();
+            }
+            _fogTextures.Clear();
 
             ThemeManager.ThemeChanged -= OnThemeChanged;
 
             base.UnloadContent();
-            Log("Game", "Контент выгружен", () => Info("Game", "UnloadContent завершен"));
+            Log("Game", "Content unloaded", () => Info("Game", "UnloadContent completed"));
         }
     }
 }

@@ -26,50 +26,49 @@ namespace GravityDefiedGame.Views
     {
         public static class Animation
         {
-            public const float ButtonScaleSpeed = 10f;
-            public const float BackgroundSpeed = 20f;
-            public const float HoverScale = 1.1f;
-
-            // Параметры анимаций переходов
-            public const float FadeSpeed = 2.0f;
-            public const float IntroFadeSpeed = 1.2f;
-            public const float LoadingBarSpeed = 0.6f;
-            public const float FogAnimationSpeed = 1.5f;
+            public const float
+                ButtonScaleSpeed = 10f,
+                BackgroundSpeed = 20f,
+                HoverScale = 1.1f,
+                FadeSpeed = 2.0f,
+                IntroFadeSpeed = 1.2f,
+                LoadingBarSpeed = 0.6f,
+                FogAnimationSpeed = 1.5f;
         }
 
         public static class Visual
         {
-            public const int BorderThin = 2;
-            public const int BorderThick = 3;
-            public const int Padding = 5;
+            public const int
+                BorderThin = 2,
+                BorderThick = 3,
+                Padding = 5,
+                TitleOffset = 30,
+                MainTextOffset = 100,
+                SubtitleOffset = 120,
+                LoadingBarHeight = 6,
+                LoadingBarWidth = 400,
+                LoadingBarPadding = 20;
 
-            public const int TitleOffset = 30;
-            public const int MainTextOffset = 100;
-            public const int SubtitleOffset = 120;
-
-            public const float ShadowOffset = 2f;
-            public const float ShadowOpacity = 0.5f;
-
-            // Параметры загрузочной полосы
-            public const int LoadingBarHeight = 6;
-            public const int LoadingBarWidth = 400;
-            public const int LoadingBarPadding = 20;
+            public const float
+                ShadowOffset = 2f,
+                ShadowOpacity = 0.5f;
         }
 
         public static class Layout
         {
-            public const float MenuWidthStandard = 0.6f;
-            public const float MenuHeightStandard = 0.7f;
-            public const float MenuWidthWide = 0.7f;
+            public const float
+                MenuWidthStandard = 0.6f,
+                MenuHeightStandard = 0.7f,
+                MenuWidthWide = 0.7f,
+                ButtonWidthMain = 0.25f,
+                ButtonWidthSmall = 0.15f,
+                ButtonWidthNav = 0.08f;
 
-            public const int ButtonSpacing = 30;
-            public const int ButtonHeight = 60;
-            public const float ButtonWidthMain = 0.25f;
-            public const float ButtonWidthSmall = 0.15f;
-            public const float ButtonWidthNav = 0.08f;
-
-            public const int NavButtonOffset = 20;
-            public const int ButtonGroupSpacing = 50;
+            public const int
+                ButtonSpacing = 30,
+                ButtonHeight = 60,
+                NavButtonOffset = 20,
+                ButtonGroupSpacing = 50;
         }
     }
 
@@ -99,9 +98,9 @@ namespace GravityDefiedGame.Views
         private readonly (
             Texture2D pixel,
             Texture2D gradient,
-            Texture2D? logo,
-            Texture2D? fog
+            Texture2D? logo
         ) _textures;
+        private readonly List<Texture2D> _fogTextures = new List<Texture2D>();
         private readonly (int width, int height) _screenSize;
 
         private readonly Dictionary<string, UIButton> _buttons = new();
@@ -115,6 +114,9 @@ namespace GravityDefiedGame.Views
         ) _selection = (0, 0, 0, 0);
 
         private float _backgroundOffset = 0f;
+        private float _fogOffset = 0f;
+        private const float FOG_ANIMATION_SPEED = 15f;
+        private bool _showFogEffect = true;
         private (string text, Vector2 position) _tooltip = (string.Empty, Vector2.Zero);
         private Controllers.GameController _gameController = null!;
 
@@ -128,11 +130,9 @@ namespace GravityDefiedGame.Views
             (Color.Orange, "Orange")
         };
 
-        // Параметры переходов и анимаций
         private TransitionState _transitionState = TransitionState.None;
         private float _fadeAlpha = 1.0f;
         private float _loadingProgress = 0f;
-        private float _fogOffset = 0f;
         private bool _introComplete = false;
         private Controllers.GameState _nextGameState;
         private int _nextLevelId = 0;
@@ -150,7 +150,7 @@ namespace GravityDefiedGame.Views
             Texture2D pixelTexture,
             Texture2D gradientTexture,
             Texture2D? logoTexture,
-            Texture2D? fogTexture,
+            List<Texture2D> fogTextures,
             int screenWidth,
             int screenHeight)
         {
@@ -158,12 +158,12 @@ namespace GravityDefiedGame.Views
             _gameController = gameController;
             _spriteBatch = spriteBatch;
             _fonts = (standardFont, titleFont, unicodeFont);
-            _textures = (pixelTexture, gradientTexture, logoTexture, fogTexture);
+            _textures = (pixelTexture, gradientTexture, logoTexture);
+            _fogTextures = fogTextures;
             _screenSize = (screenWidth, screenHeight);
 
             InitializeUI();
 
-            // Начинаем с заставки и эффекта появления
             _transitionState = TransitionState.FadeIn;
             _fadeAlpha = 1.0f;
         }
@@ -187,7 +187,6 @@ namespace GravityDefiedGame.Views
             var buttonDefs = new Dictionary<string, (Rectangle bounds, string text, Action action,
                                                   Color baseColor, Color hoverColor, string tooltip)>
             {
-                // Главное меню - центрированные кнопки с равным расстоянием
                 ["play"] = (
                     new Rectangle(centerX - btnWidth / 2, menuStartY, btnWidth, btnHeight),
                     "Play Game",
@@ -215,7 +214,6 @@ namespace GravityDefiedGame.Views
                     "Exit the game"
                 ),
 
-                // Выбор мотоцикла - с навигационными кнопками по бокам
                 ["prevBike"] = (
                     new Rectangle(centerX - btnWidth / 2 - navWidth - spacing, menuStartY, navWidth, btnHeight),
                     "←",
@@ -261,7 +259,6 @@ namespace GravityDefiedGame.Views
                     "Confirm bike selection"
                 ),
 
-                // Выбор уровня
                 ["prevLevel"] = (
                     new Rectangle(centerX - btnWidth / 2 - navWidth - spacing, menuStartY, navWidth, btnHeight),
                     "←",
@@ -289,7 +286,6 @@ namespace GravityDefiedGame.Views
                     "Start the selected level"
                 ),
 
-                // Выбор темы
                 ["prevTheme"] = (
                     new Rectangle(centerX - btnWidth / 2 - navWidth - spacing, menuStartY, navWidth, btnHeight),
                     "←",
@@ -317,7 +313,6 @@ namespace GravityDefiedGame.Views
                     "Confirm theme selection"
                 ),
 
-                // Игровые кнопки - по краям экрана
                 ["pause"] = (
                     new Rectangle(width - smallWidth - spacing, spacing, smallWidth, btnHeight),
                     "Pause",
@@ -327,7 +322,6 @@ namespace GravityDefiedGame.Views
                     "Pause the game"
                 ),
 
-                // Кнопки для паузы, завершения и проигрыша - горизонтальное расположение
                 ["restart"] = (
                     new Rectangle(centerX - smallWidth - spacing * 2, centerY + groupSpacing, smallWidth, btnHeight),
                     "Restart",
@@ -355,7 +349,6 @@ namespace GravityDefiedGame.Views
                     "Proceed to the next level"
                 ),
 
-                // Кнопка назад - всегда в верхнем левом углу
                 ["back"] = (
                     new Rectangle(spacing, spacing, navWidth, btnHeight),
                     "Back",
@@ -387,8 +380,8 @@ namespace GravityDefiedGame.Views
             _gameController = gameController;
 
             _backgroundOffset = (_backgroundOffset + UI.Animation.BackgroundSpeed * elapsedTime) % _screenSize.width;
+            _fogOffset = (_fogOffset + FOG_ANIMATION_SPEED * elapsedTime) % _screenSize.width;
 
-            // Обработка заставки - пропуск при нажатии любой клавиши
             if (_isSplashScreenActive)
             {
                 if (keyboardState.GetPressedKeys().Length > 0 ||
@@ -403,7 +396,6 @@ namespace GravityDefiedGame.Views
                 return;
             }
 
-            // Пропускаем ввод во время переходов
             if (_transitionState != TransitionState.None)
             {
                 UpdateTransitionState(elapsedTime);
@@ -475,25 +467,22 @@ namespace GravityDefiedGame.Views
         private void UpdateTransitionState(float elapsedTime)
         {
             _transitionTimer += elapsedTime;
-            _fogOffset = (_fogOffset + UI.Animation.FogAnimationSpeed * elapsedTime) % _screenSize.width;
+            _fogOffset = (_fogOffset + FOG_ANIMATION_SPEED * elapsedTime) % _screenSize.width;
 
             switch (_transitionState)
             {
                 case TransitionState.FadeIn:
-                    // Уменьшаем прозрачность черного экрана
                     _fadeAlpha = Math.Max(0, _fadeAlpha - UI.Animation.FadeSpeed * elapsedTime);
                     if (_fadeAlpha <= 0)
                     {
                         if (_isSplashScreenActive)
                         {
-                            // После показа заставки и загрузки, перейдем к главному меню
                             if (_loadingProgress >= 1.0f && _transitionTimer > 3.0f)
                             {
                                 StartTransition(TransitionState.FadeOut, Controllers.GameState.MainMenu);
                             }
                             else
                             {
-                                // Имитация загрузки
                                 _loadingProgress = Math.Min(1.0f, _loadingProgress + UI.Animation.LoadingBarSpeed * elapsedTime);
                             }
                         }
@@ -505,7 +494,6 @@ namespace GravityDefiedGame.Views
                     break;
 
                 case TransitionState.FadeOut:
-                    // Увеличиваем прозрачность черного экрана
                     _fadeAlpha = Math.Min(1.0f, _fadeAlpha + UI.Animation.FadeSpeed * elapsedTime);
                     if (_fadeAlpha >= 1.0f)
                     {
@@ -517,13 +505,11 @@ namespace GravityDefiedGame.Views
                         }
                         else if (_nextGameState == Controllers.GameState.Playing && _nextLevelId > 0)
                         {
-                            // Начать загрузку уровня
                             _transitionState = TransitionState.Loading;
                             _loadingProgress = 0f;
                         }
                         else
                         {
-                            // Переходим к новому состоянию
                             SwitchToNextGameState();
                             StartTransition(TransitionState.FadeIn, _nextGameState);
                         }
@@ -531,12 +517,10 @@ namespace GravityDefiedGame.Views
                     break;
 
                 case TransitionState.Loading:
-                    // Имитация процесса загрузки уровня
                     _loadingProgress = Math.Min(1.0f, _loadingProgress + UI.Animation.LoadingBarSpeed * elapsedTime);
 
                     if (_loadingProgress >= 1.0f)
                     {
-                        // Загрузка завершена, запускаем уровень
                         _gameController.StartLevel(_nextLevelId);
                         StartTransition(TransitionState.FadeIn, Controllers.GameState.Playing);
                     }
@@ -626,7 +610,13 @@ namespace GravityDefiedGame.Views
 
             UpdateButtonVisibility(gameController.CurrentGameState);
 
-            // Если в состоянии перехода, рисуем предыдущий экран
+            if (_showFogEffect && _fogTextures.Count > 0 &&
+                (gameController.CurrentGameState == Controllers.GameState.MainMenu ||
+                 gameController.CurrentGameState == Controllers.GameState.LevelComplete))
+            {
+                DrawFogEffect();
+            }
+
             if (_transitionState == TransitionState.FadeOut)
             {
                 DrawScreen(gameController);
@@ -637,12 +627,10 @@ namespace GravityDefiedGame.Views
                 if (!string.IsNullOrEmpty(_tooltip.text))
                     DrawTooltip();
             }
-            // Если загрузка, рисуем экран загрузки
             else if (_transitionState == TransitionState.Loading)
             {
                 DrawLoadingScreen();
             }
-            // В остальных случаях рисуем текущий экран
             else
             {
                 DrawScreen(gameController);
@@ -654,19 +642,60 @@ namespace GravityDefiedGame.Views
                     DrawTooltip();
             }
 
-            // Отрисовка эффекта перехода поверх всего
             if (_transitionState != TransitionState.None)
             {
                 DrawTransitionOverlay();
             }
         }
 
+        private void DrawFogEffect()
+        {
+            if (_fogTextures.Count == 0)
+                return;
+
+            float baseAlpha = 0.3f;
+
+            for (int layer = 0; layer < Math.Min(3, _fogTextures.Count); layer++)
+            {
+                Texture2D fogTexture = _fogTextures[layer % _fogTextures.Count];
+
+                float layerSpeed = layer == 0 ? 1.0f : (layer == 1 ? -0.7f : 0.5f);
+                float layerOffset = (_fogOffset * layerSpeed) % fogTexture.Width;
+                if (layerOffset < 0) layerOffset += fogTexture.Width;
+
+                int yPos;
+                if (layer == 0)
+                    yPos = _screenSize.height - fogTexture.Height;
+                else if (layer == 1)
+                    yPos = 0;
+                else
+                    yPos = _screenSize.height / 2 - fogTexture.Height / 2;
+
+                float alpha = baseAlpha / (layer + 1);
+
+                int startX = (int)-layerOffset;
+                while (startX < _screenSize.width)
+                {
+                    _spriteBatch.Draw(
+                        fogTexture,
+                        new Vector2(startX, yPos),
+                        null,
+                        new Color(1f, 1f, 1f, alpha),
+                        0f,
+                        Vector2.Zero,
+                        Vector2.One, 
+                        SpriteEffects.None,
+                        0f);
+
+                    startX += fogTexture.Width;
+                }
+            }
+        }
+
         private void DrawSplashScreen()
         {
-            // Фон
             _spriteBatch.Draw(_textures.gradient, new Rectangle(0, 0, _screenSize.width, _screenSize.height), Color.Black);
 
-            // Логотип (если есть)
             if (_textures.logo != null)
             {
                 int logoWidth = Math.Min(_screenSize.width - 100, _textures.logo.Width);
@@ -682,7 +711,6 @@ namespace GravityDefiedGame.Views
             }
             else
             {
-                // Если логотипа нет, просто отображаем текст
                 string gameTitle = "GRAVITY DEFIED";
                 Vector2 titleSize = _fonts.title.MeasureString(gameTitle);
                 float titleX = (_screenSize.width - titleSize.X) / 2;
@@ -696,34 +724,28 @@ namespace GravityDefiedGame.Views
                     Color.Goldenrod);
             }
 
-            // Текст загрузки
             string loadingText = "Loading game...";
             Vector2 loadingTextSize = _fonts.standard.MeasureString(loadingText);
             _fonts.standard.DrawText(_spriteBatch, loadingText,
                 new Vector2((_screenSize.width - loadingTextSize.X) / 2, _screenSize.height * 0.7f),
                 Color.White);
 
-            // Полоса загрузки
             int barWidth = UI.Visual.LoadingBarWidth;
             int barHeight = UI.Visual.LoadingBarHeight;
             int barX = (_screenSize.width - barWidth) / 2;
             int barY = (int)(_screenSize.height * 0.75f);
 
-            // Фон полосы
             _spriteBatch.Draw(_textures.pixel,
                 new Rectangle(barX, barY, barWidth, barHeight),
                 new Color(40, 40, 40, 200));
 
-            // Прогресс
             _spriteBatch.Draw(_textures.pixel,
                 new Rectangle(barX, barY, (int)(barWidth * _loadingProgress), barHeight),
                 Color.LightGreen);
 
-            // Рамка полосы
             DrawBorder(new Rectangle(barX - 1, barY - 1, barWidth + 2, barHeight + 2),
                 Color.White, 1);
 
-            // Подсказка
             string hintText = "Press any key to skip";
             Vector2 hintSize = _fonts.standard.MeasureString(hintText);
             float hintAlpha = (float)Math.Sin(_transitionTimer * 2) * 0.5f + 0.5f;
@@ -734,39 +756,32 @@ namespace GravityDefiedGame.Views
 
         private void DrawLoadingScreen()
         {
-            // Затемненный фон
             _spriteBatch.Draw(_textures.gradient,
                 new Rectangle(0, 0, _screenSize.width, _screenSize.height),
                 new Color(0, 0, 0, 200));
 
-            // Название уровня
             string levelText = $"Loading Level {_nextLevelId}: {_gameController.Levels[_nextLevelId - 1].Name}";
             Vector2 levelTextSize = _fonts.title.MeasureString(levelText);
             _fonts.title.DrawText(_spriteBatch, levelText,
                 new Vector2((_screenSize.width - levelTextSize.X) / 2, _screenSize.height * 0.4f),
                 Color.White);
 
-            // Полоса загрузки
             int barWidth = UI.Visual.LoadingBarWidth;
             int barHeight = UI.Visual.LoadingBarHeight * 2;
             int barX = (_screenSize.width - barWidth) / 2;
             int barY = (int)(_screenSize.height * 0.6f);
 
-            // Фон полосы
             _spriteBatch.Draw(_textures.pixel,
                 new Rectangle(barX, barY, barWidth, barHeight),
                 new Color(40, 40, 40, 200));
 
-            // Прогресс
             _spriteBatch.Draw(_textures.pixel,
                 new Rectangle(barX, barY, (int)(barWidth * _loadingProgress), barHeight),
                 Color.LightBlue);
 
-            // Рамка полосы
             DrawBorder(new Rectangle(barX - 1, barY - 1, barWidth + 2, barHeight + 2),
-                Color.White, 1);
+                    Color.White, 1);
 
-            // Процент загрузки
             string percentText = $"{(int)(_loadingProgress * 100)}%";
             Vector2 percentSize = _fonts.standard.MeasureString(percentText);
             _fonts.standard.DrawText(_spriteBatch, percentText,
@@ -776,40 +791,39 @@ namespace GravityDefiedGame.Views
 
         private void DrawTransitionOverlay()
         {
-            // Эффект затемнения для смены экранов
             _spriteBatch.Draw(_textures.pixel,
                 new Rectangle(0, 0, _screenSize.width, _screenSize.height),
                 new Color(0, 0, 0, _fadeAlpha));
 
-            // Эффект "тумана" при появлении главного меню
             if (_transitionState == TransitionState.FadeIn &&
                 _nextGameState == Controllers.GameState.MainMenu &&
-                _textures.fog != null &&
+                _fogTextures.Count > 0 &&
                 !_isSplashScreenActive)
             {
                 float fogAlpha = MathHelper.Clamp(_fadeAlpha * 2, 0, 0.8f);
 
-                // Создаем движущийся туман
-                for (int y = 0; y < _screenSize.height; y += _textures.fog.Height / 2)
+                for (int layer = 0; layer < Math.Min(2, _fogTextures.Count); layer++)
                 {
-                    // Слой тумана 1
-                    _spriteBatch.Draw(_textures.fog,
-                        new Rectangle((int)(-_fogOffset * 0.5f) % _screenSize.width - _textures.fog.Width, y,
-                            _screenSize.width * 2, _textures.fog.Height / 2),
-                        new Color((byte)255, (byte)255, (byte)255, (byte)(fogAlpha * 255)));
+                    Texture2D fogTexture = _fogTextures[layer % _fogTextures.Count];
 
-                    // Слой тумана 2 (движется быстрее)
-                    _spriteBatch.Draw(_textures.fog,
-                        new Rectangle((int)(-_fogOffset) % _screenSize.width, y + _textures.fog.Height / 4,
-                            _screenSize.width * 2, _textures.fog.Height / 2),
-                        new Color((byte)255, (byte)255, (byte)255, (byte)(fogAlpha * 200)));
+                    for (int y = 0; y < _screenSize.height; y += fogTexture.Height / 2)
+                    {
+                        _spriteBatch.Draw(fogTexture,
+                            new Rectangle((int)(-_fogOffset * 0.5f) % _screenSize.width - fogTexture.Width, y,
+                                _screenSize.width * 2, fogTexture.Height / 2),
+                            new Color((byte)255, (byte)255, (byte)255, (byte)(fogAlpha * 255)));
+
+                        _spriteBatch.Draw(fogTexture,
+                            new Rectangle((int)(-_fogOffset) % _screenSize.width, y + fogTexture.Height / 4,
+                                _screenSize.width * 2, fogTexture.Height / 2),
+                            new Color((byte)255, (byte)255, (byte)255, (byte)(fogAlpha * 200)));
+                    }
                 }
             }
         }
 
         private void UpdateButtonVisibility(Controllers.GameState state)
         {
-            // Во время переходов не меняем видимость кнопок
             if (_transitionState != TransitionState.None && _transitionState != TransitionState.FadeIn)
                 return;
 
@@ -938,7 +952,6 @@ namespace GravityDefiedGame.Views
             _fonts.title.DrawText(_spriteBatch, title, new Vector2(x, yPosition), color);
         }
 
-        // [Остальные методы DrawMainMenu, DrawBikeSelectionMenu и т.д. остаются без изменений]
         private void DrawMainMenu() =>
             DrawMenuBase("GRAVITY DEFIED", Color.Goldenrod, menuRect =>
             {
