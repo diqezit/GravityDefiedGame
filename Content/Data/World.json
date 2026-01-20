@@ -1,0 +1,131 @@
+{
+  "themes": [
+    {
+      "name": "Desert",
+      "description": "Warm sand colors",
+      "colors": {
+        "background": "#FFCC66",
+        "terrain": "#CC9966",
+        "verticalLine": "#CC9966"
+      },
+      "bike": {
+        "frame": "#969696",
+        "wheel": "#000000",
+        "shock": "#606060",
+        "fork": "#606060",
+        "rider": "#000000",
+        "leg": "#000000",
+        "body": "#000080",
+        "fist": "#9C0000"
+      },
+      "sky": {
+        "palette": ["#87CEEB", "#C8E6F5", "#FFDFBA"],
+        "hasStars": false,
+        "hasSun": true
+      }
+    },
+    {
+      "name": "Mountain",
+      "description": "Cool mountain tones",
+      "colors": {
+        "background": "#9BAFC8",
+        "terrain": "#5A6E5A",
+        "verticalLine": "#465A46"
+      },
+      "bike": {
+        "frame": "#46465A",
+        "wheel": "#000000",
+        "shock": "#323246",
+        "fork": "#323246",
+        "rider": "#1E1E32",
+        "leg": "#1E1E32",
+        "body": "#1E325A",
+        "fist": "#5A1E32"
+      },
+      "sky": {
+        "palette": ["#6496DC", "#8CB4EB", "#B4D2F0"],
+        "hasStars": false,
+        "hasSun": false
+      }
+    },
+    {
+      "name": "Arctic",
+      "description": "Icy blues",
+      "colors": {
+        "background": "#DCEBFF",
+        "terrain": "#C8DCF0",
+        "verticalLine": "#BED2E6"
+      },
+      "bike": {
+        "frame": "#6482A0",
+        "wheel": "#282828",
+        "shock": "#506482",
+        "fork": "#506482",
+        "rider": "#465A78",
+        "leg": "#465A78",
+        "body": "#465A96",
+        "fist": "#785A64"
+      },
+      "sky": {
+        "palette": ["#B4D2FF", "#D2E1FF", "#EBF5FF"],
+        "hasStars": false,
+        "hasSun": false
+      }
+    },
+    {
+      "name": "Volcano",
+      "description": "Hot volcanic",
+      "colors": {
+        "background": "#321414",
+        "terrain": "#50281E",
+        "verticalLine": "#78281E"
+      },
+      "bike": {
+        "frame": "#C83214",
+        "wheel": "#000000",
+        "shock": "#1E1E1E",
+        "fork": "#1E1E1E",
+        "rider": "#962814",
+        "leg": "#962814",
+        "body": "#C83214",
+        "fist": "#FF5A00"
+      },
+      "sky": {
+        "palette": ["#280A0A", "#3C140F", "#5A1E14"],
+        "hasStars": true,
+        "hasSun": false
+      }
+    },
+    {
+      "name": "Neon",
+      "description": "Vibrant neon",
+      "colors": {
+        "background": "#140A1E",
+        "terrain": "#39FF14",
+        "verticalLine": "#D000FF"
+      },
+      "bike": {
+        "frame": "#00E6FF",
+        "wheel": "#C800FF",
+        "shock": "#FF3296",
+        "fork": "#FF3296",
+        "rider": "#FFE600",
+        "leg": "#FFE600",
+        "body": "#00E6FF",
+        "fist": "#FF3296"
+      },
+      "sky": {
+        "palette": ["#050514", "#0A081E", "#190C28"],
+        "hasStars": true,
+        "hasSun": false
+      }
+    }
+  ],
+  "rendering": {
+    "terrainStroke": 3.0,
+    "verticalStroke": 0.5,
+    "fillPoints": 20,
+    "starCount": 200,
+    "gradientSteps": 30
+  }
+}
