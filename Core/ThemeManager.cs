@@ -1,8 +1,48 @@
 namespace GravityDefiedGame.Core;
 
-public enum LineType { Frame, Wheel, Shock, Fork, Rider, Leg, Body, Fist }
+public enum LineType : byte
+{
+    Frame, Wheel, Shock, Fork,
+    Rider, Leg, Body, Fist
+}
 
-public sealed record WorldData(List<ThemeJson>? Themes, RenderCfg? Rendering);
+public readonly struct BikeDefaults
+{
+    public const string
+        Frame = "#808080", Wheel = "#404040",
+        Shock = "#606060", Fork = "#606060",
+        Rider = "#000000", Leg = "#000000",
+        Body = "#000080", Fist = "#9C0000";
+
+    public const int MinHexLen = 6;
+
+    public static readonly Color Fallback = Color.Magenta;
+
+    static readonly (LineType Type,
+        Func<BikeJson, string?> Get, string Def)[] Map =
+    [
+        (LineType.Frame, b => b.Frame, Frame),
+        (LineType.Wheel, b => b.Wheel, Wheel),
+        (LineType.Shock, b => b.Shock, Shock),
+        (LineType.Fork,  b => b.Fork,  Fork),
+        (LineType.Rider, b => b.Rider, Rider),
+        (LineType.Leg,   b => b.Leg,   Leg),
+        (LineType.Body,  b => b.Body,  Body),
+        (LineType.Fist,  b => b.Fist,  Fist),
+    ];
+
+    public static Dictionary<LineType, Color> Parse(BikeJson b)
+    {
+        Dictionary<LineType, Color> d = new(Map.Length);
+        foreach ((LineType type,
+            Func<BikeJson, string?> get, string def) in Map)
+            d[type] = ThemeState.Hex(get(b) ?? def);
+        return d;
+    }
+}
+
+public sealed record WorldData(
+    List<ThemeJson>? Themes, RenderCfg? Rendering);
 
 public sealed record ThemeJson
 {
@@ -18,6 +58,13 @@ public sealed record ColorsJson
     public string? Background { get; init; }
     public string? Terrain { get; init; }
     public string? VerticalLine { get; init; }
+
+    public static readonly ColorsJson Empty = new()
+    {
+        Background = "#000000",
+        Terrain = "#808080",
+        VerticalLine = "#404040"
+    };
 }
 
 public sealed record BikeJson
@@ -30,6 +77,8 @@ public sealed record BikeJson
     public string? Leg { get; init; }
     public string? Body { get; init; }
     public string? Fist { get; init; }
+
+    public static readonly BikeJson Empty = new();
 }
 
 public sealed record SkyJson
@@ -37,6 +86,11 @@ public sealed record SkyJson
     public string[]? Palette { get; init; }
     public bool HasStars { get; init; }
     public bool HasSun { get; init; }
+
+    public static readonly SkyJson Empty = new()
+    {
+        Palette = []
+    };
 }
 
 public sealed record RenderCfg
@@ -48,15 +102,19 @@ public sealed record RenderCfg
     public int GradientSteps { get; init; } = 30;
 }
 
-public readonly record struct ThemeRenderCfg(string[] SkyPal, bool HasStars, bool HasSun);
+public readonly record struct ThemeRenderCfg(
+    string[] SkyPal, bool HasStars, bool HasSun);
 
 public sealed record ThemeSettings(
-    string Name, string Desc, Color BgColor, Color TerrainColor, Color VLineColor,
-    Dictionary<LineType, Color> BikeColors, ThemeRenderCfg RenderCfg);
+    string Name, string Desc,
+    Color BgColor, Color TerrainColor, Color VLineColor,
+    Dictionary<LineType, Color> BikeColors,
+    ThemeRenderCfg RenderCfg);
 
 public sealed class ThemeState
 {
-    static readonly JsonSerializerOptions Opt = new() { PropertyNameCaseInsensitive = true };
+    static readonly JsonSerializerOptions Opt = new(
+        JsonSerializerDefaults.Web);
 
     readonly List<ThemeSettings> _themes = [];
 
@@ -70,12 +128,18 @@ public sealed class ThemeState
     {
         WorldData data = JsonSerializer.Deserialize<WorldData>(
             File.ReadAllText(path), Opt)
-            ?? throw new InvalidDataException("World.json broken");
+            ?? throw new InvalidDataException(
+                "World.json broken");
 
         ThemeManager.Rendering = data.Rendering ?? new();
 
+        List<ThemeJson> themes = data.Themes ?? [];
+        if (themes.Count == 0)
+            throw new InvalidDataException(
+                "World.json: no themes");
+
         _themes.Clear();
-        _themes.AddRange(data.Themes!.Select(ToTheme));
+        _themes.AddRange(themes.Select(ToTheme));
 
         Idx = 0;
         Changed?.Invoke();
@@ -90,62 +154,74 @@ public sealed class ThemeState
         Changed?.Invoke();
     }
 
-    public void Next() => Set((Idx + 1) % _themes.Count);
-    public void Prev() => Set((Idx - 1 + _themes.Count) % _themes.Count);
+    public void Next() =>
+        Set((Idx + 1) % _themes.Count);
+
+    public void Prev() =>
+        Set((Idx - 1 + _themes.Count) % _themes.Count);
 
     public string GetName(int i) => _themes[i].Name;
     public string GetDesc(int i) => _themes[i].Desc;
 
     static ThemeSettings ToTheme(ThemeJson t)
     {
-        ColorsJson c = t.Colors!;
-        BikeJson b = t.Bike!;
-        SkyJson s = t.Sky!;
+        ColorsJson c = t.Colors ?? ColorsJson.Empty;
+        BikeJson b = t.Bike ?? BikeJson.Empty;
+        SkyJson s = t.Sky ?? SkyJson.Empty;
 
         return new(
-            t.Name!, t.Description!,
-            Hex(c.Background!), Hex(c.Terrain!), Hex(c.VerticalLine!),
-            ParseBike(b),
+            t.Name ?? "Unnamed",
+            t.Description ?? "",
+            Hex(c.Background ?? "#000000"),
+            Hex(c.Terrain ?? "#808080"),
+            Hex(c.VerticalLine ?? "#404040"),
+            BikeDefaults.Parse(b),
             new(s.Palette ?? [], s.HasStars, s.HasSun));
     }
 
-    static Dictionary<LineType, Color> ParseBike(BikeJson b) => new()
+    internal static Color Hex(string? s)
     {
-        [LineType.Frame] = Hex(b.Frame ?? "#808080"),
-        [LineType.Wheel] = Hex(b.Wheel ?? "#404040"),
-        [LineType.Shock] = Hex(b.Shock ?? "#606060"),
-        [LineType.Fork] = Hex(b.Fork ?? "#606060"),
-        [LineType.Rider] = Hex(b.Rider ?? "#000000"),
-        [LineType.Leg] = Hex(b.Leg ?? "#000000"),
-        [LineType.Body] = Hex(b.Body ?? "#000080"),
-        [LineType.Fist] = Hex(b.Fist ?? "#9C0000")
-    };
+        if (string.IsNullOrEmpty(s))
+            return BikeDefaults.Fallback;
 
-    internal static Color Hex(string s)
-    {
         ReadOnlySpan<char> hex = s.AsSpan();
         if (hex[0] == '#')
             hex = hex[1..];
 
-        byte r = ToByte(hex[..2]);
-        byte g = ToByte(hex[2..4]);
-        byte b = ToByte(hex[4..6]);
-        byte a = hex.Length >= 8 ? ToByte(hex[6..8]) : (byte)255;
+        if (hex.Length < BikeDefaults.MinHexLen)
+            return BikeDefaults.Fallback;
+
+        if (!TryParseHexByte(hex[..2], out byte r)
+            || !TryParseHexByte(hex[2..4], out byte g)
+            || !TryParseHexByte(hex[4..6], out byte b))
+            return BikeDefaults.Fallback;
+
+        byte a = hex.Length >= 8
+            && TryParseHexByte(hex[6..8], out byte av)
+            ? av : (byte)255;
 
         return new(r, g, b, a);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static byte ToByte(ReadOnlySpan<char> h) => (byte)Convert.ToInt32(h.ToString(), 16);
+    static bool TryParseHexByte(
+        ReadOnlySpan<char> h, out byte result) =>
+        byte.TryParse(h, NumberStyles.HexNumber,
+            null, out result);
 
-    internal static Color[] Pal(string[] arr) => [.. arr.Select(Hex)];
+    internal static Color[] ParsePal(string[] arr) =>
+        [.. arr.Select(Hex)];
 }
 
 public static class ThemeManager
 {
     const string WorldPath = "Content/Data/World.json";
 
-    public static RenderCfg Rendering { get; internal set; } = new();
+    public static RenderCfg Rendering
+    {
+        get; internal set;
+    } = new();
+
     public static ThemeState State { get; } = new();
 
     public static ThemeSettings Cur => State.Cur;
@@ -164,10 +240,14 @@ public static class ThemeManager
     public static void Next() => State.Next();
     public static void Prev() => State.Prev();
 
-    public static string GetName(int i) => State.GetName(i);
-    public static string GetDesc(int i) => State.GetDesc(i);
+    public static string GetName(int i) =>
+        State.GetName(i);
 
-    public static Color[] ParsePal(string[] pal) => ThemeState.Pal(pal);
+    public static string GetDesc(int i) =>
+        State.GetDesc(i);
+
+    public static Color[] ParsePal(string[] pal) =>
+        ThemeState.ParsePal(pal);
 
     public static void SaveToSettings()
     {

@@ -16,4 +16,5 @@ global using Microsoft.Xna.Framework;
 global using Microsoft.Xna.Framework.Graphics;
 global using Microsoft.Xna.Framework.Input;
 global using MonoGame.Extended;
-global using Bike = GravityDefiedGame.Models.Bike.BikeAPI;
+global using System.Globalization;
+global using Bike = GravityDefiedGame.Models.Bike.BikePhysics;

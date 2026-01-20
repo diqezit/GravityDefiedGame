@@ -3,18 +3,22 @@ using XVector2 = Microsoft.Xna.Framework.Vector2;
 namespace GravityDefiedGame.Models.Terrain;
 
 // Core level parameters shared between data and generator
-// Grouped: geometry, progression, positions
 public readonly record struct LevelConst(
     float GroundY, float SafeZone, float TerrainH,
     float BaseLen, float LenPerLvl, float MaxLen,
     float StartX, float EndX, float EndY, float FinishDist,
-    int BasePts, int PtsPerLvl, int MaxPts)
+    int BasePts, int PtsPerLvl, int MaxPts,
+    float Epsilon, float DefX, float DefY,
+    float DefNormX, float DefNormY)
 {
     public static readonly LevelConst Default = new(
         GroundY: 500f, SafeZone: 300f, TerrainH: 500f,
         BaseLen: 3000f, LenPerLvl: 500f, MaxLen: 10000f,
-        StartX: 100f, EndX: -100f, EndY: -50f, FinishDist: 50f,
-        BasePts: 60, PtsPerLvl: 5, MaxPts: 200);
+        StartX: 100f, EndX: -100f, EndY: 0f,
+        FinishDist: 50f,
+        BasePts: 60, PtsPerLvl: 5, MaxPts: 200,
+        Epsilon: 1e-6f, DefX: 0f, DefY: 500f,
+        DefNormX: 0f, DefNormY: -1f);
 }
 
 // Level stores terrain points and segment normals
@@ -38,31 +42,40 @@ public sealed class Level
     public int StartIdx { get; }
     public int FinishIdx { get; }
 
-    public Level(int id, string name, int diff, float len,
-                 float[] ptsX, float[] ptsY, float[] normX, float[] normY,
-                 float startX, XVector2 finish, int startIdx, int finishIdx)
+    public Level(
+        int id, string name, int diff, float len,
+        float[] ptsX, float[] ptsY,
+        float[] normX, float[] normY,
+        float startX, XVector2 finish,
+        int startIdx, int finishIdx)
     {
         (Id, Name, Diff, Len) = (id, name, diff, len);
-        (_ptsX, _ptsY, _normX, _normY) = (ptsX, ptsY, normX, normY);
+        (_ptsX, _ptsY, _normX, _normY) =
+            (ptsX, ptsY, normX, normY);
         (StartX, FinishPoint) = (startX, finish);
         (StartIdx, FinishIdx) = (startIdx, finishIdx);
         PtCount = ptsX.Length;
         (_visStart, _visEnd) = (0, PtCount - 1);
-        (_lastLeftX, _lastRightX) = (0f, len);
+        (_lastLeftX, _lastRightX) = (Cfg.DefX, len);
     }
 
     // Factory delegates to generator — each run produces different terrain
-    public static Level Create(int id, string name, int? seed = null, int? diff = null) =>
+    public static Level Create(
+        int id, string name,
+        int? seed = null, int? diff = null) =>
         Generator.Generate(id, name, seed, diff);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float GetPtX(int i) => (uint)i < (uint)PtCount ? _ptsX[i] : 0f;
+    public float GetPtX(int i) =>
+        (uint)i < (uint)PtCount ? _ptsX[i] : Cfg.DefX;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float GetPtY(int i) => (uint)i < (uint)PtCount ? _ptsY[i] : Cfg.TerrainH;
+    public float GetPtY(int i) =>
+        (uint)i < (uint)PtCount ? _ptsY[i] : Cfg.DefY;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public (int Start, int End) GetVisibleRange() => (_visStart, _visEnd);
+    public (int Start, int End) GetVisibleRange() =>
+        (_visStart, _visEnd);
 
     // Hot path for camera and collision
     // Binary search avoids linear scan on long tracks and keeps frame time stable
@@ -71,7 +84,7 @@ public sealed class Level
         int n = PtCount;
 
         if (n <= 0)
-            return Cfg.TerrainH;
+            return Cfg.DefY;
         if (n == 1)
             return _ptsY[0];
 
@@ -97,19 +110,25 @@ public sealed class Level
                 hi = mid - 1;
         }
 
-        float x0 = xs[lo], y0 = ys[lo], x1 = xs[lo + 1], y1 = ys[lo + 1];
+        float x0 = xs[lo], y0 = ys[lo];
+        float x1 = xs[lo + 1], y1 = ys[lo + 1];
         float dx = x1 - x0;
 
         // Guard for bad data where two points share same X
-        return AbsF(dx) < 1e-6f ? y0 : y0 + (y1 - y0) * ((x - x0) / dx);
+        return MathF.Abs(dx) < Cfg.Epsilon
+            ? y0
+            : y0 + (y1 - y0) * ((x - x0) / dx);
     }
 
-    public void GetSegmentPoints(int idx, out float ax, out float ay,
-                                 out float bx, out float by)
+    public void GetSegmentPoints(
+        int idx,
+        out float ax, out float ay,
+        out float bx, out float by)
     {
         if ((uint)idx >= (uint)(PtCount - 1))
         {
-            (ax, ay, bx, by) = (0f, 0f, 0f, 0f);
+            (ax, ay, bx, by) =
+                (Cfg.DefX, Cfg.DefY, Cfg.DefX, Cfg.DefY);
             return;
         }
 
@@ -117,11 +136,12 @@ public sealed class Level
         (bx, by) = (_ptsX[idx + 1], _ptsY[idx + 1]);
     }
 
-    public void GetSegmentNormal(int idx, out float nx, out float ny)
+    public void GetSegmentNormal(
+        int idx, out float nx, out float ny)
     {
         if ((uint)idx >= (uint)_normX.Length)
         {
-            (nx, ny) = (0f, -1f);
+            (nx, ny) = (Cfg.DefNormX, Cfg.DefNormY);
             return;
         }
 
@@ -130,7 +150,8 @@ public sealed class Level
 
     // Physics and render should not walk full arrays each frame
     // Visible range acts like a moving window around the player
-    public void UpdateVisible(float leftX, float rightX, float margin)
+    public void UpdateVisible(
+        float leftX, float rightX, float margin)
     {
         if (PtCount < 2)
             return;
@@ -139,19 +160,23 @@ public sealed class Level
         rightX += margin;
 
         if (rightX > _lastRightX)
-            while (_visEnd < PtCount - 1 && rightX > _ptsX[_visEnd])
+            while (_visEnd < PtCount - 1
+                && rightX > _ptsX[_visEnd])
                 _visEnd++;
 
         if (leftX < _lastLeftX)
-            while (_visStart > 0 && leftX < _ptsX[_visStart])
+            while (_visStart > 0
+                && leftX < _ptsX[_visStart])
                 _visStart--;
 
         if (leftX > _lastLeftX)
-            while (_visStart < PtCount - 1 && leftX > _ptsX[_visStart + 1])
+            while (_visStart < PtCount - 1
+                && leftX > _ptsX[_visStart + 1])
                 _visStart++;
 
         if (rightX < _lastRightX)
-            while (_visEnd > 0 && rightX < _ptsX[_visEnd - 1])
+            while (_visEnd > 0
+                && rightX < _ptsX[_visEnd - 1])
                 _visEnd--;
 
         (_lastLeftX, _lastRightX) = (leftX, rightX);
@@ -159,8 +184,6 @@ public sealed class Level
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsFinish(XVector2 p) =>
-        XVector2.DistanceSquared(p, FinishPoint) <= Cfg.FinishDist * Cfg.FinishDist;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static float AbsF(float v) => v < 0f ? -v : v;
+        XVector2.DistanceSquared(p, FinishPoint)
+            <= Cfg.FinishDist * Cfg.FinishDist;
 }
