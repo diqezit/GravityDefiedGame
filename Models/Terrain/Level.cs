@@ -6,7 +6,8 @@ namespace GravityDefiedGame.Models.Terrain;
 public readonly record struct LevelConst(
     float GroundY, float SafeZone, float TerrainH,
     float BaseLen, float LenPerLvl, float MaxLen,
-    float StartX, float EndX, float EndY, float FinishDist,
+    float StartX, float StartGateOffX,
+    float EndX, float EndY, float FinishDist, float FinishGateOffX,
     int BasePts, int PtsPerLvl, int MaxPts,
     float Epsilon, float DefX, float DefY,
     float DefNormX, float DefNormY)
@@ -14,8 +15,9 @@ public readonly record struct LevelConst(
     public static readonly LevelConst Default = new(
         GroundY: 500f, SafeZone: 300f, TerrainH: 500f,
         BaseLen: 3000f, LenPerLvl: 500f, MaxLen: 10000f,
-        StartX: 100f, EndX: -100f, EndY: 0f,
-        FinishDist: 50f,
+        StartX: 100f, StartGateOffX: 65f,
+        EndX: -100f, EndY: 0f,
+        FinishDist: 50f, FinishGateOffX: -65f,
         BasePts: 60, PtsPerLvl: 5, MaxPts: 200,
         Epsilon: 1e-6f, DefX: 0f, DefY: 500f,
         DefNormX: 0f, DefNormY: -1f);
@@ -41,6 +43,15 @@ public sealed class Level
     public XVector2 FinishPoint { get; }
     public int StartIdx { get; }
     public int FinishIdx { get; }
+
+    public float StartGateX => StartX + Cfg.StartGateOffX;
+    public float FinishGateX => FinishPoint.X + Cfg.FinishGateOffX;
+
+    public XVector2 StartGatePos =>
+        new(StartGateX, GetGroundYAtX(StartGateX));
+
+    public XVector2 FinishGatePos =>
+        new(FinishGateX, GetGroundYAtX(FinishGateX));
 
     public Level(
         int id, string name, int diff, float len,
@@ -147,6 +158,14 @@ public sealed class Level
 
         (nx, ny) = (_normX[idx], _normY[idx]);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool CrossedStartGate(float x0, float x1) =>
+        x0 < StartGateX && x1 >= StartGateX;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool CrossedFinishGate(float x0, float x1) =>
+        x0 < FinishGateX && x1 >= FinishGateX;
 
     // Physics and render should not walk full arrays each frame
     // Visible range acts like a moving window around the player

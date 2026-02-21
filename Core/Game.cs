@@ -3,145 +3,51 @@ using Vector2 = Microsoft.Xna.Framework.Vector2;
 
 namespace GravityDefiedGame.Core;
 
-public readonly struct CamCfg
-{
-    public readonly float MinZoom, MaxZoom, DefZoom,
-        LerpK, ScrollK, YOff;
-
-    public CamCfg()
-    {
-        MinZoom = 0.5f;
-        MaxZoom = 5f;
-        DefZoom = 3f;
-        LerpK = 0.1f;
-        ScrollK = 0.001f;
-        YOff = -60f;
-    }
-}
-
-public readonly struct SettingsCfg
-{
-    public readonly string Path;
-    public readonly int MinW, MaxW, MinH, MaxH, MaxBikeIdx;
-    public readonly int DefW, DefH;
-    public readonly (int W, int H)[] Resolutions;
-
-    public SettingsCfg()
-    {
-        Path = "settings.json";
-        MinW = 640;
-        MaxW = 3840;
-        MinH = 480;
-        MaxH = 2160;
-        MaxBikeIdx = 2;
-        DefW = 800;
-        DefH = 600;
-        Resolutions =
-        [
-            (800, 600), (1024, 768), (1280, 720),
-            (1366, 768), (1600, 900), (1920, 1080)
-        ];
-    }
-}
-
-public readonly struct AppCfg
-{
-    public readonly int Fps, FontSm, FontLg;
-    public readonly float MaxDt, VisMargin;
-    public readonly string FontPath, AssetDir;
-
-    public AppCfg()
-    {
-        Fps = 60;
-        MaxDt = 0.1f;
-        VisMargin = 200f;
-        FontSm = 20;
-        FontLg = 40;
-        FontPath = "Content/Fonts/PixelOperator8.ttf";
-        AssetDir = Spec.AssetDir;
-    }
-
-    public TimeSpan FrameTime =>
-        TimeSpan.FromSeconds(1.0 / Fps);
-}
-
-public readonly struct KeyBinds
-{
-    public readonly Keys Throttle, Brake, LeanL, LeanR,
-        ToggleSprites;
-
-    public KeyBinds()
-    {
-        Throttle = Keys.W;
-        Brake = Keys.S;
-        LeanL = Keys.A;
-        LeanR = Keys.D;
-        ToggleSprites = Keys.F1;
-    }
-
-    public BikeInput Read(KeyboardState k)
-    {
-        float thr = k.IsKeyDown(Throttle) ? 1f : 0f;
-        float brk = k.IsKeyDown(Brake) ? 1f : 0f;
-        float lean = k.IsKeyDown(LeanL) ? -1f
-            : k.IsKeyDown(LeanR) ? 1f : 0f;
-        return new(thr, brk, lean);
-    }
-}
-
 public readonly record struct InputState(
-    Point MousePos, bool MouseDown, bool MouseWasDown,
-    KeyboardState Keys, KeyboardState PrevKeys,
+    Point MousePos, Point MouseDelta,
+    bool LMB, bool LMBWas, bool RMB,
+    KeyboardState Kb, KeyboardState PrevKb,
     int ScrollDelta, BikeInput Bike,
-    bool ToggleSprites)
+    bool ToggleSprites, bool CycleRender,
+    bool ToggleDebugNodes)
 {
+    public bool Dragging => RMB;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool JustPressed(Keys k) =>
-        Keys.IsKeyDown(k) && PrevKeys.IsKeyUp(k);
+        Kb.IsKeyDown(k) && PrevKb.IsKeyUp(k);
 }
 
 public static class InputReader
 {
-    static readonly KeyBinds Binds = new();
-    static MouseState _prevM;
-    static KeyboardState _prevK;
+    static MouseState _pm;
+    static KeyboardState _pk;
 
     public static InputState Read()
     {
-        MouseState pm = _prevM, m = Mouse.GetState();
-        KeyboardState pk = _prevK, k = Keyboard.GetState();
-        (_prevM, _prevK) = (m, k);
-
-        bool toggle = k.IsKeyDown(Binds.ToggleSprites)
-            && pk.IsKeyUp(Binds.ToggleSprites);
+        (MouseState pm, MouseState m) = (_pm, Mouse.GetState());
+        (KeyboardState pk, KeyboardState k) = (_pk, Keyboard.GetState());
+        (_pm, _pk) = (m, k);
 
         return new(
             new(m.X, m.Y),
+            new(m.X - pm.X, m.Y - pm.Y),
             m.LeftButton == ButtonState.Pressed,
             pm.LeftButton == ButtonState.Pressed,
+            m.RightButton == ButtonState.Pressed,
             k, pk,
             m.ScrollWheelValue - pm.ScrollWheelValue,
-            Binds.Read(k),
-            toggle);
-    }
-}
-
-public sealed class Font(string path) : IDisposable
-{
-    readonly FontSystem _sys = Init(path);
-
-    static FontSystem Init(string p)
-    {
-        FontSystem sys = new();
-        using Stream s = TitleContainer.OpenStream(p);
-        sys.AddFont(s);
-        return sys;
+            ReadBike(k),
+            k.IsKeyDown(Keys.F1) && pk.IsKeyUp(Keys.F1),
+            k.IsKeyDown(Keys.F2) && pk.IsKeyUp(Keys.F2),
+            k.IsKeyDown(Keys.F4) && pk.IsKeyUp(Keys.F4));
     }
 
-    public DynamicSpriteFont Get(int size) =>
-        _sys.GetFont(size);
-
-    public void Dispose() => _sys.Dispose();
+    static BikeInput ReadBike(KeyboardState k) => new(
+        k.IsKeyDown(Keys.W) ? 1f : 0f,
+        k.IsKeyDown(Keys.S) ? 1f : 0f,
+        k.IsKeyDown(Keys.A) ? -1f
+            : k.IsKeyDown(Keys.D) ? 1f : 0f);
 }
 
 public sealed class Display(
@@ -153,8 +59,9 @@ public sealed class Display(
 
     public void Set(int nw, int nh)
     {
-        if (nw <= 0 || nh <= 0 || nw == W && nh == H)
+        if (nw <= 0 || nh <= 0 || (nw == W && nh == H))
             return;
+
         (W, H) = (nw, nh);
         gfx.PreferredBackBufferWidth = nw;
         gfx.PreferredBackBufferHeight = nh;
@@ -165,60 +72,70 @@ public sealed class Display(
 
 public sealed class Camera
 {
-    static readonly CamCfg Cfg = new();
+    const float
+        ZMin = 0.5f, ZMax = 5f, ZDef = 3f,
+        LerpK = 0.1f, ScrollK = 0.001f, YOff = -60f;
+
     int _w, _h;
 
     public Camera(int w, int h) => (_w, _h) = (w, h);
 
-    public float Zoom { get; private set; } = Cfg.DefZoom;
+    public float Zoom { get; private set; } = ZDef;
     public Vector2 Pos { get; private set; }
     public float HalfViewWidth => _w / (2f * Zoom);
 
     public Matrix Transform =>
-        Matrix.CreateTranslation(-Pos.X, -Pos.Y, 0)
-        * Matrix.CreateScale(Zoom)
-        * Matrix.CreateTranslation(_w / 2f, _h / 2f, 0);
+        Matrix.CreateTranslation(-Pos.X, -Pos.Y, 0f) *
+        Matrix.CreateScale(Zoom) *
+        Matrix.CreateTranslation(_w / 2f, _h / 2f, 0f);
 
     public void Follow(Vector2 t) =>
-        Pos = Vector2.Lerp(
-            Pos, new(t.X, t.Y + Cfg.YOff), Cfg.LerpK);
+        Pos = Vector2.Lerp(Pos, new(t.X, t.Y + YOff), LerpK);
 
     public void Scroll(int d)
     {
         if (d != 0)
-            Zoom = MathHelper.Clamp(
-                Zoom + d * Cfg.ScrollK,
-                Cfg.MinZoom, Cfg.MaxZoom);
+            Zoom = MathHelper.Clamp(Zoom + d * ScrollK, ZMin, ZMax);
     }
 
-    public void Resize(int nw, int nh) =>
-        (_w, _h) = (nw, nh);
+    public void Resize(int w, int h) => (_w, _h) = (w, h);
 }
 
 public sealed class GameSettings
 {
-    static readonly SettingsCfg Cfg = new();
-    static readonly JsonSerializerOptions Opt = new()
+    const string FilePath = "settings.json";
+    const int WMin = 640, WMax = 3840, HMin = 480, HMax = 2160;
+
+    static readonly (int W, int H)[] Res =
+    [
+        (800, 600), (1024, 768), (1280, 720),
+        (1366, 768), (1600, 900), (1920, 1080),
+    ];
+
+    static readonly string[] RndNames = ["2D", "3D Voxel"];
+
+    static readonly JsonSerializerOptions Jso = new()
     {
         WriteIndented = true
     };
 
-    public int W { get; set; } = Cfg.DefW;
-    public int H { get; set; } = Cfg.DefH;
+    public int W { get; set; } = 800;
+    public int H { get; set; } = 600;
     public int ThemeIdx { get; set; }
     public int BikeIdx { get; set; }
+    public int RenderIdx { get; set; }
 
     public string ResStr => $"{W} x {H}";
+    public string RenderStr => RndNames[RenderIdx];
 
     public int ResIdx
     {
-        get => Math.Max(0, Array.FindIndex(
-            Cfg.Resolutions,
-            r => r.W == W && r.H == H));
+        get => Math.Max(0,
+            Array.FindIndex(Res, r => r.W == W && r.H == H));
         set
         {
-            if ((uint)value < (uint)Cfg.Resolutions.Length)
-                (W, H) = Cfg.Resolutions[value];
+            if ((uint)value < (uint)Res.Length)
+                (W, H) = Res[value];
         }
     }
 
@@ -226,18 +143,17 @@ public sealed class GameSettings
     {
         try
         {
-            if (!File.Exists(Cfg.Path))
+            if (!File.Exists(FilePath))
                 return new();
 
-            GameSettings s = JsonSerializer.Deserialize
-                <GameSettings>(
-                    File.ReadAllText(Cfg.Path)) ?? new();
+            GameSettings s = JsonSerializer.Deserialize<GameSettings>(
+                File.ReadAllText(FilePath)) ?? new();
 
-            s.W = Math.Clamp(s.W, Cfg.MinW, Cfg.MaxW);
-            s.H = Math.Clamp(s.H, Cfg.MinH, Cfg.MaxH);
+            s.W = Math.Clamp(s.W, WMin, WMax);
+            s.H = Math.Clamp(s.H, HMin, HMax);
             s.ThemeIdx = Math.Max(0, s.ThemeIdx);
-            s.BikeIdx = Math.Clamp(
-                s.BikeIdx, 0, Cfg.MaxBikeIdx);
+            s.BikeIdx = Math.Clamp(s.BikeIdx, 0, 2);
+            s.RenderIdx = Math.Clamp(s.RenderIdx, 0, 1);
             return s;
         }
         catch { return new(); }
@@ -246,32 +162,34 @@ public sealed class GameSettings
     public void Save()
     {
         try
-        {
-            File.WriteAllText(Cfg.Path,
-                JsonSerializer.Serialize(this, Opt));
-        }
+        { File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Jso)); }
         catch { }
     }
 
     public void NextRes() =>
-        ResIdx = (ResIdx + 1) % Cfg.Resolutions.Length;
+        ResIdx = ThemeManager.Cycle(ResIdx, Res.Length, 1);
 
     public void PrevRes() =>
-        ResIdx = (ResIdx - 1 + Cfg.Resolutions.Length)
-            % Cfg.Resolutions.Length;
+        ResIdx = ThemeManager.Cycle(ResIdx, Res.Length, -1);
+
+    public void NextRender() =>
+        RenderIdx = ThemeManager.Cycle(RenderIdx, RndNames.Length, 1);
+
+    public void PrevRender() =>
+        RenderIdx = ThemeManager.Cycle(RenderIdx, RndNames.Length, -1);
 }
 
 public sealed class Game : Microsoft.Xna.Framework.Game
 {
-    static readonly AppCfg App = new();
+    const float MaxDt = 0.1f, Margin = 200f;
+    const int Fps = 60;
 
     readonly GraphicsDeviceManager _gfx;
     readonly GameSettings _cfg;
-    readonly GamePlay _ctrl = new();
+    readonly GamePlay _gp = new();
 
     SpriteBatch _sb = null!;
-    Font _font = null!;
-    Display _disp = null!;
+    Display _dsp = null!;
     Camera _cam = null!;
     Renderer _rnd = null!;
     ScreenMachine _ui = null!;
@@ -284,15 +202,16 @@ public sealed class Game : Microsoft.Xna.Framework.Game
             PreferredBackBufferWidth = _cfg.W,
             PreferredBackBufferHeight = _cfg.H
         };
+
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
-        TargetElapsedTime = App.FrameTime;
+        TargetElapsedTime = TimeSpan.FromSeconds(1.0 / Fps);
     }
 
     protected override void Initialize()
     {
         _cam = new(_cfg.W, _cfg.H);
-        _disp = new(_gfx, _cfg.W, _cfg.H, OnResize);
+        _dsp = new(_gfx, _cfg.W, _cfg.H, OnResize);
         ThemeManager.Set(_cfg.ThemeIdx);
         base.Initialize();
     }
@@ -300,92 +219,114 @@ public sealed class Game : Microsoft.Xna.Framework.Game
     protected override void LoadContent()
     {
         _sb = new(GraphicsDevice);
-        _font = new(App.FontPath);
-        _rnd = new(_sb, new(
-            () => _ctrl.Bike, () => _ctrl.Level,
-            () => _cam.Zoom, () => _cam.Pos,
-            () => _cam.Transform));
-        _rnd.LoadBikeSprites(GraphicsDevice, App.AssetDir);
+        _rnd = new(_sb, new(_gp, _cam), _cfg.W, _cfg.H);
+        _rnd.LoadBikeSprites(GraphicsDevice);
+        _rnd.SetMode((RenderMode)_cfg.RenderIdx);
+
+        MyraEnvironment.Game = this;
         RebuildUI();
-        _ctrl.LoadLevels();
+        _gp.LoadLevels();
     }
 
-    protected override void Update(GameTime time)
+    protected override void Update(GameTime gt)
     {
         float dt = MathF.Min(
-            (float)time.ElapsedGameTime.TotalSeconds,
-            App.MaxDt);
+            (float)gt.ElapsedGameTime.TotalSeconds, MaxDt);
         InputState inp = InputReader.Read();
 
         if (inp.ToggleSprites)
             _rnd.ToggleBikeRenderMode();
 
-        _ui.Update(inp);
-
-        if (_ctrl.State == GameState.Playing)
+        if (inp.CycleRender)
         {
-            _ctrl.HandleInput(inp.Bike);
-            _ctrl.Update(dt);
-
-            if (_ctrl.Bike?.Pos is { } p
-                && float.IsFinite(p.X)
-                && float.IsFinite(p.Y))
-            {
-                _cam.Follow(p);
-                _ctrl.Level?.UpdateVisible(
-                    p.X - _cam.HalfViewWidth,
-                    p.X + _cam.HalfViewWidth,
-                    App.VisMargin);
-            }
-
-            _cam.Scroll(inp.ScrollDelta);
+            _rnd.CycleMode();
+            _cfg.RenderIdx = (int)_rnd.Mode;
+            _cfg.Save();
         }
 
-        base.Update(time);
+#if DEBUG
+        if (inp.ToggleDebugNodes && _gp.Bike != null)
+            _gp.Bike.DebugNodesEnabled = !_gp.Bike.DebugNodesEnabled;
+#endif
+
+        _ui.Update(inp);
+
+        if (_gp.State == GameState.Playing)
+        {
+            _gp.HandleInput(inp.Bike);
+            _gp.Update(dt);
+            UpdateCam(inp.ScrollDelta);
+            _rnd.HandleInput(inp);
+        }
+
+        _rnd.Update(dt);
+        base.Update(gt);
     }
 
-    protected override void Draw(GameTime time)
+    protected override void Draw(GameTime gt)
     {
         GraphicsDevice.Clear(ThemeManager.Cur.BgColor);
         _rnd.RenderBackground();
 
-        if (_ctrl.Level is not null)
+        if (_gp.Level is not null)
             _rnd.RenderGame();
 
-        _sb.Begin(
-            SpriteSortMode.Deferred,
-            BlendState.AlphaBlend);
         _ui.Draw();
-        _sb.End();
 
-        base.Draw(time);
+#if DEBUG
+        _gp.Bike?.DrawDebug(_sb, _ui.DebugFont, GraphicsDevice,
+            _cam.Transform, _rnd.Mode == RenderMode.Voxel ? _rnd.VoxCam : null);
+#endif
+
+        base.Draw(gt);
     }
 
-    public void SetResolution(int w, int h) =>
-        _disp.Set(w, h);
+    public void SetResolution(int w, int h) => _dsp.Set(w, h);
+
+    public void ApplyRenderMode() =>
+        _rnd.SetMode((RenderMode)_cfg.RenderIdx);
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            _font?.Dispose();
+            _ui?.Dispose();
             _sb?.Dispose();
             _rnd?.Dispose();
-            _ctrl?.Dispose();
+            _gp?.Dispose();
         }
         base.Dispose(disposing);
     }
 
-    void RebuildUI() =>
-        _ui = new(
-            new(_sb, _font.Get(App.FontSm),
-                _font.Get(App.FontLg),
-                _disp.W, _disp.H),
-            _ctrl, this, _cfg);
+    void UpdateCam(int scroll)
+    {
+        if (_gp.Bike is not { } b)
+            return;
+
+        Vector2 tgt = (b.RagdollActive ? b.RiderPose.Hd : b.Pos)
+            * GamePlay.BikeScale;
+
+        if (float.IsFinite(tgt.X) && float.IsFinite(tgt.Y))
+        {
+            _cam.Follow(tgt);
+
+            float bx = b.Pos.X * GamePlay.BikeScale;
+            if (float.IsFinite(bx))
+                _gp.Level?.UpdateVisible(
+                    bx - _cam.HalfViewWidth,
+                    bx + _cam.HalfViewWidth,
+                    Margin);
+        }
+
+        _cam.Scroll(scroll);
+    }
+
+    void RebuildUI() => _ui = new(_gp, this, _cfg);
 
     void OnResize(int w, int h)
     {
         _cam.Resize(w, h);
+        _rnd.ResizeCamera(w, h);
         (_cfg.W, _cfg.H) = (w, h);
         _cfg.Save();
         RebuildUI();

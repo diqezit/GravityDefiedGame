@@ -1,12 +1,11 @@
 using static System.MathF;
-using Vector2 = Microsoft.Xna.Framework.Vector2;
 
 namespace GravityDefiedGame.Models.Bike;
 
-public enum BikeType { Standard, Sport, OffRoad }
+public enum BikeType : byte { Standard, Sport, OffRoad }
 
 [Flags]
-public enum BikeState
+public enum BikeState : byte
 {
     None = 0, Grounded = 1, InAir = 2,
     Wheelie = 4, Stoppie = 8, Crashed = 16
@@ -19,81 +18,6 @@ public delegate void LandEvent(float impactSpeed);
 public readonly record struct BikeInput(
     float Throttle, float Brake, float Lean);
 
-public readonly record struct PhysConst(
-    float Gravity, float FixedDt,
-    float Scale, float InvScale, float WheelBase,
-    float PushOut, float CollMargin,
-    float WheelieAngle, float StoppieAngle,
-    float MinAxleDist2, float MaxAxleDist2, float TorqueDamp,
-    float UpperOffsetX, float UpperOffsetY, float HeadOffsetY,
-    float MaxRelVel, float SpringMinDist, float FrameCollOffsetPx,
-    float MinDist, float Epsilon, float MaxFrameDt,
-    float HardLandVel, float PlaceOffsetY, float DefaultGroundY,
-    float MinSlice, float CollPadding,
-    float TiltRestoreLow, float TiltRestoreHigh, float TiltCenter,
-    float TiltRestoreStep, float TiltLeanSlowStep, float TiltLeanFastStep,
-    float CrossSpringKMul, float CrossSpringDMul, float HeadSpringKMul)
-{
-    public static readonly PhysConst Default = new(
-        Gravity: 25f, FixedDt: 0.016f,
-        Scale: 6f, InvScale: 1f / 6f, WheelBase: 3.5f,
-        PushOut: 0.05f / 6f, CollMargin: 0.1f,
-        WheelieAngle: 0.32f, StoppieAngle: 0.32f,
-        MinAxleDist2: 15f, MaxAxleDist2: 70f, TorqueDamp: 0.1f,
-        UpperOffsetX: 2.0f, UpperOffsetY: 3.0f, HeadOffsetY: 5.0f,
-        MaxRelVel: 30f, SpringMinDist: 0.0000458f,
-        FrameCollOffsetPx: 1.0f,
-        MinDist: 0.01f, Epsilon: 0.0001f, MaxFrameDt: 0.1f,
-        HardLandVel: 3f, PlaceOffsetY: 0.5f, DefaultGroundY: 80f,
-        MinSlice: 65f / 65536f, CollPadding: 1.75f,
-        TiltRestoreLow: 0.4f, TiltRestoreHigh: 0.6f,
-        TiltCenter: 0.5f,
-        TiltRestoreStep: 0.05f, TiltLeanSlowStep: 0.025f,
-        TiltLeanFastStep: 0.05f,
-        CrossSpringKMul: 0.1f, CrossSpringDMul: 0.7f,
-        HeadSpringKMul: 1.1f);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static float Hyp(float a, float b) => Sqrt(a * a + b * b);
-
-    public readonly float RestWheel => WheelBase;
-    public readonly float RestUpper => Hyp(UpperOffsetX, UpperOffsetY);
-    public readonly float RestUpperSpan => UpperOffsetX * 2f;
-    public readonly float RestWheelUpper => Hyp(WheelBase - UpperOffsetX, UpperOffsetY);
-    public readonly float RestHeadUpper => Hyp(UpperOffsetX, HeadOffsetY - UpperOffsetY);
-    public readonly float RestHeadFrame => HeadOffsetY;
-
-    public readonly float OuterR(float baseR) =>
-        baseR + CollMargin;
-
-    public readonly float InnerR(float baseR)
-    {
-        float v = baseR - CollMargin;
-        return v < 0.01f ? 0.01f : v;
-    }
-}
-
-public readonly record struct WheelFriction(
-    float RotDamp, float SlipFriction, float RollCouple,
-    float BounceFront, float BounceRear,
-    float TangentDamp, float BrakeDamp,
-    float BrakeBase, float BrakeP,
-    float StopThreshold, float MinWheelR)
-{
-    public static readonly WheelFriction Default = new(
-        RotDamp: 0.7f,
-        SlipFriction: 0.2f,
-        RollCouple: 0.6f,
-        BounceFront: 0.5f,
-        BounceRear: 0.5f,
-        TangentDamp: 0.5f,
-        BrakeDamp: 0.1f,
-        BrakeBase: 0.4f,
-        BrakeP: 0.4f,
-        StopThreshold: 0.1f,
-        MinWheelR: 0.1f);
-}
-
 public readonly record struct BikeCfg(
     float WheelR, float Mass,
     float SpringK, float SpringDamp,
@@ -105,114 +29,328 @@ public readonly record struct BikeCfg(
     public static BikeCfg Get(BikeType t) => t switch
     {
         BikeType.Standard => new(
-            1.75f, 5.5f, 300f, 4f, 17f,
-            0.4f, 5f, 0.5f, 50f, 1000f, 0.33f),
+            1.75f, 5.5f, 300f, 4f, 17f, 0.4f,
+            5f, 0.5f, 50f, 1000f, 0.33f),
+
         BikeType.Sport => new(
-            1.75f, 5.5f, 330f, 4f, 20f,
-            0.6f, 5f, 0.5f, 53f, 1150f, 0.33f),
+            1.75f, 5.5f, 330f, 4f, 20f, 0.6f,
+            5f, 0.5f, 53f, 1150f, 0.33f),
+
         BikeType.OffRoad => new(
-            1.75f, 5.5f, 330f, 4f, 22f,
-            1.0f, 20f, 0.5f, 54f, 1200f, 0.33f),
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(t), t, null)
+            1.75f, 5.5f, 330f, 4f, 22f, 1.0f,
+            20f, 0.5f, 54f, 1200f, 0.33f),
+
+        _ => throw new ArgumentOutOfRangeException(nameof(t))
     };
 }
 
 public readonly record struct SpringCfg(
     int A, int B, float RestLen, float K, float D);
 
-public readonly record struct InputCfg(
-    float LeanDeadZone, float InputDeadZone)
+public readonly struct PhysConst
 {
-    public static readonly InputCfg Default = new(
-        LeanDeadZone: 0.05f,
-        InputDeadZone: 0.01f);
+    public static readonly PhysConst Default = new();
+
+    public readonly float
+        Gravity, FixedDt, WheelBase, PushOut, CollMargin,
+        WheelieAngle, StoppieAngle, TorqueDamp,
+        MinAxleDist2, MaxAxleDist2,
+        UpperOffsetX, UpperOffsetY, HeadOffsetY,
+        MaxRelVel, SpringMinDist, FrameCollOffset,
+        MinDist, Epsilon, MaxFrameDt,
+        HardLandVel, PlaceOffsetY, DefaultGroundY,
+        MinSlice, CollPadding,
+        TiltRestoreLow, TiltRestoreHigh, TiltCenter,
+        TiltRestoreStep, TiltLeanSlowStep, TiltLeanFastStep,
+        CrossSpringKMul, CrossSpringDMul, CrossSpringRwDMul,
+        HeadSpringKMul, TerrainScale;
+
+    public PhysConst()
+    {
+        (Gravity, FixedDt, WheelBase) = (25f, 0.016f, 3.5f);
+        (PushOut, CollMargin) = (0.000033f, 0.05f);
+
+        (WheelieAngle, StoppieAngle, TorqueDamp) = (0.32f, 0.32f, 0.1f);
+        (MinAxleDist2, MaxAxleDist2) = (15f, 70f);
+
+        (UpperOffsetX, UpperOffsetY, HeadOffsetY) = (2.0f, 3.0f, 7.1f);
+
+        (MaxRelVel, SpringMinDist, FrameCollOffset) = (30f, 0.0000458f, 0.05f);
+        (MinDist, Epsilon, MaxFrameDt) = (0.01f, 0.0001f, 0.1f);
+
+        (HardLandVel, PlaceOffsetY, DefaultGroundY) = (3f, 0.5f, 13.33f);
+
+        (MinSlice, CollPadding) = (0.001f, 1.75f);
+
+        (TiltRestoreLow, TiltRestoreHigh, TiltCenter) = (0.4f, 0.6f, 0.5f);
+        (TiltRestoreStep, TiltLeanSlowStep, TiltLeanFastStep) = (0.05f, 0.025f, 0.05f);
+
+        (CrossSpringKMul, CrossSpringDMul, CrossSpringRwDMul) = (0.2f, 1.4f, 2.0f);
+        (HeadSpringKMul, TerrainScale) = (1.1f, 6f);
+    }
+
+    public float RestWheel => WheelBase;
+    public float RestUpper => Hyp(UpperOffsetX, UpperOffsetY);
+    public float RestUpperSpan => UpperOffsetX * 2f;
+    public float RestWheelUpper => Hyp(WheelBase - UpperOffsetX, UpperOffsetY);
+    public float RestHeadUpper => Hyp(UpperOffsetX, HeadOffsetY - UpperOffsetY);
+    public float RestHeadFrame => HeadOffsetY;
+
+    public float OuterR(float baseR) => baseR + CollMargin;
+
+    public float InnerR(float baseR) => Max(baseR - CollMargin, 0.01f);
+
+    static float Hyp(float a, float b) => Sqrt(a * a + b * b);
+
+    public static float WrapAngle(float a)
+    {
+        while (a > PI)
+            a -= Tau;
+        while (a < -PI)
+            a += Tau;
+        return a;
+    }
+
+    public static bool SafeNorm(
+        float dx, float dy, float minDist,
+        out float nx, out float ny)
+    {
+        float d = BikeDynamics.FastDist(dx, dy);
+        if (d < minDist)
+        { nx = 0f; ny = -1f; return false; }
+        (nx, ny) = (dx / d, dy / d);
+        return true;
+    }
 }
 
-public readonly record struct BikeVisual(
-    Vector2 Fr, Vector2 Fw, Vector2 Rw,
-    Vector2 Uf, Vector2 Ur, Vector2 Hd,
-    float WhlR, float FwRot, float RwRot, float TiltZ)
+public readonly struct WheelFriction
 {
-    public static BikeVisual Empty => new(
-        default, default, default,
-        default, default, default,
-        10.5f, 0f, 0f, 0.5f);
+    public static readonly WheelFriction Default = new();
+
+    public readonly float
+        RotDamp, SlipFriction, RollCouple,
+        BounceFront, BounceRear, TangentDamp, BrakeDamp,
+        BrakeBase, BrakeP, StopThreshold, MinWheelR,
+        FreeSpinDamp;
+
+    public WheelFriction()
+    {
+        (RotDamp, SlipFriction, RollCouple) = (0.7f, 0.2f, 0.6f);
+        (BounceFront, BounceRear, TangentDamp) = (0.5f, 0.5f, 0.5f);
+        (BrakeDamp, BrakeBase, BrakeP) = (0.1f, 0.4f, 0.4f);
+        (StopThreshold, MinWheelR) = (0.1f, 0.1f);
+        FreeSpinDamp = 0.998f;
+    }
+}
+
+public readonly struct MathCfg
+{
+    public static readonly MathCfg Default = new();
+
+    public readonly float FastDistMax, FastDistMin;
+
+    public MathCfg()
+    {
+        (FastDistMax, FastDistMin) = (0.98339844f, 0.43066406f);
+    }
+}
+
+public readonly struct InputCfg
+{
+    public static readonly InputCfg Default = new();
+
+    public readonly float LeanDeadZone, BrakeDeadZone, ThrottleDeadZone;
+
+    public InputCfg()
+    {
+        (LeanDeadZone, BrakeDeadZone, ThrottleDeadZone) = (0.05f, 0.01f, 0.01f);
+    }
+}
+
+public readonly struct BodyCfg
+{
+    public static readonly BodyCfg Default = new();
+
+    public readonly float[] Radii;
+
+    public BodyCfg()
+    {
+        Radii = [0.5f, 1.75f, 1.75f, 0.5f, 0.5f, 0.5f];
+    }
+}
+
+public readonly struct MassCfg
+{
+    public static readonly MassCfg Default = new();
+
+    public readonly float[] Norm, Wheelie, Stoppie;
+
+    public MassCfg()
+    {
+        Norm = [3.64f, 13.34f, 3.64f, 5.72f, 5.72f, 4.44f];
+        Wheelie = [5.72f, 13.34f, 3.08f, 5.72f, 4.44f, 4.44f];
+        Stoppie = [5.72f, 8.0f, 3.64f, 4.44f, 5.72f, 4.44f];
+    }
+}
+
+public readonly record struct Pose(
+    Vector2 Hip, Vector2 Sh, Vector2 Elb, Vector2 Hnd,
+    Vector2 Nk, Vector2 Ft, Vector2 Kn, Vector2 Hd)
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Pose Lerp(in Pose a, in Pose b, float t) => new(
+        Vector2.Lerp(a.Hip, b.Hip, t),
+        Vector2.Lerp(a.Sh, b.Sh, t),
+        Vector2.Lerp(a.Elb, b.Elb, t),
+        Vector2.Lerp(a.Hnd, b.Hnd, t),
+        Vector2.Lerp(a.Nk, b.Nk, t),
+        Vector2.Lerp(a.Ft, b.Ft, t),
+        Vector2.Lerp(a.Kn, b.Kn, t),
+        Vector2.Lerp(a.Hd, b.Hd, t));
+
+    public Pose ToWorld(Vector2 o, Vector2 fw, Vector2 pp, float sc)
+    {
+        Vector2 M(Vector2 v) =>
+            o + pp * (v.X * sc) + fw * (v.Y * sc);
+
+        return new(
+            M(Hip), M(Sh), M(Elb), M(Hnd),
+            M(Nk), M(Ft), M(Kn), M(Hd));
+    }
+
+    public void CopyTo(Span<Vector2> dest)
+    {
+        (dest[0], dest[1], dest[2], dest[3]) = (Hip, Sh, Elb, Hnd);
+        (dest[4], dest[5], dest[6], dest[7]) = (Nk, Ft, Kn, Hd);
+    }
+
+    public static Pose FromSpan(ReadOnlySpan<Vector2> src) => new(
+        src[0], src[1], src[2], src[3],
+        src[4], src[5], src[6], src[7]);
+}
+
+public readonly struct PoseCfg
+{
+    public static readonly PoseCfg Default = new();
+
+    public readonly float Scale, TiltMid;
+    public readonly Pose L, N, R;
+
+    public PoseCfg()
+    {
+        (Scale, TiltMid) = (1f, 0.5f);
+
+        L = new(
+            new(2.9f, -1.4f), new(3.9f, -3.6f),
+            new(5.1f, -1.8f), new(6f, -0.7f),
+            new(4.6f, 0.1f), new(1f, -1.2f),
+            new(0.2f, -1.2f), new(4.4f, 1.3f));
+
+        N = new(
+            new(2.8f, -0.6f), new(4f, -2f),
+            new(6f, -1f), new(7f, -0.6f),
+            new(4.5f, 0.1f), new(0.3f, -2.2f),
+            new(0.2f, -1.2f), new(4.4f, 1.3f));
+
+        R = new(
+            new(2.4f, 0.2f), new(4.5f, -0.2f),
+            new(5.6f, 1.6f), new(6.2f, 2.7f),
+            new(5.3f, 1.1f), new(0.6f, -1.5f),
+            new(0.2f, -0.8f), new(4.4f, 1.3f));
+    }
+}
+
+public static class Poses
+{
+    static readonly PoseCfg C = PoseCfg.Default;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Pose ForTilt(float z) => z < C.TiltMid
+        ? Pose.Lerp(C.L, C.N, Math.Clamp(z * 2f, 0f, 1f))
+        : Pose.Lerp(C.N, C.R, Math.Clamp((z - C.TiltMid) * 2f, 0f, 1f));
+
+    public static Pose Build(Vector2 fr, Vector2 uf, Vector2 ur, float tiltZ)
+    {
+        Vector2 ax = uf - ur;
+        float len = Max(ax.Length(), 0.01f);
+        Vector2 fw = ax / len;
+        Vector2 pp = new(fw.Y, -fw.X);
+        return ForTilt(tiltZ).ToWorld(fr, fw, pp, C.Scale);
+    }
+}
+
+public struct PtState
+{
+    public Vector2 Pos, Vel, Force;
+    public float AngVel, Torque, Angle;
+}
+
+public struct BodyDef
+{
+    public float R, Inertia;
+    public bool IsWheel;
 }
 
 public sealed partial class BikePhysics : IDisposable
 {
-    enum CollCode { DeepPen = 0, Resolve = 1, None = 2 }
-
-    const int BFrame = 0, BFw = 1, BRw = 2,
-        BUF = 3, BUR = 4, BHead = 5;
-    const int BodyCount = 6;
+    public const int
+        BFrame = 0, BFw = 1, BRw = 2,
+        BUF = 3, BUR = 4, BHead = 5,
+        BodyCount = 6, SpringCount = 10;
 
     static readonly PhysConst P = PhysConst.Default;
-    static readonly WheelFriction WF = WheelFriction.Default;
-    static readonly InputCfg IC = InputCfg.Default;
+    static readonly InputCfg InpC = InputCfg.Default;
+    static readonly BodyCfg BodC = BodyCfg.Default;
+    static readonly MassCfg MasC = MassCfg.Default;
 
-    static readonly float[] CollR =
-        [1.0f, 1.75f, 1.75f, 1.0f, 1.0f, 0.5f];
+    internal readonly PtState[] Cur = new PtState[BodyCount];
+    internal readonly PtState[] New = new PtState[BodyCount];
+    internal readonly BodyDef[] Bods = new BodyDef[BodyCount];
+    internal readonly SpringCfg[] Spr = new SpringCfg[SpringCount];
+    internal readonly float[] InvM = new float[BodyCount];
 
-    static readonly float[] NormInvM =
-        [3.64f, 13.34f, 3.64f, 5.72f, 5.72f, 4.44f];
-    static readonly float[] WheelieInvM =
-        [5.72f, 13.34f, 3.08f, 5.72f, 4.44f, 4.44f];
-    static readonly float[] StoppieInvM =
-        [5.72f, 8.0f, 3.64f, 4.44f, 5.72f, 4.44f];
+    internal BikeInput Input;
+    internal BikeCfg Cfg;
+    internal Level? Terrain;
+
+    internal float EngineTorque, TiltZ, TiltAngle;
+    internal bool LeanL, LeanR, Braking, FwGnd, RwGnd, HeadHit;
+    internal int FrameNum, GndFrame = -1;
+
+    readonly BikeDynamics _dyn;
+    readonly BikeCollider _col;
+    readonly RiderRagdoll _ragdoll = new();
 
     bool _disposed;
-    Level? _terrain;
-    BikeInput _input;
-    int _frameNum;
-    int _gndFrame = -1;
-    float _accumDt, _tiltZ;
-    float _engineTorque, _tiltAngle;
+    float _accumDt;
 
-    readonly PtState[] _cur = new PtState[BodyCount];
-    readonly PtState[] _new = new PtState[BodyCount];
-    readonly PtState[] _k1 = new PtState[BodyCount];
-    readonly PtState[] _k2 = new PtState[BodyCount];
-    readonly PtState[] _tmp = new PtState[BodyCount];
-    readonly PtState[] _vis = new PtState[BodyCount];
+    public BikeCfg CfgPub => Cfg;
+    public BikeType Type { get; private set; }
+    public BikeState State { get; private set; } = BikeState.Grounded;
 
-    readonly BodyDef[] _bods = new BodyDef[BodyCount];
-    readonly SpringCfg[] _spr = new SpringCfg[10];
-    readonly float[] _curInvM = new float[BodyCount];
+    public Vector2 Pos => Cur[BFrame].Pos;
+    public Vector2 Vel => Cur[BFrame].Vel;
+    public Vector2 FwPos => Cur[BFw].Pos;
+    public Vector2 RwPos => Cur[BRw].Pos;
+    public Vector2 UfPos => Cur[BUF].Pos;
+    public Vector2 UrPos => Cur[BUR].Pos;
+    public Vector2 HdPos => Cur[BHead].Pos;
 
-    bool _leanL, _leanR, _braking;
-    int _collIdx;
-    float _collNx, _collNy;
-    bool _headHit;
-
-    public BikeCfg Cfg { get; private set; } =
-        BikeCfg.Get(BikeType.Standard);
-    public BikeType Type { get; private set; } =
-        BikeType.Standard;
-    public BikeState State { get; private set; } =
-        BikeState.Grounded;
-
-    public Vector2 Pos => _cur[BFrame].Pos * P.Scale;
-    public Vector2 Vel => _cur[BFrame].Vel * P.Scale;
     public float Ang { get; private set; }
     public float AngVel { get; private set; }
-    public float Speed => FastLen(Vel);
+    public float Speed => BikeDynamics.FastLen(Vel);
+    public float FwRot => Cur[BFw].Angle;
+    public float RwRot => Cur[BRw].Angle;
+    public float RawTiltZ => TiltZ;
 
-    public Vector2 FwPos => _cur[BFw].Pos * P.Scale;
-    public Vector2 RwPos => _cur[BRw].Pos * P.Scale;
-    public float FwRot { get; private set; }
-    public float RwRot { get; private set; }
-
-    public bool FwGnd { get; private set; }
-    public bool RwGnd { get; private set; }
     public bool InAir => !FwGnd && !RwGnd;
     public bool IsGrounded => FwGnd || RwGnd;
     public bool Crashed => (State & BikeState.Crashed) != 0;
-    public bool FinishReached { get; private set; }
+    public bool FinishReached { get; internal set; }
 
-    public float FrontSusp { get; private set; }
-    public float RearSusp { get; private set; }
+    public bool RagdollActive => _ragdoll.On;
+    public bool RagdollDone { get; set; }
+    public Pose RiderPose => _ragdoll.On ? _ragdoll.GetPose() : GetPose();
 
     public event BikeStateChanged? OnStateChanged;
     public event BikeEvent? OnCrash;
@@ -222,31 +360,15 @@ public sealed partial class BikePhysics : IDisposable
     {
         Type = type;
         Cfg = BikeCfg.Get(type);
+        _dyn = new BikeDynamics(this);
+        _col = new BikeCollider(this, _dyn);
         Build();
     }
 
     public void SetTerrain(Level level)
     {
         if (!_disposed)
-            _terrain = level;
-    }
-
-    public void SetInput(float thr, float brk, float lean)
-    {
-        if (_disposed)
-            return;
-
-        float finalThr = thr > 0f ? 1f : 0f;
-        float finalBrk = brk > 0f ? 1f : 0f;
-
-        if (finalBrk > 0f)
-            finalThr = 0f;
-
-        float finalLean = lean < 0f ? -1f
-            : (lean > 0f ? 1f : 0f);
-
-        _input = new BikeInput(
-            finalThr, finalBrk, finalLean);
+            Terrain = level;
     }
 
     public void SetType(BikeType t)
@@ -258,42 +380,59 @@ public sealed partial class BikePhysics : IDisposable
         Build();
     }
 
-    public void Reset(float startX)
+    public void SetInput(float thr, float brk, float lean)
+    {
+        if (_disposed || Crashed)
+            return;
+
+        float finalThr = thr > 0f ? 1f : 0f;
+        float finalBrk = brk > 0f ? 1f : 0f;
+        if (finalBrk > 0f)
+            finalThr = 0f;
+
+        float finalLean = lean < 0f ? -1f : (lean > 0f ? 1f : 0f);
+        Input = new(finalThr, finalBrk, finalLean);
+    }
+
+    public void Reset(float startXMeters)
     {
         if (_disposed)
             return;
-#if DEBUG
-        Core.Log.Debug("BikePhysics", $"Reset({startX}) called");
-#endif
+
+        _ragdoll.Stop();
         Build();
-        Place(startX * P.InvScale);
-        (_input, _accumDt, _tiltAngle, _tiltZ, _frameNum) =
-            (default, 0f, 0f, P.TiltCenter, 0);
-        (Ang, AngVel, FwRot, RwRot) = (0f, 0f, 0f, 0f);
-        (FwGnd, RwGnd, FrontSusp, RearSusp) =
-            (false, false, 0f, 0f);
-        (_leanL, _leanR, _braking) = (false, false, false);
-        (_collIdx, _collNx, _collNy, _headHit) =
-            (-1, 0f, -1f, false);
-        (_engineTorque, FinishReached) = (0f, false);
+        Place(startXMeters);
+        ResetState();
+    }
+
+    void ResetState()
+    {
+        (Input, _accumDt, TiltAngle) = (default, 0f, 0f);
+        (TiltZ, FrameNum, Ang, AngVel) = (P.TiltCenter, 0, 0f, 0f);
+        (FwGnd, RwGnd, LeanL, LeanR, Braking) = (false, false, false, false, false);
+        (EngineTorque, FinishReached, HeadHit, GndFrame) = (0f, false, false, -1);
+        RagdollDone = false;
         State = BikeState.Grounded;
     }
 
     public void Update(float dt)
     {
-        if (_disposed || Crashed || dt <= 0f)
+        if (_disposed || dt <= 0f)
+            return;
+
+        if (Crashed && RagdollDone)
             return;
 
         _accumDt += Min(dt, P.MaxFrameDt);
+
         while (_accumDt >= P.FixedDt)
         {
-            Step(P.FixedDt);
-            _accumDt -= P.FixedDt;
-            if (Crashed)
-                break;
-        }
+            if (_ragdoll.On)
+                _ragdoll.StepFixed(P.FixedDt);
 
-        CopyState(_cur, _vis);
+            StepFixed(P.FixedDt);
+            _accumDt -= P.FixedDt;
+        }
     }
 
     public void Dispose()
@@ -301,174 +440,500 @@ public sealed partial class BikePhysics : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        (OnStateChanged, OnCrash, OnHardLand) =
-            (null, null, null);
-    }
-}
-
-public sealed partial class BikePhysics
-{
-    struct PtState
-    {
-        public Vector2 Pos, Vel, Force;
-        public float AngVel, Torque, Angle;
+        (OnStateChanged, OnCrash, OnHardLand) = (null, null, null);
     }
 
-    struct BodyDef
-    {
-        public float R, Inertia;
-        public bool IsWheel;
-    }
+    Pose GetPose() =>
+        Poses.Build(Cur[BFrame].Pos, Cur[BUF].Pos, Cur[BUR].Pos, TiltZ);
 
     void Build()
     {
         for (int i = 0; i < BodyCount; i++)
         {
-            _curInvM[i] = NormInvM[i];
-            _bods[i] = new()
+            InvM[i] = MasC.Norm[i];
+            Bods[i] = new()
             {
-                R = CollR[i],
-                Inertia = (i == BRw)
-                    ? Cfg.WheelInertia : 0f,
-                IsWheel = i is BFw or BRw
+                R = BodC.Radii[i],
+                IsWheel = i is BFw or BRw,
+                Inertia = i == BRw ? Cfg.WheelInertia : 0f
             };
         }
-
-        RebuildSprings();
-    }
-
-    void RebuildSprings()
-    {
-        float k = Cfg.SpringK, d = Cfg.SpringDamp;
-
-        _spr[0] = new(BFrame, BFw, P.RestWheel, k, d);
-        _spr[1] = new(BFrame, BRw, P.RestWheel, k, d);
-        _spr[2] = new(BFrame, BUF, P.RestUpper, k, d);
-        _spr[3] = new(BFrame, BUR, P.RestUpper, k, d);
-        _spr[4] = new(BUF, BUR, P.RestUpperSpan, k, d);
-        _spr[5] = new(BFw, BUF, P.RestWheelUpper,
-            k * P.CrossSpringKMul, d * P.CrossSpringDMul);
-        _spr[6] = new(BRw, BUR, P.RestWheelUpper,
-            k * P.CrossSpringKMul, d);
-        _spr[7] = new(BHead, BUR, P.RestHeadUpper,
-            k * P.HeadSpringKMul, d);
-        _spr[8] = new(BHead, BUF, P.RestHeadUpper,
-            k * P.HeadSpringKMul, d);
-        _spr[9] = new(BHead, BFrame, P.RestHeadFrame,
-            k * P.HeadSpringKMul, d);
+        _dyn.RebuildSprings();
     }
 
     void Place(float x)
     {
-        float gy = _terrain != null
-            ? _terrain.GetGroundYAtX(x * P.Scale) * P.InvScale
+        float scale = P.TerrainScale;
+        float gy = Terrain != null
+            ? Terrain.GetGroundYAtX(x * scale) / scale
             : P.DefaultGroundY;
-        float r = Cfg.WheelR;
-        float baseY = gy - r - P.PlaceOffsetY;
 
-        _cur[BFrame] = new() { Pos = new(x, baseY) };
-        _cur[BFw] = new()
-        {
-            Pos = new(x + P.WheelBase, baseY)
-        };
-        _cur[BRw] = new()
-        {
-            Pos = new(x - P.WheelBase, baseY)
-        };
-        _cur[BUF] = new()
-        {
-            Pos = new(x + P.UpperOffsetX,
-                baseY - P.UpperOffsetY)
-        };
-        _cur[BUR] = new()
-        {
-            Pos = new(x - P.UpperOffsetX,
-                baseY - P.UpperOffsetY)
-        };
-        _cur[BHead] = new()
-        {
-            Pos = new(x, baseY - P.HeadOffsetY)
-        };
+        float baseY = gy - Cfg.WheelR - P.PlaceOffsetY;
+        Array.Clear(Cur);
 
-        for (int i = 0; i < BodyCount; i++)
-        {
-            _cur[i].Vel = Vector2.Zero;
-            _cur[i].AngVel = 0f;
-            _cur[i].Angle = 0f;
-        }
+        Cur[BFrame].Pos = new(x, baseY);
+        Cur[BFw].Pos = new(x + P.WheelBase, baseY);
+        Cur[BRw].Pos = new(x - P.WheelBase, baseY);
+        Cur[BUF].Pos = new(x + P.UpperOffsetX, baseY - P.UpperOffsetY);
+        Cur[BUR].Pos = new(x - P.UpperOffsetX, baseY - P.UpperOffsetY);
+        Cur[BHead].Pos = new(x, baseY - P.HeadOffsetY);
 
-        CopyState(_cur, _new);
-        CopyState(_cur, _vis);
+        Array.Copy(Cur, New, BodyCount);
     }
-}
 
-public sealed partial class BikePhysics
-{
-    void Step(float dt)
+    void StepFixed(float dt)
     {
-        _frameNum++;
-        float var1 = _cur[BFrame].Vel.Y;
-        bool var2 = InAir;
+        FrameNum++;
+        float oldVelY = Cur[BFrame].Vel.Y;
+        bool wasAir = InAir;
 
-        _leanL = _input.Lean < -IC.LeanDeadZone;
-        _leanR = _input.Lean > IC.LeanDeadZone;
-        _braking = _input.Brake > IC.InputDeadZone;
+        LeanL = !Crashed && Input.Lean < -InpC.LeanDeadZone;
+        LeanR = !Crashed && Input.Lean > InpC.LeanDeadZone;
+        Braking = !Crashed && Input.Brake > InpC.BrakeDeadZone;
 
-#if DEBUG
-        DbgClrFrame();
-#endif
+        _dyn.UpdateMassAndLean();
 
-        UpdateInvMassAndLean();
+        HeadHit = false;
+        int res = _col.StepCollision(dt);
 
-        _headHit = false;
-        int var6 = StepCollision(dt);
-
-        if (_headHit || var6 < 0)
+        if (!Crashed && (HeadHit || res < 0))
         {
             DoCrash();
 #if DEBUG
-            DbgLog(dt);
+            UpdateDebugStats(dt);
 #endif
             return;
         }
 
-        FwRot = _cur[BFw].Angle;
-        RwRot = _cur[BRw].Angle;
-
         UpdAngle();
-        UpdSusp();
 
-        if (var2 && !InAir && var1 > P.HardLandVel)
-            OnHardLand?.Invoke(var1 * P.Scale);
+        if (wasAir && !InAir && oldVelY > P.HardLandVel)
+            OnHardLand?.Invoke(oldVelY);
 
         UpdState();
 
 #if DEBUG
-        DbgLog(dt);
+        UpdateDebugStats(dt);
 #endif
     }
 
-    int StepCollision(float dt)
+    void UpdAngle()
     {
-        float proc = 0f;
-        float targ = dt;
-        bool wasFin = FinishReached;
+        Vector2 ax = Cur[BFw].Pos - Cur[BRw].Pos;
+        float newAng = Atan2(ax.Y, ax.X);
+        float diff = PhysConst.WrapAngle(newAng - Ang);
+        (AngVel, Ang) = (diff / P.FixedDt, newAng);
+    }
+
+    void UpdState()
+    {
+        if (Crashed)
+            return;
+
+        BikeState prev = State;
+        BikeState next = IsGrounded ? BikeState.Grounded : BikeState.InAir;
+
+        float normAng = PhysConst.WrapAngle(Ang);
+
+        if (RwGnd && !FwGnd && normAng < -P.WheelieAngle)
+            next |= BikeState.Wheelie;
+
+        if (FwGnd && !RwGnd && normAng > P.StoppieAngle)
+            next |= BikeState.Stoppie;
+
+        if (State != next)
+        {
+            State = next;
+            OnStateChanged?.Invoke(prev, next);
+        }
+    }
+
+    void DoCrash()
+    {
+        BikeState prev = State;
+        State |= BikeState.Crashed;
+        Input = default;
+
+        if (!_ragdoll.On)
+            _ragdoll.Start(GetPose(), Vel, AngVel, Terrain);
+
+        if (prev != State)
+            OnStateChanged?.Invoke(prev, State);
+
+        OnCrash?.Invoke();
+    }
+}
+
+// BikePhysics handles input events crash state and public API
+// BikeDynamics handles forces springs and integration math
+// Split exists because handling tuning changes constantly during playtesting
+// Input mapping and event wiring should remain untouched during tuning
+//
+// Physics must run on fixed 60fps timestep
+// Every level jump and obstacle was hand-tuned against that exact tick rate
+// Variable dt breaks level design
+//
+// Scratch arrays _tmp _k1 _k2 are pre-allocated and reused every frame
+// Allocating per-tick causes GC spikes mid-race ruining frame pacing
+public sealed class BikeDynamics(BikePhysics p)
+{
+    const int
+        BFrame = BikePhysics.BFrame, BFw = BikePhysics.BFw,
+        BRw = BikePhysics.BRw, BUF = BikePhysics.BUF,
+        BUR = BikePhysics.BUR, BHead = BikePhysics.BHead,
+        BodyCount = BikePhysics.BodyCount,
+        SpringCount = BikePhysics.SpringCount;
+
+    static readonly PhysConst P = PhysConst.Default;
+    static readonly WheelFriction WF = WheelFriction.Default;
+    static readonly MassCfg MasC = MassCfg.Default;
+    static readonly InputCfg InpC = InputCfg.Default;
+
+    readonly PtState[] _tmp = new PtState[BodyCount];
+    readonly PtState[] _k1 = new PtState[BodyCount];
+    readonly PtState[] _k2 = new PtState[BodyCount];
+
+    public void RebuildSprings()
+    {
+        float k = p.Cfg.SpringK, d = p.Cfg.SpringDamp;
+        float cK = k * P.CrossSpringKMul,
+              cD = d * P.CrossSpringDMul,
+              cDrw = d * P.CrossSpringRwDMul,
+              hK = k * P.HeadSpringKMul;
+
+        (p.Spr[0], p.Spr[1]) = (
+            new(BFrame, BFw, P.RestWheel, k, d),
+            new(BFrame, BRw, P.RestWheel, k, d));
+
+        (p.Spr[2], p.Spr[3]) = (
+            new(BFrame, BUF, P.RestUpper, k, d),
+            new(BFrame, BUR, P.RestUpper, k, d));
+
+        p.Spr[4] = new(BUF, BUR, P.RestUpperSpan, k, d);
+
+        (p.Spr[5], p.Spr[6]) = (
+            new(BFw, BUF, P.RestWheelUpper, cK, cD),
+            new(BRw, BUR, P.RestWheelUpper, cK, cDrw));
+
+        (p.Spr[7], p.Spr[8], p.Spr[9]) = (
+            new(BHead, BUR, P.RestHeadUpper, hK, d),
+            new(BHead, BUF, P.RestHeadUpper, hK, d),
+            new(BHead, BFrame, P.RestHeadFrame, hK, d));
+    }
+
+    public void UpdateMassAndLean()
+    {
+        if (p.Crashed)
+            return;
+
+        float dx = p.Cur[BFw].Pos.X - p.Cur[BRw].Pos.X;
+        float dy = p.Cur[BFw].Pos.Y - p.Cur[BRw].Pos.Y;
+
+        if (!PhysConst.SafeNorm(dx, dy, P.MinDist, out float nx, out float ny))
+            return;
+
+        Engine();
+        Mass();
+
+        if (p.LeanL || p.LeanR)
+        {
+            float sign = p.LeanL ? -1f : 1f;
+            if (sign * p.TiltAngle < p.Cfg.MaxTilt)
+                ApplyLean(sign, nx, ny);
+            return;
+        }
+
+        RestoreTilt();
+    }
+
+    // Matches original J2ME integrator timings
+    // Uses half-step predictor and half dt for the second pass
+    // since gameplay feel and level balance were tuned around it
+    public void HeunJ2ME(float dt)
+    {
+        Forces(p.Cur);
+        Integ(p.Cur, _k1, dt);
+
+        Combine(_tmp, p.Cur, _k1, 0.5f);
+
+        Forces(_tmp);
+        Integ(_tmp, _k2, dt * 0.5f);
+
+        CombineTwo(p.New, p.Cur, _k1, _k2, 0.5f);
+
+        for (int i = BFw; i <= BRw; i++)
+        {
+            p.New[i].Angle = p.Cur[i].Angle + p.Cur[i].AngVel * dt;
+            p.New[i].AngVel = p.Cur[i].AngVel
+                + p.Bods[i].Inertia * p.Cur[i].Torque * dt;
+        }
+    }
+
+    static void Combine(PtState[] dst, PtState[] src, PtState[] k, float scale)
+    {
+        for (int i = 0; i < BodyCount; i++)
+        {
+            dst[i].Pos = src[i].Pos + k[i].Pos * scale;
+            dst[i].Vel = src[i].Vel + k[i].Vel * scale;
+            (dst[i].AngVel, dst[i].Angle) = (src[i].AngVel, src[i].Angle);
+        }
+    }
+
+    static void CombineTwo(PtState[] dst, PtState[] src, PtState[] k1, PtState[] k2, float scale)
+    {
+        for (int i = 0; i < BodyCount; i++)
+        {
+            dst[i].Pos = src[i].Pos + (k1[i].Pos + k2[i].Pos) * scale;
+            dst[i].Vel = src[i].Vel + (k1[i].Vel + k2[i].Vel) * scale;
+            (dst[i].AngVel, dst[i].Angle) = (src[i].AngVel, src[i].Angle);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float FastDist(float dx, float dy) => Sqrt(dx * dx + dy * dy);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float FastLen(Vector2 v) => v.Length();
+
+    void Forces(PtState[] st)
+    {
+        for (int i = 0; i < BodyCount; i++)
+        {
+            st[i].Force = new(0f, P.Gravity / p.InvM[i]);
+            st[i].Torque = 0f;
+        }
+
+        for (int i = 0; i < SpringCount; i++)
+            Spring(ref st[p.Spr[i].A], ref st[p.Spr[i].B], i);
+
+        p.EngineTorque *= 1f - P.TorqueDamp;
+        st[BRw].Torque = p.EngineTorque;
+        st[BRw].AngVel = Math.Clamp(
+            st[BRw].AngVel,
+            -p.Cfg.MaxWheelOmega,
+            p.Cfg.MaxWheelOmega);
+
+        st[BFw].AngVel *= WF.FreeSpinDamp;
+        st[BRw].AngVel *= WF.FreeSpinDamp;
+
+        float maxRel = ClampRelativeVelocities(st);
+        ComputeTiltAngle(st, maxRel);
+    }
+
+    void Integ(PtState[] cur, PtState[] k, float dt)
+    {
+        for (int i = 0; i < BodyCount; i++)
+        {
+            k[i].Pos = cur[i].Vel * dt;
+            k[i].Vel = cur[i].Force * (dt * p.InvM[i]);
+            k[i].AngVel = 0f;
+        }
+    }
+
+    void Spring(ref PtState a, ref PtState b, int idx)
+    {
+        ref SpringCfg s = ref p.Spr[idx];
+
+        float dx = a.Pos.X - b.Pos.X;
+        float dy = a.Pos.Y - b.Pos.Y;
+        float dist = FastDist(dx, dy);
+        if (dist < P.SpringMinDist)
+            return;
+
+        float nx = dx / dist, ny = dy / dist;
+
+        float dvx = a.Vel.X - b.Vel.X;
+        float dvy = a.Vel.Y - b.Vel.Y;
+        float f = s.K * (dist - s.RestLen)
+                + s.D * (dvx * nx + dvy * ny);
+
+        a.Force.X -= nx * f;
+        a.Force.Y -= ny * f;
+        b.Force.X += nx * f;
+        b.Force.Y += ny * f;
+    }
+
+    void Engine()
+    {
+        if (p.Braking)
+        {
+            p.EngineTorque = 0f;
+            float damp = 1f - WF.BrakeDamp;
+            BrakeWheel(ref p.Cur[BFw].AngVel, damp);
+            BrakeWheel(ref p.Cur[BRw].AngVel, damp);
+            return;
+        }
+
+        if (p.Input.Throttle > InpC.ThrottleDeadZone)
+            p.EngineTorque = Min(
+                p.EngineTorque + p.Cfg.TorqueAccel,
+                p.Cfg.MaxEngineTorque);
+    }
+
+    static void BrakeWheel(ref float w, float d)
+    {
+        w *= d;
+        if (w < WF.StopThreshold)
+            w = 0f;
+    }
+
+    void Mass()
+    {
+        float[] arr = p.LeanL ? MasC.Wheelie
+                    : p.LeanR ? MasC.Stoppie
+                    : MasC.Norm;
+
+        for (int i = 0; i < BodyCount; i++)
+            p.InvM[i] = arr[i];
+    }
+
+    void ApplyLean(float sign, float dirX, float dirY)
+    {
+        float scale = sign * p.TiltAngle > 0f
+            ? (p.Cfg.MaxTilt - sign * p.TiltAngle) / p.Cfg.MaxTilt
+            : 1f;
+
+        float force = p.Cfg.LeanForce * scale;
+        float perpX = -dirY * force;
+        float perpY = dirX * force;
+
+        float step = p.TiltZ > P.TiltCenter
+            ? P.TiltLeanSlowStep
+            : P.TiltLeanFastStep;
+
+        p.TiltZ = Math.Clamp(p.TiltZ + sign * step, 0f, 1f);
+
+        p.Cur[BUR].Vel.X += sign * perpX;
+        p.Cur[BUR].Vel.Y += sign * perpY;
+
+        p.Cur[BUF].Vel.X -= sign * perpX;
+        p.Cur[BUF].Vel.Y -= sign * perpY;
+
+        p.Cur[BHead].Vel.X += sign * perpY;
+        p.Cur[BHead].Vel.Y += sign * dirY * force;
+    }
+
+    void RestoreTilt()
+    {
+        if (p.TiltZ < P.TiltRestoreLow)
+            p.TiltZ += P.TiltRestoreStep;
+        else if (p.TiltZ > P.TiltRestoreHigh)
+            p.TiltZ -= P.TiltRestoreStep;
+        else
+            p.TiltZ = P.TiltCenter;
+    }
+
+    // Subtracting a unit vector instead of hard clamping to MaxRelVel is intentional
+    // A strict mathematical clamp would instantly freeze a fast-moving node
+    // sending massive shockwaves through the network and tearing the mass-spring bike apart
+    // This subtraction acts as a soft aerodynamic drag that safely dampens explosive forces
+    static float ClampRelativeVelocities(PtState[] st)
+    {
+        float cx = 0f, cy = 0f;
+        for (int i = 0; i < BodyCount; i++)
+        {
+            cx += st[i].Vel.X;
+            cy += st[i].Vel.Y;
+        }
+
+        float inv = 1f / BodyCount;
+        (cx, cy) = (cx * inv, cy * inv);
+
+        float max = 0f;
+        for (int i = 0; i < BodyCount; i++)
+        {
+            float vx = st[i].Vel.X - cx;
+            float vy = st[i].Vel.Y - cy;
+            float spd = FastDist(vx, vy);
+
+            if (spd > P.MaxRelVel)
+            {
+                st[i].Vel.X -= vx / spd;
+                st[i].Vel.Y -= vy / spd;
+            }
+
+            max = Max(max, spd);
+        }
+
+        return max;
+    }
+
+    void ComputeTiltAngle(PtState[] st, float maxRel)
+    {
+        int sy = st[BRw].Pos.Y >= st[BFrame].Pos.Y ? 1 : -1;
+        int sx = st[BRw].Vel.X >= st[BFrame].Vel.X ? 1 : -1;
+        p.TiltAngle = sy * sx > 0 ? maxRel : -maxRel;
+    }
+}
+
+// Collision detection uses adaptive time-stepping with bisection
+// When penetration is too deep we halve the timestep and re-integrate
+// This avoids tunneling through thin terrain segments at high speeds
+//
+// Three collision zones per body: touch > outer > inner
+// - touchR zone: sets FwGnd/RwGnd flags for gameplay state detection
+// - outer zone: triggers velocity reflection (Resolve)
+// - inner zone: penetration too deep, requires timestep reduction
+//
+// _collIdx stores only one body index per CheckAllBodies pass
+// The while(Resolve) loop handles multiple colliding bodies sequentially
+// Each Resolve flips velocity direction so same body wont trigger again
+// This guarantees convergence without explicit iteration limits
+//
+// _collNx/_collNy accumulates normals from multiple terrain segments
+// Intentionally not normalized in PushOut - on concave corners
+// the summed vector points "out of corner" with stronger push
+// Normalization happens only for velocity reflection direction
+//
+// Head collision instantly crashes the bike (no Resolve attempt)
+// Upper frame points BUF/BUR skip collision until crashed
+// to prevent false positives during wheelies and stoppies
+public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
+{
+    enum CollCode { DeepPen, Resolve, None }
+
+    const int
+        BFrame = BikePhysics.BFrame, BFw = BikePhysics.BFw,
+        BRw = BikePhysics.BRw, BUF = BikePhysics.BUF,
+        BUR = BikePhysics.BUR, BHead = BikePhysics.BHead,
+        BodyCount = BikePhysics.BodyCount;
+
+    static readonly PhysConst P = PhysConst.Default;
+    static readonly WheelFriction WF = WheelFriction.Default;
+
+    int _collIdx;
+    float _collNx, _collNy;
+
+    internal int CollIdx => _collIdx;
+    internal float CollNx => _collNx;
+    internal float CollNy => _collNy;
+
+    static float Scale => P.TerrainScale;
+
+    Vector2 ScaledPos(int i) => p.New[i].Pos * Scale;
+    Vector2 ScaledVel(int i) => p.New[i].Vel * Scale;
+
+    public int StepCollision(float dt)
+    {
+        p.ResetContactStats();
+
+        float proc = 0f, targ = dt;
+        bool wasFin = p.FinishReached;
 
         while (proc < dt)
         {
-            CopyState(_cur, _new);
+            Array.Copy(p.Cur, p.New, BodyCount);
+            dyn.HeunJ2ME(targ - proc);
 
-            HeunJ2ME(targ - proc);
-
-            if (_terrain != null && !wasFin)
+            if (p.Terrain != null && !wasFin)
             {
-                float fwX = _new[BFw].Pos.X * P.Scale;
-                float rwX = _new[BRw].Pos.X * P.Scale;
+                float fwX = ScaledPos(BFw).X;
+                float rwX = ScaledPos(BRw).X;
 
-                if (fwX > _terrain.FinishPoint.X
-                    || rwX > _terrain.FinishPoint.X)
+                if (fwX > p.Terrain.FinishPoint.X ||
+                    rwX > p.Terrain.FinishPoint.X)
                 {
-                    FinishReached = true;
+                    p.FinishReached = true;
                     wasFin = true;
                     targ = (proc + targ) * 0.5f;
                     continue;
@@ -476,8 +941,7 @@ public sealed partial class BikePhysics
             }
 
             CollCode coll = ChkColl();
-
-            if (_headHit)
+            if (!p.Crashed && p.HeadHit)
                 return -1;
 
             if (coll == CollCode.DeepPen)
@@ -495,736 +959,376 @@ public sealed partial class BikePhysics
                     Resolve(_collIdx);
                     coll = ChkColl();
 
-                    if (_headHit)
+                    if (!p.Crashed && p.HeadHit)
                         return -1;
-
                     if (coll == CollCode.DeepPen)
                         return -1;
                 }
             }
 
-            CopyState(_new, _cur);
-
+            Array.Copy(p.New, p.Cur, BodyCount);
             proc = targ;
-            targ = dt;
+            if (proc < dt)
+                targ = dt;
         }
 
-        float dx = _cur[BFw].Pos.X - _cur[BRw].Pos.X;
-        float dy = _cur[BFw].Pos.Y - _cur[BRw].Pos.Y;
+        float dx = p.Cur[BFw].Pos.X - p.Cur[BRw].Pos.X;
+        float dy = p.Cur[BFw].Pos.Y - p.Cur[BRw].Pos.Y;
         float d2 = dx * dx + dy * dy;
 
         return d2 < P.MinAxleDist2 || d2 > P.MaxAxleDist2 ? -1 : 0;
     }
 
-    void HeunJ2ME(float dt)
-    {
-        Forces(_cur);
-        Integ(_cur, _k1, dt);
-
-        for (int var1 = 0; var1 < BodyCount; var1++)
-        {
-            _tmp[var1].Pos = _cur[var1].Pos
-                + _k1[var1].Pos * 0.5f;
-            _tmp[var1].Vel = _cur[var1].Vel
-                + _k1[var1].Vel * 0.5f;
-            _tmp[var1].AngVel = _cur[var1].AngVel;
-            _tmp[var1].Angle = _cur[var1].Angle;
-        }
-
-        Forces(_tmp);
-        Integ(_tmp, _k2, dt * 0.5f);
-
-        for (int var2 = 0; var2 < BodyCount; var2++)
-        {
-            _new[var2].Pos = _cur[var2].Pos
-                + _k1[var2].Pos * 0.5f
-                + _k2[var2].Pos * 0.5f;
-            _new[var2].Vel = _cur[var2].Vel
-                + _k1[var2].Vel * 0.5f
-                + _k2[var2].Vel * 0.5f;
-            _new[var2].AngVel = _cur[var2].AngVel;
-            _new[var2].Angle = _cur[var2].Angle;
-        }
-
-        for (int var3 = BFw; var3 <= BRw; var3++)
-        {
-            _new[var3].Angle = _cur[var3].Angle
-                + _cur[var3].AngVel * dt;
-            _new[var3].AngVel = _cur[var3].AngVel
-                + _bods[var3].Inertia
-                * _cur[var3].Torque * dt;
-        }
-    }
-
-    void Integ(
-        PtState[] var1, PtState[] var2, float var3)
-    {
-        for (int var4 = 0; var4 < BodyCount; var4++)
-        {
-            float var5 = var3 * _curInvM[var4];
-            var2[var4].Pos = var1[var4].Vel * var3;
-            var2[var4].Vel = var1[var4].Force * var5;
-            var2[var4].AngVel = 0f;
-        }
-    }
-
-    void UpdateInvMassAndLean()
-    {
-        if (Crashed)
-            return;
-
-        float var1 = _cur[BFw].Pos.X - _cur[BRw].Pos.X;
-        float var2 = _cur[BFw].Pos.Y - _cur[BRw].Pos.Y;
-        float var3 = FastDist(var1, var2);
-
-        if (var3 < P.MinDist)
-            return;
-
-        float var4 = var1 / var3;
-        float var5 = var2 / var3;
-
-        Engine();
-        Mass();
-
-        if (_leanL || _leanR)
-        {
-            float sign = _leanL ? -1f : 1f;
-
-            if (sign * _tiltAngle < Cfg.MaxTilt)
-                ApplyLean(sign, var4, var5);
-
-            return;
-        }
-
-        Tilt();
-    }
-
-    void Engine()
-    {
-        static void BrakeWheel(
-            ref float omega, float damp, float threshold)
-        {
-            omega *= damp;
-            if (omega < threshold)
-                omega = 0f;
-        }
-
-        if (_braking)
-        {
-            _engineTorque = 0f;
-            float damp = 1f - WF.BrakeDamp;
-            BrakeWheel(ref _cur[BFw].AngVel, damp, WF.StopThreshold);
-            BrakeWheel(ref _cur[BRw].AngVel, damp, WF.StopThreshold);
-        }
-        else if (_input.Throttle > IC.InputDeadZone)
-        {
-            if (_engineTorque < Cfg.MaxEngineTorque)
-            {
-                _engineTorque += Cfg.TorqueAccel;
-                if (_engineTorque > Cfg.MaxEngineTorque)
-                    _engineTorque = Cfg.MaxEngineTorque;
-            }
-        }
-    }
-
-    void Mass()
-    {
-        float[] var7 = NormInvM;
-        if (_leanL)
-            var7 = WheelieInvM;
-        else if (_leanR)
-            var7 = StoppieInvM;
-
-        for (int var8 = 0; var8 < BodyCount; var8++)
-            _curInvM[var8] = var7[var8];
-    }
-
-    void Tilt()
-    {
-        if (_tiltZ < P.TiltRestoreLow)
-            _tiltZ += P.TiltRestoreStep;
-        else if (_tiltZ > P.TiltRestoreHigh)
-            _tiltZ -= P.TiltRestoreStep;
-        else
-            _tiltZ = P.TiltCenter;
-    }
-
-    void ApplyLean(
-        float sign, float dirX, float dirY)
-    {
-        float scale = 1f;
-        float st = sign * _tiltAngle;
-
-        if (st > 0f)
-            scale = (Cfg.MaxTilt - st) / Cfg.MaxTilt;
-
-        float force = Cfg.LeanForce * scale;
-        float perpF = -dirY * force;
-        float dirXF = dirX * force;
-        float dirYF = dirY * force;
-
-        float step = _tiltZ > P.TiltCenter
-            ? P.TiltLeanSlowStep : P.TiltLeanFastStep;
-        _tiltZ = Math.Clamp(
-            _tiltZ + sign * step, 0f, 1f);
-
-        _cur[BUR].Vel.X += sign * perpF;
-        _cur[BUR].Vel.Y += sign * dirXF;
-        _cur[BUF].Vel.X -= sign * perpF;
-        _cur[BUF].Vel.Y -= sign * dirXF;
-        _cur[BHead].Vel.X += sign * dirXF;
-        _cur[BHead].Vel.Y += sign * dirYF;
-    }
-}
-
-public sealed partial class BikePhysics
-{
-    void Forces(PtState[] st)
-    {
-        for (int var1 = 0; var1 < BodyCount; var1++)
-        {
-            st[var1].Force = new Vector2(0f, P.Gravity / _curInvM[var1]);
-            st[var1].Torque = 0f;
-        }
-
-        ApplySprings(st, false);
-
-        _engineTorque *= (1f - P.TorqueDamp);
-        st[BRw].Torque = _engineTorque;
-
-        st[BRw].AngVel = Math.Clamp(
-            st[BRw].AngVel, -Cfg.MaxWheelOmega, Cfg.MaxWheelOmega);
-
-        float var10 = VelocityClamp(st);
-        Angle(st, var10);
-    }
-
-    static float VelocityClamp(PtState[] st)
-    {
-        float var2 = 0f, var3 = 0f;
-        for (int var4 = 0; var4 < BodyCount; var4++)
-        {
-            var2 += st[var4].Vel.X;
-            var3 += st[var4].Vel.Y;
-        }
-        var2 *= (1f / BodyCount);
-        var3 *= (1f / BodyCount);
-
-        float var10 = 0f;
-        for (int var5 = 0; var5 < BodyCount; var5++)
-        {
-            float var6 = st[var5].Vel.X - var2;
-            float var7 = st[var5].Vel.Y - var3;
-            float var8 = FastDist(var6, var7);
-
-            if (var8 > P.MaxRelVel)
-            {
-                float var9 = var6 / var8;
-                float var11 = var7 / var8;
-                st[var5].Vel.X -= var9;
-                st[var5].Vel.Y -= var11;
-            }
-
-            var10 = var8;
-        }
-
-        return var10;
-    }
-
-    void Angle(PtState[] st, float var10)
-    {
-        int var12 = (st[BRw].Pos.Y - st[BFrame].Pos.Y) >= 0f ? 1 : -1;
-        int var13 = (st[BRw].Vel.X - st[BFrame].Vel.X) >= 0f ? 1 : -1;
-        _tiltAngle = var12 * var13 > 0 ? var10 : -var10;
-    }
-
-    void ApplySprings(PtState[] st, bool var1)
-    {
-        if (var1 || !Crashed)
-        {
-            Spring(ref st[BFrame], ref st[BRw], 1, 1f);
-            Spring(ref st[BFrame], ref st[BFw], 0, 1f);
-            Spring(ref st[BRw], ref st[BUR], 6, 2f);
-            Spring(ref st[BFw], ref st[BUF], 5, 2f);
-        }
-
-        Spring(ref st[BFrame], ref st[BUF], 2, 1f);
-        Spring(ref st[BFrame], ref st[BUR], 3, 1f);
-        Spring(ref st[BUF], ref st[BUR], 4, 1f);
-        Spring(ref st[BHead], ref st[BUF], 8, 1f);
-        Spring(ref st[BHead], ref st[BUR], 7, 1f);
-        Spring(ref st[BHead], ref st[BFrame], 9, 1f);
-    }
-
-    void Spring(
-        ref PtState var1, ref PtState var2,
-        int var3, float var4)
-    {
-        SpringCfg var5 = _spr[var3];
-
-        float var6 = var1.Pos.X - var2.Pos.X;
-        float var7 = var1.Pos.Y - var2.Pos.Y;
-        float var8 = FastDist(var6, var7);
-
-        if (var8 < P.SpringMinDist)
-            return;
-
-        float var9 = var6 / var8;
-        float var10 = var7 / var8;
-        float var11 = var8 - var5.RestLen;
-
-        float var12 = var1.Vel.X - var2.Vel.X;
-        float var13 = var1.Vel.Y - var2.Vel.Y;
-        float var14 = var12 * var9 + var13 * var10;
-
-        float var15 =
-            (var11 * var5.K + var14 * var5.D) * var4;
-
-        var1.Force.X -= var9 * var15;
-        var1.Force.Y -= var10 * var15;
-        var2.Force.X += var9 * var15;
-        var2.Force.Y += var10 * var15;
-    }
-}
-
-public sealed partial class BikePhysics
-{
     CollCode ChkColl()
     {
-        if (_gndFrame != _frameNum)
+        if (p.GndFrame != p.FrameNum)
         {
-            _gndFrame = _frameNum;
-            FwGnd = RwGnd = false;
+            p.GndFrame = p.FrameNum;
+            (p.FwGnd, p.RwGnd) = (false, false);
         }
 
-        _headHit = false;
-
-        if (_terrain == null)
+        p.HeadHit = false;
+        if (p.Terrain == null)
         {
             _collIdx = -1;
             return CollCode.None;
         }
 
-        float var1 = _new[BFw].Pos.X * P.Scale; // fwX
-        float var2 = _new[BRw].Pos.X * P.Scale; // rwX
-        float var3 = _new[BHead].Pos.X * P.Scale; // headX
+        Vector2 fwP = ScaledPos(BFw);
+        Vector2 rwP = ScaledPos(BRw);
+        Vector2 hdP = ScaledPos(BHead);
 
-        float var4 = var1 < var2 ? var1 : var2; // minX
-        float var5 = var1 > var2 ? var1 : var2; // maxX
-        if (var3 < var4)
-            var4 = var3;
-        if (var3 > var5)
-            var5 = var3;
+        float minX = Min(fwP.X, Min(rwP.X, hdP.X));
+        float maxX = Max(fwP.X, Max(rwP.X, hdP.X));
 
-        // IMPORTANT: UpdateVisible must cover touch broad-phase radius (ChkPtColl uses touchR)
-        // Also add J2ME-like padding: 1.75 world (114688 in Q16)
-        float var6 = CollR[BFw];
-        float var7 = P.OuterR(var6) * P.Scale; // outerRpx
-        float var8 = P.InnerR(var6) * P.Scale; // innerRpx
-        float var9 = TouchR(var7, var8);        // touchRpx (NOT IN J2ME)
-        float var10 = P.CollPadding * P.Scale;  // J2ME padding
-        _terrain.UpdateVisible(
-            var4, var5, var9 + var10);
+        float r = p.Bods[BFw].R;
+        float touchR = P.OuterR(r) * Scale * 2f - P.InnerR(r) * Scale;
 
-        float var11 = _new[BFw].Pos.X
-            - _new[BRw].Pos.X; // dx
-        float var12 = _new[BFw].Pos.Y
-            - _new[BRw].Pos.Y; // dy
-        float var13 = FastDist(var11, var12);
+        p.Terrain.UpdateVisible(minX, maxX, touchR + P.CollPadding * Scale);
 
-        float var14 = var13 > P.MinDist
-            ? var11 / var13 : 1f; // dirX
-        float var15 = var13 > P.MinDist
-            ? var12 / var13 : 0f; // dirY
+        PhysConst.SafeNorm(
+            fwP.X - rwP.X, fwP.Y - rwP.Y,
+            P.MinDist, out float axNx, out float axNy);
 
-        float var16 = -var15;
-        float var17 = var14;
+        CollCode res = CollCode.None;
 
-        CollCode var18 = CollCode.None;
-
-        for (int var19 = 0; var19 < BodyCount; var19++)
+        for (int i = 0; i < BodyCount; i++)
         {
-            if (var19 == BUF || var19 == BUR)
+            if (!p.Crashed && i is BUF or BUR)
+                continue;
+            if (p.Crashed && i == BHead)
                 continue;
 
-            ref PtState var20 = ref _new[var19];
+            Vector2 pos = ScaledPos(i);
+            Vector2 vel = ScaledVel(i);
 
-            float var21 = var20.Pos.X * P.Scale;
-            float var22 = var20.Pos.Y * P.Scale;
+            float x = pos.X, y = pos.Y;
 
-            if (var19 == BFrame)
+            if (i == BFrame)
             {
-                float var23 = P.FrameCollOffsetPx;
-                var21 += var16 * var23;
-                var22 += var17 * var23;
+                x += -axNy * P.FrameCollOffset * Scale;
+                y += axNx * P.FrameCollOffset * Scale;
             }
 
-            float var24 = var20.Vel.X * P.Scale;
-            float var25 = var20.Vel.Y * P.Scale;
+            float outR = P.OuterR(p.Bods[i].R) * Scale;
+            float inR = P.InnerR(p.Bods[i].R) * Scale;
 
-            float var26 = CollR[var19];
-            float var27 = P.OuterR(var26) * P.Scale;
-            float var28 = P.InnerR(var26) * P.Scale;
+            CollCode code = ChkPtColl(x, y, vel.X, vel.Y, outR, inR, out bool touch);
 
-            CollCode var29 = ChkPtColl(
-                var21, var22, var24, var25,
-                var27, var28, out bool touch);
+            if (i == BFw)
+                p.FwGnd |= touch;
+            if (i == BRw)
+                p.RwGnd |= touch;
 
-#if DEBUG
-            DbgTrackTouch(var19, touch);
-#endif
-
-            // IMPORTANT: grounded by touch (geometry), not by return != 2 (depends on v·n)
-            if (var19 == BFw && touch)
-                FwGnd = true;
-            if (var19 == BRw && touch)
-                RwGnd = true;
-
-            if (var19 == BHead
-                && var29 != CollCode.None)
+            if (!p.Crashed && i == BHead && code != CollCode.None)
             {
-                _headHit = true;
+                p.HeadHit = true;
                 _collIdx = BHead;
-#if DEBUG
-                DbgSaveLastColl(BHead, (int)var29);
-#endif
                 return CollCode.DeepPen;
             }
 
-            if (var29 == CollCode.DeepPen)
+            if (code == CollCode.DeepPen)
             {
-                _collIdx = var19;
-#if DEBUG
-                DbgSaveLastColl(var19, 0);
-#endif
+                _collIdx = i;
                 return CollCode.DeepPen;
             }
 
-            if (var29 == CollCode.Resolve)
+            if (code == CollCode.Resolve)
             {
-                _collIdx = var19;
-                var18 = CollCode.Resolve;
-#if DEBUG
-                DbgSaveLastColl(var19, 1);
-#endif
+                _collIdx = i;
+                res = CollCode.Resolve;
             }
         }
 
-        if (var18 == CollCode.None)
+        if (res == CollCode.None)
             _collIdx = -1;
-
-        return var18;
+        return res;
     }
 
     CollCode ChkPtColl(
-        float var1, float var2, float var3, float var4,
-        float var5, float var6, out bool var7)
+        float x, float y, float vx, float vy,
+        float outR, float inR, out bool touch)
     {
-        var7 = false;
+        touch = false;
 
-        if (_terrain == null)
-            return CollCode.None;
+        (int s, int e) = p.Terrain!.GetVisibleRange();
 
-        (int var8, int var9) = _terrain.GetVisibleRange();
+        float outSq = outR * outR;
+        float inSq = inR * inR;
+        float touchR = outR + outR - inR;
+        float touchSq = touchR * touchR;
 
-        float var10 = var5 * var5; // outerR^2
-        float var11 = var6 * var6; // innerR^2
+        int hits = 0;
+        float nxSum = 0f, nySum = 0f;
 
-        // IMPORTANT: touch hysteresis (NOT IN J2ME). Used only for stable grounded in float.
-        float var12 = TouchR(var5, var6); // touchR
-        float var13 = var12 * var12;      // touchR^2
-
-        int var14 = 0;
-        float var15 = 0f, var16 = 0f;
-
-        for (int var17 = var8; var17 < var9; var17++)
+        for (int i = s; i < e; i++)
         {
-            _terrain.GetSegmentPoints(var17,
-                out float var18, out float var19,
-                out float var20, out float var21);
+            p.Terrain.GetSegmentPoints(i, out float sx, out float sy, out float ex, out float ey);
 
-            // IMPORTANT: broad-phase uses touchR, must match UpdateVisible margin.
-            if (var1 - var12 > var20
-                || var1 + var12 < var18)
+            if (x - touchR > ex || x + touchR < sx)
                 continue;
 
-            float var22 = var20 - var18;
-            float var23 = var21 - var19;
-            float var24 = var22 * var22 + var23 * var23;
-
-            if (var24 < P.Epsilon)
+            float dx = ex - sx, dy = ey - sy;
+            float lenSq = dx * dx + dy * dy;
+            if (lenSq < P.Epsilon)
                 continue;
 
-            float var25 = ((var1 - var18) * var22
-                + (var2 - var19) * var23) / var24;
-            if (var25 < 0f)
-                var25 = 0f;
-            else if (var25 > 1f)
-                var25 = 1f;
+            float t = Math.Clamp(((x - sx) * dx + (y - sy) * dy) / lenSq, 0f, 1f);
 
-            float var26 = var18 + var25 * var22;
-            float var27 = var19 + var25 * var23;
+            float px = sx + t * dx, py = sy + t * dy;
+            float rx = x - px, ry = y - py;
+            float distSq = rx * rx + ry * ry;
 
-            float var28 = var1 - var26;
-            float var29 = var2 - var27;
-            float var30 = var28 * var28 + var29 * var29;
-
-            // IMPORTANT: touch flag is geometry-only (no v·n check)
-            if (var30 >= var13)
+            if (distSq >= touchSq)
                 continue;
-            var7 = true;
-
-            // Touch-only zone: grounded yes, but no resolve/crash
-            if (var30 >= var10)
+            touch = true;
+            if (distSq >= outSq)
                 continue;
 
-            _terrain.GetSegmentNormal(var17,
-                out float var31, out float var32);
+            p.Terrain.GetSegmentNormal(i, out float snx, out float sny);
+            float dot = vx * snx + vy * sny;
 
-            float var33 = var3 * var31 + var4 * var32; // v·n
-
-            if (var30 < var11)
+            if (distSq < inSq)
             {
-                if (var33 < 0f)
+                if (dot < 0f)
                 {
-                    _collNx = var31;
-                    _collNy = var32;
+                    (_collNx, _collNy) = (snx, sny);
                     return CollCode.DeepPen;
                 }
                 continue;
             }
 
-            if (var33 < 0f)
+            if (dot < 0f)
             {
-                var14++;
-                var15 += var31;
-                var16 += var32;
+                hits++;
+                nxSum += snx;
+                nySum += sny;
             }
         }
 
-        if (var14 > 0)
+        if (hits > 0 && vx * nxSum + vy * nySum < 0f)
         {
-            if (var3 * var15 + var4 * var16 >= 0f)
-                return CollCode.None;
-
-            _collNx = var15;
-            _collNy = var16;
+            (_collNx, _collNy) = (nxSum, nySum);
             return CollCode.Resolve;
         }
 
         return CollCode.None;
     }
 
-    void Resolve(int var1)
+    void Resolve(int idx)
     {
-#if DEBUG
-        float var2 = _bods[var1].IsWheel
-            ? _new[var1].AngVel : 0f;
-#endif
+        p.RecordKeBefore(idx);
 
-        if (_bods[var1].IsWheel)
-            ResolveWheel(ref _new[var1], var1);
-        else
-            ResolveBody(ref _new[var1]);
+        ref PtState pt = ref p.New[idx];
+        PushOut(ref pt, out float nx, out float ny);
 
-#if DEBUG
-        float var3 = _bods[var1].IsWheel
-            ? _new[var1].AngVel : 0f;
-        DbgTrackResolve(var1, var2, var3);
-#endif
-    }
+        float vn = -(pt.Vel.X * nx + pt.Vel.Y * ny);
+        float vt = pt.Vel.X * ny - pt.Vel.Y * nx;
 
-    void ResolveWheel(ref PtState var1, int var2)
-    {
-        float var3 = WF.RotDamp;
-        float var4 = WF.SlipFriction;
-        float var5 = WF.RollCouple;
-        float var6 = WF.TangentDamp;
-        float var7 = (var2 == BFw)
-            ? WF.BounceFront : WF.BounceRear;
+        float td = WF.TangentDamp;
+        float bd, rt;
 
-        if (_braking && (var2 == BFw || var2 == BRw)
-            && var1.AngVel < WF.StopThreshold)
+        if (p.Bods[idx].IsWheel)
         {
-            float var8 = WF.BrakeBase - WF.BrakeP;
-            var3 = WF.RotDamp - WF.BrakeP;
-            var6 = var8;
-            var7 = var8;
+            float rd = WF.RotDamp;
+            float sf = WF.SlipFriction;
+            float rc = WF.RollCouple;
+            bd = idx == BFw ? WF.BounceFront : WF.BounceRear;
+
+            if (p.Braking && pt.AngVel < WF.StopThreshold)
+            {
+                float brk = WF.BrakeBase - WF.BrakeP;
+                (rd, td, bd) = (WF.RotDamp - WF.BrakeP, brk, brk);
+            }
+
+            float rad = Max(p.Bods[idx].R, WF.MinWheelR);
+            pt.AngVel = rd * pt.AngVel - sf * (vt / rad);
+            rt = td * vt - rc * (pt.AngVel * rad);
+        }
+        else
+        {
+            bd = WF.BounceRear;
+            rt = td * vt;
         }
 
-        PushOutAndNormalize(ref var1,
-            out float var11, out float var12);
+        float rn = bd * vn;
+        pt.Vel.X = rt * ny + rn * nx;
+        pt.Vel.Y = -rt * nx + rn * ny;
 
-        float var13 = _bods[var2].R;
-        if (var13 < WF.MinWheelR)
-            var13 = WF.MinWheelR;
-
-        ProjectVelToNT(var1.Vel.X, var1.Vel.Y,
-            var11, var12,
-            out float var16, out float var17);
-
-        float var18 = var3 * var1.AngVel
-            - var4 * (var17 / var13);
-        float var19 = var6 * var17
-            - var5 * (var1.AngVel * var13);
-        float var20 = -(var7 * var16);
-
-        ApplyNTToVel(var19, var20, var11, var12,
-            out var1.Vel.X, out var1.Vel.Y);
-        var1.AngVel = var18;
+        p.RecordResolve(idx, vn, nx, ny, in pt);
     }
 
-    void ResolveBody(ref PtState var1)
-    {
-        PushOutAndNormalize(ref var1,
-            out float var4, out float var5);
-
-        ProjectVelToNT(var1.Vel.X, var1.Vel.Y,
-            var4, var5,
-            out float var8, out float var9);
-
-        float var10 = WF.TangentDamp * var9;
-        float var11 = -(WF.BounceRear * var8);
-
-        ApplyNTToVel(var10, var11, var4, var5,
-            out var1.Vel.X, out var1.Vel.Y);
-    }
-
-    void PushOutAndNormalize(
-        ref PtState pt, out float nx, out float ny)
+    void PushOut(ref PtState pt, out float nx, out float ny)
     {
         pt.Pos.X += _collNx * P.PushOut;
         pt.Pos.Y += _collNy * P.PushOut;
-
-        float d = FastDist(_collNx, _collNy);
-        nx = d > P.Epsilon ? _collNx / d : 0f;
-        ny = d > P.Epsilon ? _collNy / d : -1f;
+        PhysConst.SafeNorm(_collNx, _collNy, P.Epsilon, out nx, out ny);
     }
 }
 
-public sealed partial class BikePhysics
+// Spring-mass ragdoll used after a crash
+// Starts from the current rider pose and inherits bike linear and angular velocity
+// Steps on the same fixed dt as bike physics to keep springs stable
+// Terrain contact uses slope normal so points do not sink into hills
+// Push distance compensates for steep slopes because penetration is measured vertically
+// Collision radius is tuned for line rendering so thick strokes do not clip into ground
+public sealed class RiderRagdoll
 {
-    void UpdAngle()
+    const int N = 8, NS = 11;
+
+    const float
+        K = 150f, D = 8f,
+        Bounce = 0.3f, Friction = 0.8f,
+        CollRadius = 0.5f, SlopeStep = 0.5f,
+        CoreKMul = 2.2f, CoreDMul = 1.4f,
+        CoreMinFrac = 0.75f, CoreStopMul = 6f,
+        MinLen = 0.01f, MinNy = 0.2f;
+
+    static readonly PhysConst P = PhysConst.Default;
+
+    static readonly (int A, int B)[] Skeleton =
+    [
+        (0, 1), (1, 2), (2, 3), (1, 4),
+        (4, 7), (0, 6), (6, 5), (0, 4),
+        (2, 4), (1, 6), (0, 7)
+    ];
+
+    readonly Vector2[] _pos = new Vector2[N];
+    readonly Vector2[] _vel = new Vector2[N];
+    readonly float[] _rest = new float[NS];
+
+    Level? _terrain;
+
+    public bool On { get; private set; }
+
+    public Pose GetPose() => Pose.FromSpan(_pos);
+
+    public void Stop() => (On, _terrain) = (false, null);
+
+    public void Start(in Pose pose, Vector2 linVel, float angVel, Level? terrain)
     {
-        Vector2 ax = _cur[BFw].Pos - _cur[BRw].Pos;
-        float newAng = Atan2(ax.Y, ax.X);
-        AngVel = NormAng(newAng - Ang) / P.FixedDt;
-        Ang = newAng;
-    }
+        (On, _terrain) = (true, terrain);
+        pose.CopyTo(_pos);
 
-    void UpdSusp()
-    {
-        float fd = FastLen(
-            _cur[BFrame].Pos - _cur[BFw].Pos);
-        float rd = FastLen(
-            _cur[BFrame].Pos - _cur[BRw].Pos);
-        FrontSusp = Math.Clamp(
-            Abs(fd - P.RestWheel) / 2f, 0f, 1f);
-        RearSusp = Math.Clamp(
-            Abs(rd - P.RestWheel) / 2f, 0f, 1f);
-    }
+        Vector2 c = default;
+        for (int i = 0; i < N; i++)
+            c += _pos[i];
+        c *= 1f / N;
 
-    void DoCrash()
-    {
-        BikeState prev = State;
-        State |= BikeState.Crashed;
-        if (prev != State)
-            OnStateChanged?.Invoke(prev, State);
-        OnCrash?.Invoke();
-    }
-
-    void UpdState()
-    {
-        if (Crashed)
-            return;
-
-        BikeState prev = State;
-        BikeState next = IsGrounded
-            ? BikeState.Grounded : BikeState.InAir;
-
-        float ang = NormAng(Ang);
-        if (RwGnd && !FwGnd && ang < -P.WheelieAngle)
-            next |= BikeState.Wheelie;
-        if (FwGnd && !RwGnd && ang > P.StoppieAngle)
-            next |= BikeState.Stoppie;
-
-        if (State != next)
+        for (int i = 0; i < N; i++)
         {
-            State = next;
-            OnStateChanged?.Invoke(prev, next);
+            Vector2 r = _pos[i] - c;
+            _vel[i] = linVel + new Vector2(-angVel * r.Y, angVel * r.X);
+        }
+
+        for (int i = 0; i < NS; i++)
+        {
+            (int a, int b) = Skeleton[i];
+            _rest[i] = Vector2.Distance(_pos[a], _pos[b]);
         }
     }
-}
 
-public sealed partial class BikePhysics
-{
-    public BikeVisual ComputeVisual()
+    public void StepFixed(float dt)
     {
-        Vector2 fr = _vis[BFrame].Pos * P.Scale;
-        Vector2 fw = _vis[BFw].Pos * P.Scale;
-        Vector2 rw = _vis[BRw].Pos * P.Scale;
-        Vector2 uf = _vis[BUF].Pos * P.Scale;
-        Vector2 ur = _vis[BUR].Pos * P.Scale;
-        Vector2 hd = _vis[BHead].Pos * P.Scale;
+        if (!On)
+            return;
 
-        return new BikeVisual(
-            fr, fw, rw, uf, ur, hd,
-            Cfg.WheelR * P.Scale,
-            FwRot, RwRot, _tiltZ);
-    }
-}
-
-public sealed partial class BikePhysics
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static float FastDist(float dx, float dy)
-    {
-        float ax = dx < 0f ? -dx : dx;
-        float ay = dy < 0f ? -dy : dy;
-        float max = ay >= ax ? ay : ax;
-        float min = ay >= ax ? ax : ay;
-        return 0.98339844f * max + 0.43066406f * min;
+        ApplySprings(dt);
+        Integrate(dt);
+        CollideTerrain();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static float FastLen(Vector2 v) =>
-        FastDist(v.X, v.Y);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static float NormAng(float a)
+    void ApplySprings(float dt)
     {
-        while (a > 3.14159265f)
-            a -= 6.28318530f;
-        while (a < -3.14159265f)
-            a += 6.28318530f;
-        return a;
+        for (int i = 0; i < NS; i++)
+        {
+            (int a, int b) = Skeleton[i];
+
+            Vector2 d = _pos[a] - _pos[b];
+            float len = d.Length();
+            if (len < MinLen)
+                continue;
+
+            float k = K, damp = D, rest = _rest[i];
+
+            if (IsCoreBone(a) && IsCoreBone(b))
+            {
+                k *= CoreKMul;
+                damp *= CoreDMul;
+                if (len < rest * CoreMinFrac)
+                    k *= CoreStopMul;
+            }
+
+            Vector2 n = d / len;
+            float rel = Vector2.Dot(_vel[a] - _vel[b], n);
+            float imp = ((len - rest) * k + rel * damp) * dt * 0.5f;
+
+            _vel[a] -= n * imp;
+            _vel[b] += n * imp;
+        }
+    }
+
+    void Integrate(float dt)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            _vel[i].Y += P.Gravity * dt;
+            _pos[i] += _vel[i] * dt;
+        }
+    }
+
+    void CollideTerrain()
+    {
+        Level level = _terrain!;
+        float sc = P.TerrainScale;
+        float Gy(float x) => level.GetGroundYAtX(x * sc) / sc;
+
+        for (int i = 0; i < N; i++)
+        {
+            float x = _pos[i].X, gy = Gy(x);
+            float pen = _pos[i].Y + CollRadius - gy;
+            if (pen <= 0f)
+                continue;
+
+            PhysConst.SafeNorm(Gy(x + SlopeStep) - gy, -SlopeStep, MinLen, out float nx, out float ny);
+
+            float push = pen / Max(-ny, MinNy);
+            _pos[i].X += nx * push;
+            _pos[i].Y += ny * push;
+
+            float vx = _vel[i].X, vy = _vel[i].Y;
+
+            float vn = vx * nx + vy * ny;
+            float vt = (vx * ny - vy * nx) * Friction;
+
+            if (vn < 0f)
+                vn = -vn * Bounce;
+
+            _vel[i].X = nx * vn + ny * vt;
+            _vel[i].Y = ny * vn - nx * vt;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static void ProjectVelToNT(
-        float vx, float vy, float nx, float ny,
-        out float vn, out float vt)
-    {
-        vn = -(vx * nx + vy * ny);
-        vt = -(vx * (-ny) + vy * nx);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static void ApplyNTToVel(
-        float respT, float respN, float nx, float ny,
-        out float vx, out float vy)
-    {
-        vx = (-respT) * (-ny) + (-respN) * nx;
-        vy = (-respT) * nx + (-respN) * ny;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static float TouchR(float outerR, float innerR) =>
-        outerR + outerR - innerR;
-
-    static void CopyState(PtState[] src, PtState[] dst)
-    {
-        for (int i = 0; i < BodyCount; i++)
-            dst[i] = src[i];
-    }
+    static bool IsCoreBone(int i) => i is 0 or 1 or 4 or 7;
 }

@@ -1,109 +1,100 @@
 namespace GravityDefiedGame.Core;
 
-public readonly struct PlayCfg
+public static class BikeDefs
 {
-    public readonly int LevelCount, DiffStep;
-    public readonly float MaxFall;
-
-    public PlayCfg()
-    {
-        LevelCount = 10;
-        DiffStep = 5;
-        MaxFall = 2000f;
-    }
-
-    public int DiffFor(int i) => (i - 1) / DiffStep + 1;
-}
-
-public readonly struct BikeDefs
-{
-    public static readonly BikeType[] Types =
-        [BikeType.Standard, BikeType.Sport, BikeType.OffRoad];
-
-    public static readonly string[] Names =
-        ["Standard", "Sport", "OffRoad"];
-
+    public static readonly BikeType[] Types = [BikeType.Standard, BikeType.Sport, BikeType.OffRoad];
     public static int Count => Types.Length;
+    public static string Name(int i) => Types[ClampBike(i)].ToString();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int ClampBike(int i) => Count > 0 ? Math.Clamp(i, 0, Count - 1) : 0;
 }
 
-public enum GameState : byte
-{
-    MainMenu, Playing, Paused, GameOver, LevelComplete
-}
+public enum GameState : byte { MainMenu, Playing, Paused, GameOver, LevelComplete }
 
 public sealed class GamePlay : IDisposable
 {
-    static readonly PlayCfg Cfg = new();
+    public const float BikeScale = 6f;
 
-    bool _disposed;
-    int _curLevelId = -1;
+    const int LevelCount = 10, DiffStep = 5;
+    const float MaxYPx = 2000f;
 
-    public Bike? Bike { get; private set; } =
-        new(BikeType.Standard);
+    bool _dis, _tr;
+
+    public BikePhysics? Bike { get; private set; } = new(BikeType.Standard);
     public Level? Level { get; private set; }
     public List<Level> Levels { get; } = [];
-    public IReadOnlyList<BikeType> AvailBikes =>
-        BikeDefs.Types;
-    public BikeType BikeType { get; private set; } =
-        BikeType.Standard;
-    public GameState State { get; private set; } =
-        GameState.MainMenu;
+    public BikeType BikeType { get; private set; } = BikeType.Standard;
+    public GameState State { get; private set; } = GameState.MainMenu;
     public TimeSpan Time { get; private set; }
 
     public void LoadLevels()
     {
         Levels.Clear();
-        for (int i = 1; i <= Cfg.LevelCount; i++)
-            Levels.Add(Level.Create(
-                i, Strings.LevelN(i - 1),
-                seed: null, diff: Cfg.DiffFor(i)));
+        for (int i = 1; i <= LevelCount; i++)
+            Levels.Add(Level.Create(i, $"Level {i}", null, (i - 1) / DiffStep + 1));
     }
 
     public void StartLevel(int id)
     {
-        if (_curLevelId == id
-            && State == GameState.Playing)
-            return;
-
         if ((uint)(id - 1) >= (uint)Levels.Count)
             return;
-        Level lv = Levels[id - 1];
 
-        (_curLevelId, Level, Time) =
-            (id, lv, TimeSpan.Zero);
+        Level = Levels[id - 1];
+        (Time, _tr, State) = (TimeSpan.Zero, false, GameState.Playing);
 
-        if (Bike is not null)
-        {
-            Bike.SetInput(0f, 0f, 0f);
-            Bike.SetType(BikeType);
-            Bike.SetTerrain(lv);
-            Bike.Reset(lv.StartX);
-        }
+        if (Bike is not { } b)
+            return;
 
-        State = GameState.Playing;
+        b.SetInput(0f, 0f, 0f);
+        b.SetType(BikeType);
+        b.SetTerrain(Level);
+        b.Reset(Level.StartX / BikeScale);
     }
 
     public void Update(float dt)
     {
-        if (_disposed || State != GameState.Playing
-            || Level is null || Bike is null)
+        if (_dis || State != GameState.Playing || Level is null || Bike is null)
+            return;
+
+        float px = Bike.Pos.X * BikeScale;
+        Bike.Update(dt);
+        float cx = Bike.Pos.X * BikeScale;
+        float yPx = Bike.Pos.Y * BikeScale;
+
+        if (yPx > MaxYPx)
+        {
+            _tr = false;
+            State = GameState.GameOver;
+            return;
+        }
+
+        if (Bike.Crashed)
+        {
+            _tr = false;
+            if (Bike.RagdollDone)
+                State = GameState.GameOver;
+            return;
+        }
+
+        _tr |= Level.CrossedStartGate(px, cx);
+        if (!_tr)
             return;
 
         Time += TimeSpan.FromSeconds(dt);
-        Bike.Update(dt);
-
-        if (Level.IsFinish(Bike.Pos))
+        if (Level.CrossedFinishGate(px, cx))
             State = GameState.LevelComplete;
-        else if (Bike.Pos.Y > Cfg.MaxFall || Bike.Crashed)
-            State = GameState.GameOver;
     }
 
-    public void HandleInput(BikeInput inp) =>
-        Bike?.SetInput(inp.Throttle, inp.Brake, inp.Lean);
+    public void HandleInput(BikeInput inp)
+    {
+        if (Bike is { Crashed: false })
+            Bike.SetInput(inp.Throttle, inp.Brake, inp.Lean);
+    }
 
     public void Pause()
     {
-        if (State == GameState.Playing)
+        if (State == GameState.Playing && Bike is { Crashed: false })
             State = GameState.Paused;
     }
 
@@ -115,8 +106,13 @@ public sealed class GamePlay : IDisposable
 
     public void ResetState()
     {
-        _curLevelId = -1;
-        State = GameState.MainMenu;
+        (Level, Time, _tr, State) = (null, TimeSpan.Zero, false, GameState.MainMenu);
+
+        if (Bike is not { } b)
+            return;
+
+        b.SetInput(0f, 0f, 0f);
+        b.Reset(0f);
     }
 
     public void SetBike(BikeType t)
@@ -127,9 +123,9 @@ public sealed class GamePlay : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        if (_dis)
             return;
-        _disposed = true;
+        _dis = true;
         Bike?.Dispose();
         Bike = null;
     }
