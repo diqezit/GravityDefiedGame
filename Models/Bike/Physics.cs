@@ -53,19 +53,14 @@ public readonly record struct PhysConst(
         CrossSpringKMul: 0.1f, CrossSpringDMul: 0.7f,
         HeadSpringKMul: 1.1f);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static float Hyp(float a, float b) => Sqrt(a * a + b * b);
+
     public readonly float RestWheel => WheelBase;
-    public readonly float RestUpper =>
-        Sqrt(UpperOffsetX * UpperOffsetX
-            + UpperOffsetY * UpperOffsetY);
+    public readonly float RestUpper => Hyp(UpperOffsetX, UpperOffsetY);
     public readonly float RestUpperSpan => UpperOffsetX * 2f;
-    public readonly float RestWheelUpper =>
-        Sqrt((WheelBase - UpperOffsetX)
-            * (WheelBase - UpperOffsetX)
-            + UpperOffsetY * UpperOffsetY);
-    public readonly float RestHeadUpper =>
-        Sqrt(UpperOffsetX * UpperOffsetX
-            + (HeadOffsetY - UpperOffsetY)
-            * (HeadOffsetY - UpperOffsetY));
+    public readonly float RestWheelUpper => Hyp(WheelBase - UpperOffsetX, UpperOffsetY);
+    public readonly float RestHeadUpper => Hyp(UpperOffsetX, HeadOffsetY - UpperOffsetY);
     public readonly float RestHeadFrame => HeadOffsetY;
 
     public readonly float OuterR(float baseR) =>
@@ -425,11 +420,6 @@ public sealed partial class BikePhysics
 
         UpdateInvMassAndLean();
 
-        // IMPORTANT (change):
-        // Removed terrain.UpdateVisible() from Step().
-        // We update visible segment window only in ChkColl() (J2ME-style),
-        // so it cannot be "shrunk" by a second call with a different margin.
-
         _headHit = false;
         int var6 = StepCollision(dt);
 
@@ -479,6 +469,7 @@ public sealed partial class BikePhysics
                     || rwX > _terrain.FinishPoint.X)
                 {
                     FinishReached = true;
+                    wasFin = true;
                     targ = (proc + targ) * 0.5f;
                     continue;
                 }
@@ -610,18 +601,20 @@ public sealed partial class BikePhysics
 
     void Engine()
     {
+        static void BrakeWheel(
+            ref float omega, float damp, float threshold)
+        {
+            omega *= damp;
+            if (omega < threshold)
+                omega = 0f;
+        }
+
         if (_braking)
         {
             _engineTorque = 0f;
-
-            float var6 = 1f - WF.BrakeDamp;
-            _cur[BFw].AngVel *= var6;
-            _cur[BRw].AngVel *= var6;
-
-            if (_cur[BFw].AngVel < WF.StopThreshold)
-                _cur[BFw].AngVel = 0f;
-            if (_cur[BRw].AngVel < WF.StopThreshold)
-                _cur[BRw].AngVel = 0f;
+            float damp = 1f - WF.BrakeDamp;
+            BrakeWheel(ref _cur[BFw].AngVel, damp, WF.StopThreshold);
+            BrakeWheel(ref _cur[BRw].AngVel, damp, WF.StopThreshold);
         }
         else if (_input.Throttle > IC.InputDeadZone)
         {
@@ -699,10 +692,8 @@ public sealed partial class BikePhysics
         _engineTorque *= (1f - P.TorqueDamp);
         st[BRw].Torque = _engineTorque;
 
-        if (st[BRw].AngVel > Cfg.MaxWheelOmega)
-            st[BRw].AngVel = Cfg.MaxWheelOmega;
-        if (st[BRw].AngVel < -Cfg.MaxWheelOmega)
-            st[BRw].AngVel = -Cfg.MaxWheelOmega;
+        st[BRw].AngVel = Math.Clamp(
+            st[BRw].AngVel, -Cfg.MaxWheelOmega, Cfg.MaxWheelOmega);
 
         float var10 = VelocityClamp(st);
         Angle(st, var10);
