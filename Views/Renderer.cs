@@ -1,6 +1,3 @@
-using BikePhysics = GravityDefiedGame.Models.Bike.BikePhysics;
-using Pose2D = GravityDefiedGame.Views.Models.Pose;
-
 namespace GravityDefiedGame.Views;
 
 public enum RenderMode : byte { Flat, Voxel }
@@ -12,20 +9,12 @@ public readonly record struct TerrainColors(Color Fill, Color Stroke)
         Color.Lerp(t.TerrainColor, Color.Black, 0.3f));
 }
 
-public readonly record struct RenderState(TerrainColors Terrain, BikeColors Bike)
-{
-    public static RenderState From(ThemeSettings t) => new(
-        TerrainColors.From(t),
-        BikeColors.From(t.BikeColors, ThemeManager.Rendering.TerrainStroke));
-}
-
 public readonly record struct GameRefs(GamePlay GP, Camera Cam)
 {
     public BikePhysics? Bike => GP.Bike;
     public Level? Level => GP.Level;
-    public float Zoom => Cam.Zoom;
-    public Vector2 Camera => Cam.Pos;
-    public Matrix Transform => Cam.Transform;
+    public Matrix Tr => Cam.Transform;
+    public bool HasLevel => Level is { PtCount: > 1 };
 }
 
 public sealed class Renderer : IDisposable
@@ -34,65 +23,66 @@ public sealed class Renderer : IDisposable
 
     readonly SpriteBatch _sb;
     readonly GameRefs _refs;
-    readonly WorldRenderer _world = new();
-    readonly VoxelWorldRenderer _voxWorld = new();
-    readonly BikeRenderer _bike = new();
-    readonly Camera3D _cam;
-    readonly VoxMesh _mesh = new();
+    readonly FlatWorld _flatWorld = new();
+    readonly VoxWorld _voxWorld = new();
+    readonly BikeRenderer _bikeRnd = new();
+    readonly Mesh _mesh = new();
+    readonly Camera3D _voxCam;
 
-    RenderState _st;
+    TerrainColors _terrain;
+    BikeColors _bike;
     float _time;
-    bool _sprites, _disposed;
+    bool _spr, _disposed;
 
-    public Layer SpriteMask { get; set; } = Layer.All;
     public RenderMode Mode { get; private set; }
+    public Camera3D? VoxCam => IsVox ? _voxCam : null;
 
-#if DEBUG
-    public Camera3D VoxCam => _cam;
-#endif
-
-    bool UseSprites => _sprites && _bike.SpritesLoaded && Mode == RenderMode.Flat;
+    bool UseSpr => _spr && _bikeRnd.SpritesLoaded && !IsVox;
+    bool IsVox => Mode == RenderMode.Voxel;
 
     public Renderer(SpriteBatch sb, GameRefs refs, int w, int h)
     {
-        _sb = sb;
-        _refs = refs;
-        _st = RenderState.From(ThemeManager.Cur);
-        _cam = new(w, h);
-
-        _world.Init();
-        _voxWorld.Init();
+        (_sb, _refs, _voxCam) = (sb, refs, new(w, h));
+        UpdateTheme();
         ThemeManager.Changed += OnTheme;
     }
 
     public void SetMode(RenderMode m) => Mode = m;
-
-    public void CycleMode() =>
-        Mode = Mode == RenderMode.Flat ? RenderMode.Voxel : RenderMode.Flat;
-
-    public void ResizeCamera(int w, int h) => _cam.Resize(w, h);
+    public void CycleMode() => SetMode(IsVox ? RenderMode.Flat : RenderMode.Voxel);
+    public void Resize(int w, int h) => _voxCam.Resize(w, h);
     public void Update(float dt) => _time += dt;
+    public void ToggleSprites() => _spr = !_spr;
 
-    public void HandleInput(InputState inp)
+    public void LoadSprites(GraphicsDevice gd)
     {
-        if (Mode != RenderMode.Voxel)
+        if (_disposed)
+            return;
+        _bikeRnd.LoadSprites(gd, AssetDir);
+    }
+
+    public void Draw()
+    {
+        if (_disposed)
+            return;
+        if (IsVox)
+            DrawVoxel();
+        else
+            DrawFlat();
+    }
+
+    public void Input(in InputState inp)
+    {
+        if (!IsVox)
             return;
 
-        if (inp.Dragging)
-            _cam.Rotate(inp.MouseDelta.X, inp.MouseDelta.Y);
-        if (inp.ScrollDelta != 0)
-            _cam.Zoom(inp.ScrollDelta * 0.01f);
+        MouseInput m = inp.Mouse;
+        if (m.Right)
+            _voxCam.Rotate(m.Delta.X, m.Delta.Y);
+        if (m.Scroll != 0)
+            _voxCam.Zoom(m.Scroll * 0.01f);
     }
 
-    public void LoadBikeSprites(GraphicsDevice gd)
-    {
-        if (!_disposed)
-            _bike.LoadSprites(gd, AssetDir);
-    }
-
-    public void ToggleBikeRenderMode() => _sprites = !_sprites;
-
-    public void RenderBackground()
+    public void Background()
     {
         if (_disposed)
             return;
@@ -100,22 +90,11 @@ public sealed class Renderer : IDisposable
         Viewport vp = _sb.GraphicsDevice.Viewport;
 
         _sb.Begin();
-        if (Mode == RenderMode.Voxel)
+        if (IsVox)
             _voxWorld.Sky(_sb, vp.Width, vp.Height);
         else
-            _world.Sky(_sb, vp.Width, vp.Height);
+            _flatWorld.Sky(_sb, vp.Width, vp.Height);
         _sb.End();
-    }
-
-    public void RenderGame()
-    {
-        if (_disposed)
-            return;
-
-        if (Mode == RenderMode.Voxel)
-            DrawVox();
-        else
-            DrawFlat();
     }
 
     public void Dispose()
@@ -124,94 +103,93 @@ public sealed class Renderer : IDisposable
             return;
         _disposed = true;
         ThemeManager.Changed -= OnTheme;
-        _bike.Dispose();
+        _bikeRnd.Dispose();
         _mesh.Dispose();
     }
 
     void DrawFlat()
     {
-        BikePhysics? b = _refs.Bike;
-        Level? lv = _refs.Level;
-        Matrix tr = _refs.Transform;
-        Vector2 cam = _refs.Camera;
+        bool hasPose = TryGetPose(out BikeVisual vis, out Pose pose);
+        bool spr = UseSpr;
 
-        (BikeVisual v, Pose2D p) = CreateBikePose(b);
+        _sb.Begin(SpriteSortMode.Deferred, null, null, null, null, null, _refs.Tr);
 
-        _sb.Begin(transformMatrix: tr);
+        if (_refs.HasLevel)
+            _flatWorld.Terrain(
+                _sb, _refs.Level!, _refs.Cam.Pos,
+                _refs.Cam.Zoom, _terrain, _time);
 
-        if (lv is { PtCount: > 1 })
-            _world.Terrain(_sb, lv, cam, _refs.Zoom, _st.Terrain, _time);
-
-        if (b is not null && !UseSprites)
-            BikeRenderer.Render(_sb, v, p, _st.Bike);
+        if (!spr && hasPose)
+            BikeRenderer.Render(_sb, vis, pose, _bike);
 
         _sb.End();
 
-        if (b is not null && UseSprites)
-            DrawSprites(v, p);
-
-        if (lv is { PtCount: > 1 })
+        if (spr && hasPose)
         {
-            _sb.Begin(transformMatrix: tr);
-            _world.DrawNearFlags(_sb, lv, cam, _time);
+            _sb.Begin(
+                SpriteSortMode.Deferred,
+                BlendState.NonPremultiplied,
+                SamplerState.PointClamp,
+                DepthStencilState.None,
+                RasterizerState.CullNone, null, _refs.Tr);
+            _bikeRnd.RenderSprites(_sb, vis, pose, _bike, Layer.All);
+            _sb.End();
+        }
+
+        if (_refs.HasLevel)
+        {
+            _sb.Begin(SpriteSortMode.Deferred, null, null, null, null, null, _refs.Tr);
+            _flatWorld.NearFlags(
+                _sb, _refs.Level!, _refs.Cam.Pos, _time);
             _sb.End();
         }
     }
 
-    void DrawVox()
+    void DrawVoxel()
     {
         GraphicsDevice gd = _sb.GraphicsDevice;
         _mesh.Init(gd);
 
-        BikePhysics? b = _refs.Bike;
-        Level? lv = _refs.Level;
+        if (_refs.Bike is { } b)
+            _voxCam.Target(b.Pos * GamePlay.BikeScale);
 
-        if (b is not null)
-            _cam.Target(b.Pos * GamePlay.BikeScale);
-
-        _cam.Update();
+        _voxCam.Update();
         _mesh.Begin();
 
-        if (lv is { PtCount: > 1 })
-            _voxWorld.Terrain(_mesh, lv, _st.Terrain, _st.Bike.Thick, _time);
+        if (_refs.HasLevel)
+            VoxWorld.Terrain(_mesh, _refs.Level!, _terrain, _bike.Thick, _time);
 
-        if (b is not null)
-        {
-            (BikeVisual v, Pose2D p) = CreateBikePose(b);
-            VoxelBikeRenderer.Render(_mesh, v, p, _st.Bike);
-        }
+        if (TryGetPose(out BikeVisual vis, out Pose pose))
+            BikeRenderer.Render(_mesh, vis, pose, _bike);
 
         gd.Clear(ClearOptions.DepthBuffer, Color.Transparent, 1f, 0);
-        _mesh.Flush(gd, _cam);
+        _mesh.Flush(gd, _voxCam);
     }
 
-    void DrawSprites(in BikeVisual v, in Pose2D p)
+    bool TryGetPose(out BikeVisual vis, out Pose pose)
     {
-        _sb.Begin(
-            SpriteSortMode.Deferred, BlendState.NonPremultiplied,
-            SamplerState.PointClamp, DepthStencilState.None,
-            RasterizerState.CullNone, null, _refs.Transform);
-
-        _bike.RenderSprites(_sb, v, p, _st.Bike, SpriteMask);
-        _sb.End();
+        if (_refs.Bike is { } b)
+        {
+            vis = BikeVisual.Create(b, GamePlay.BikeScale);
+            pose = Pose.From(b.RiderPose, GamePlay.BikeScale);
+            return true;
+        }
+        vis = default;
+        pose = default;
+        return false;
     }
 
-    static (BikeVisual v, Pose2D p) CreateBikePose(BikePhysics? b)
+    void UpdateTheme()
     {
-        if (b is null)
-            return (default, default);
-
-        return (
-            BikeVisual.Create(b, GamePlay.BikeScale),
-            Pose2D.From(b.RiderPose, GamePlay.BikeScale));
+        ThemeSettings t = ThemeManager.Cur;
+        _terrain = TerrainColors.From(t);
+        _bike = new BikeColors(t.BikeColors, ThemeManager.Rendering.TerrainStroke);
     }
 
     void OnTheme()
     {
-        if (_disposed)
-            return;
-        _st = RenderState.From(ThemeManager.Cur);
-        _world.OnTheme();
+        UpdateTheme();
+        _flatWorld.OnTheme();
         _voxWorld.OnTheme();
     }
 }

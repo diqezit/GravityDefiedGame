@@ -1,4 +1,5 @@
-using XVector2 = Microsoft.Xna.Framework.Vector2;
+using static System.MathF;
+using Vec2 = Microsoft.Xna.Framework.Vector2;
 
 namespace GravityDefiedGame.Models.Terrain;
 
@@ -40,24 +41,24 @@ public sealed class Level
     public float Len { get; }
     public int PtCount { get; }
     public float StartX { get; }
-    public XVector2 FinishPoint { get; }
+    public Vec2 FinishPoint { get; }
     public int StartIdx { get; }
     public int FinishIdx { get; }
 
     public float StartGateX => StartX + Cfg.StartGateOffX;
     public float FinishGateX => FinishPoint.X + Cfg.FinishGateOffX;
 
-    public XVector2 StartGatePos =>
+    public Vec2 StartGatePos =>
         new(StartGateX, GetGroundYAtX(StartGateX));
 
-    public XVector2 FinishGatePos =>
+    public Vec2 FinishGatePos =>
         new(FinishGateX, GetGroundYAtX(FinishGateX));
 
     public Level(
         int id, string name, int diff, float len,
         float[] ptsX, float[] ptsY,
         float[] normX, float[] normY,
-        float startX, XVector2 finish,
+        float startX, Vec2 finish,
         int startIdx, int finishIdx)
     {
         (Id, Name, Diff, Len) = (id, name, diff, len);
@@ -76,15 +77,12 @@ public sealed class Level
         int? seed = null, int? diff = null) =>
         Generator.Generate(id, name, seed, diff);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float GetPtX(int i) =>
         (uint)i < (uint)PtCount ? _ptsX[i] : Cfg.DefX;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float GetPtY(int i) =>
         (uint)i < (uint)PtCount ? _ptsY[i] : Cfg.DefY;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (int Start, int End) GetVisibleRange() =>
         (_visStart, _visEnd);
 
@@ -126,7 +124,7 @@ public sealed class Level
         float dx = x1 - x0;
 
         // Guard for bad data where two points share same X
-        return MathF.Abs(dx) < Cfg.Epsilon
+        return Abs(dx) < Cfg.Epsilon
             ? y0
             : y0 + (y1 - y0) * ((x - x0) / dx);
     }
@@ -159,11 +157,9 @@ public sealed class Level
         (nx, ny) = (_normX[idx], _normY[idx]);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool CrossedStartGate(float x0, float x1) =>
         x0 < StartGateX && x1 >= StartGateX;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool CrossedFinishGate(float x0, float x1) =>
         x0 < FinishGateX && x1 >= FinishGateX;
 
@@ -200,9 +196,4 @@ public sealed class Level
 
         (_lastLeftX, _lastRightX) = (leftX, rightX);
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsFinish(XVector2 p) =>
-        XVector2.DistanceSquared(p, FinishPoint)
-            <= Cfg.FinishDist * Cfg.FinishDist;
 }
