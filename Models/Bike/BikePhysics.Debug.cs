@@ -43,11 +43,8 @@ public readonly struct HudCfg
         (Pad, Gap, ColGap) = (12f, 10f, 16f);
     }
 
-    HudCfg(float pad, float gap, float colGap)
-    {
-        (Lbl, V1, V2, V3) = (5, 8, 7, 6);
+    HudCfg(float pad, float gap, float colGap) : this() =>
         (Pad, Gap, ColGap) = (pad, gap, colGap);
-    }
 
     public static HudCfg ForRes(int w) => w switch
     {
@@ -397,6 +394,7 @@ public sealed partial class BikePhysics
     {
         InitDbg();
         _ctFrame = new();
+        (_dbgIdx, _dbgNx, _dbgNy) = (-1, 0f, 0f);
     }
 
     [Conditional("DEBUG")]
@@ -410,6 +408,7 @@ public sealed partial class BikePhysics
     internal void RecordResolve(int idx, float vn, float nx, float ny, in PtState pt)
     {
         InitDbg();
+        (_dbgIdx, _dbgNx, _dbgNy) = (idx, nx, ny);
         _ctFrame.Record(vn, nx, ny, in pt, BodyKE(idx));
     }
 
@@ -429,7 +428,6 @@ public sealed partial class BikePhysics
         if (!DebugNodesEnabled || dt <= 0f)
             return;
         InitDbg();
-        (_dbgIdx, _dbgNx, _dbgNy) = (_col.CollIdx, _col.CollNx, _col.CollNy);
         Rec(dt).Speed().Energy().Jitter().Springs().Contact().Commit();
     }
 
@@ -799,6 +797,8 @@ sealed class DebugOverlay(BikePhysics bp)
           .Lbl("V", 2).Val(pt.Vel.X, 2, 7).Val(pt.Vel.Y, 2, 7).Ln()
           .Lbl("|V|", 4).Val(pt.Vel.Length(), 1, 6)
           .Lbl("F", 2).Val(pt.Force.Length(), 0, 5).Ln()
+          .Lbl("A", 2).Val(pt.Angle, 2, 7)
+          .Lbl("ω", 2).Val(pt.AngVel, 3, 7).Ln()
           .Lbl("R", 2).Val(bp.Bods[i].R, 2, 5)
           .Lbl("M", 2).Val(bp.Mass[i], 3, 5).Ln();
     }
@@ -989,8 +989,8 @@ sealed class DebugHud
 
     void BuildInput()
     {
-        _sb.Lbl("T", 3).Val(_bp.Input.Throttle, 2, 5)
-           .Lbl("B", 3).Val(_bp.Input.Brake, 2, 5)
+        _sb.Lbl("T", 3).Pad(_bp.Input.Throttle ? "1" : "0", 5)
+           .Lbl("B", 3).Pad(_bp.Input.Brake ? "1" : "0", 5)
            .Lbl("L", 3).Val(_bp.Input.Lean, 2, 5).Ln()
            .Lbl("LEAN", H.Lbl).Pad(_bp.LeanL ? "L" : _bp.LeanR ? "R" : "-", 3)
            .Lbl("BRK", H.Lbl).Pad(_bp.Braking ? "ON" : "-", 3).Ln();
@@ -1175,6 +1175,9 @@ sealed class DebugRender(BikePhysics bp)
     readonly DebugHud _hud = new(bp);
     readonly StringBuilder _sb = new(256);
 
+    int _prevHover = -1;
+    int _hoverLogTick;
+
     bool Has(DebugMask m) => (bp.DebugView & m) != 0;
 
     public void Draw(SpriteBatch sb, SpriteFontBase font, GraphicsDevice gd,
@@ -1219,8 +1222,29 @@ sealed class DebugRender(BikePhysics bp)
             _ov.Energy(ref g);
         if (Has(DebugMask.Ragdoll) && bp.RagdollActive)
             _ov.Ragdoll(ref g);
+
         if (hover >= 0)
+        {
             _ov.Tooltip(font, mouse, hover, _sb, ref g);
+            LogHover(hover);
+        }
+        else
+        {
+            _prevHover = -1;
+        }
+    }
+
+    void LogHover(int hover)
+    {
+        if (hover == _prevHover && bp.FrameNum - _hoverLogTick < 30)
+            return;
+
+        _prevHover = hover;
+        _hoverLogTick = bp.FrameNum;
+
+        Serilog.Log.Information(
+            "\n=== NODE {Idx} (tick {Tick}) ===\n{Content}",
+            hover, bp.FrameNum, _sb.ToString());
     }
 }
 
