@@ -1,4 +1,5 @@
 using static System.MathF;
+using static GravityDefiedGame.Models.Bike.BikePhysics;
 
 namespace GravityDefiedGame.Models.Bike;
 
@@ -16,7 +17,7 @@ public delegate void BikeEvent();
 public delegate void LandEvent(float impactSpeed);
 
 public readonly record struct BikeInput(
-    float Throttle, float Brake, float Lean);
+    bool Throttle, bool Brake, float Lean);
 
 public readonly record struct BikeCfg(
     float WheelR, float Mass,
@@ -52,7 +53,7 @@ public readonly struct PhysConst
     public static readonly PhysConst Default = new();
 
     public readonly float
-        Gravity, FixedDt, WheelBase, PushOut, CollMargin,
+        Gravity, FixedDt, WheelBase, CollMargin,
         WheelieAngle, StoppieAngle, TorqueDampRate, MinAxleDist2, MaxAxleDist2,
         UpperOffsetX, UpperOffsetY, HeadOffsetY, MaxRelVel, SpringMinDist,
         MinDist, Epsilon, MaxFrameDt, HardLandVel, PlaceOffsetY, DefaultGroundY,
@@ -64,7 +65,7 @@ public readonly struct PhysConst
     public PhysConst()
     {
         (Gravity, FixedDt, WheelBase) = (14.06f, 0.016f, 3.5f);
-        (PushOut, CollMargin) = (0.033f, 0.05f);
+        CollMargin = 0.05f;
 
         (WheelieAngle, StoppieAngle, TorqueDampRate) = (0.32f, 0.32f, 6.6f);
         (MinAxleDist2, MaxAxleDist2) = (15f, 70f);
@@ -80,7 +81,7 @@ public readonly struct PhysConst
 
         (TiltCenter, TiltFollow) = (0.5f, 12f);
 
-        (CrossSpringKMul, CrossSpringDMul, CrossSpringRwDMul) = (0.2f, 1.4f, 2.0f);
+        (CrossSpringKMul, CrossSpringDMul, CrossSpringRwDMul) = (0.2f, 1.0f, 2.0f);
 
         (HeadSpringKMul, TerrainScale, HeadCrashVel, LeanHeadMul) = (1.1f, 6f, 1.5f, 18f);
 
@@ -133,16 +134,6 @@ public readonly struct WheelFriction
         (BounceFront, BounceRear, TangentDamp) = (0.5f, 0.5f, 0.5f);
         (BrakeBase, BrakeP, StopThreshold, MinWheelR) = (0.4f, 0.4f, 0.1f, 0.1f);
     }
-}
-
-public readonly struct InputCfg
-{
-    public static readonly InputCfg Default = new();
-
-    public readonly float LeanDeadZone, BrakeDeadZone, ThrottleDeadZone;
-
-    public InputCfg() =>
-        (LeanDeadZone, BrakeDeadZone, ThrottleDeadZone) = (0.05f, 0.01f, 0.01f);
 }
 
 public readonly struct BodyCfg
@@ -268,7 +259,7 @@ public struct PtState
 public struct BodyDef
 {
     public float R, InvInertia;
-    public bool IsWheel, HasCollOffset;
+    public bool IsWheel;
 }
 
 public sealed partial class BikePhysics : IDisposable
@@ -279,7 +270,6 @@ public sealed partial class BikePhysics : IDisposable
         BodyCount = 6, SpringCount = 10;
 
     static readonly PhysConst P = PhysConst.Default;
-    static readonly InputCfg InpC = InputCfg.Default;
     static readonly BodyCfg BodC = BodyCfg.Default;
     static readonly MassCfg MasC = MassCfg.Default;
 
@@ -295,8 +285,11 @@ public sealed partial class BikePhysics : IDisposable
     internal Level? Terrain;
 
     internal float EngineTorque, TiltZ;
-    internal bool LeanL, LeanR, Braking, FwGnd, RwGnd, HeadHit;
+    internal bool Braking, FwGnd, RwGnd;
     internal int FrameNum;
+
+    internal bool LeanL => !Crashed && Input.Lean < 0f;
+    internal bool LeanR => !Crashed && Input.Lean > 0f;
 
     readonly BikeDynamics _dyn;
     readonly BikeCollider _col;
@@ -330,7 +323,6 @@ public sealed partial class BikePhysics : IDisposable
     public bool InAir => !FwGnd && !RwGnd;
     public bool IsGrounded => FwGnd || RwGnd;
     public bool Crashed => (State & BikeState.Crashed) != 0;
-    public bool FinishReached { get; private set; }
 
     public bool RagdollActive => _ragdoll.On;
     public bool RagdollDone { get; set; }
@@ -365,16 +357,11 @@ public sealed partial class BikePhysics : IDisposable
         Build();
     }
 
-    public void SetInput(float throttle, float brake, float lean)
+    public void SetInput(BikeInput inp)
     {
         if (_disposed || Crashed)
             return;
-
-        Input = new(
-            Convert.ToSingle(throttle > 0f && brake <= 0f),
-            Convert.ToSingle(brake > 0f),
-            Sign(lean)
-        );
+        Input = inp;
     }
 
     public void Reset(float startXMeters)
@@ -421,10 +408,8 @@ public sealed partial class BikePhysics : IDisposable
     {
         (Input, _accumDt) = (default, 0f);
         (TiltZ, FrameNum, Ang, AngVel) = (P.TiltCenter, 0, 0f, 0f);
-
-        (FwGnd, RwGnd, LeanL, LeanR, Braking) = (false, false, false, false, false);
-        (EngineTorque, FinishReached, HeadHit) = (0f, false, false);
-
+        (FwGnd, RwGnd, Braking) = (false, false, false);
+        EngineTorque = 0f;
         RagdollDone = false;
         State = BikeState.Grounded;
     }
@@ -442,8 +427,7 @@ public sealed partial class BikePhysics : IDisposable
             {
                 R = BodC.Radii[i],
                 IsWheel = i is BFw or BRw,
-                InvInertia = i == BRw ? Cfg.InvWheelInertia : 0f,
-                HasCollOffset = i == BFrame
+                InvInertia = i == BRw ? Cfg.InvWheelInertia : 0f
             };
         }
 
@@ -476,18 +460,13 @@ public sealed partial class BikePhysics : IDisposable
         float oldVelY = Cur[BFrame].Vel.Y;
         bool wasAir = InAir;
 
-        LeanL = !Crashed && Input.Lean < -InpC.LeanDeadZone;
-        LeanR = !Crashed && Input.Lean > InpC.LeanDeadZone;
-        Braking = !Crashed && Input.Brake > InpC.BrakeDeadZone;
+        Braking = !Crashed && Input.Brake;
 
         _dyn.UpdateMassAndLean();
 
-        HeadHit = false;
         int res = _col.StepCollision(dt);
 
-        CheckFinish();
-
-        if (!Crashed && (HeadHit || res < 0))
+        if (!Crashed && res < 0)
         {
             DoCrash();
 #if DEBUG
@@ -506,19 +485,6 @@ public sealed partial class BikePhysics : IDisposable
 #if DEBUG
         UpdateDebugStats(dt);
 #endif
-    }
-
-    // Finish check moved out of collision loop — no subframe precision needed
-    // Called after collision resolution, before crash check
-    void CheckFinish()
-    {
-        if (Terrain == null || FinishReached)
-            return;
-
-        float scale = P.TerrainScale;
-        if (Cur[BFw].Pos.X * scale > Terrain.FinishPoint.X ||
-            Cur[BRw].Pos.X * scale > Terrain.FinishPoint.X)
-            FinishReached = true;
     }
 
     void UpdAngle()
@@ -581,16 +547,8 @@ public sealed partial class BikePhysics : IDisposable
 // Allocating per-tick causes GC spikes mid-race ruining frame pacing
 public sealed class BikeDynamics(BikePhysics p)
 {
-    const int
-        BFrame = BikePhysics.BFrame, BFw = BikePhysics.BFw,
-        BRw = BikePhysics.BRw, BUF = BikePhysics.BUF,
-        BUR = BikePhysics.BUR, BHead = BikePhysics.BHead,
-        BodyCount = BikePhysics.BodyCount,
-        SpringCount = BikePhysics.SpringCount;
-
     static readonly PhysConst P = PhysConst.Default;
     static readonly WheelFriction WF = WheelFriction.Default;
-    static readonly InputCfg InpC = InputCfg.Default;
 
     readonly PtState[] _tmp = new PtState[BodyCount];
     readonly PtState[] _k1 = new PtState[BodyCount];
@@ -635,17 +593,25 @@ public sealed class BikeDynamics(BikePhysics p)
         p.TiltZ += (t - p.TiltZ) * (1f - Exp(-P.TiltFollow * P.FixedDt));
     }
 
-    // Standard Heun (improved Euler) integrator
-    // Full predictor step, full dt second pass, 0.5 blend
-    // All forces and thresholds are tuned against this scheme
+    // Fixed 60 Hz tick matches level layout and spring tuning
+    // Heun kept since bike constants were tuned for its two force passes
+    //
+    // Collision may split a tick into smaller slices when penetration gets too deep
+    // Each slice runs integration and collision resolve then repeats until dt is consumed
+    // Damping and engine torque decay use slice dt so total damping over a full tick stays time based
+    // Using FixedDt would apply full tick damping per slice causing extra power loss and faster wheel spin drop on rough ground
+    //
+    // Wheel Angle and AngVel updated after linear blend
+    // Wheel rotation drives slip and braking so moving it into the blend changes handling and tuning
+    // Keeping this order avoids retuning levels and bike types
     public void Heun(float dt)
     {
-        Forces(p.Cur);
+        Forces(p.Cur, dt);
         Integ(p.Cur, _k1, dt);
 
         Combine(_tmp, p.Cur, _k1, 1.0f);
 
-        Forces(_tmp);
+        Forces(_tmp, dt);
         Integ(_tmp, _k2, dt);
 
         CombineTwo(p.New, p.Cur, _k1, _k2, 0.5f);
@@ -678,7 +644,7 @@ public sealed class BikeDynamics(BikePhysics p)
         }
     }
 
-    void Forces(PtState[] st)
+    void Forces(PtState[] st, float dt)
     {
         for (int i = 0; i < BodyCount; i++)
         {
@@ -691,18 +657,19 @@ public sealed class BikeDynamics(BikePhysics p)
         for (int i = 0; i < SpringCount; i++)
             Spring(ref st[p.Spr[i].A], ref st[p.Spr[i].B], i);
 
-        p.EngineTorque *= Exp(-P.TorqueDampRate * P.FixedDt);
+        p.EngineTorque *= Exp(-P.TorqueDampRate * dt);
+
         st[BRw].Torque = p.EngineTorque;
         st[BRw].AngVel = Math.Clamp(
             st[BRw].AngVel,
             -p.Cfg.MaxWheelOmega,
             p.Cfg.MaxWheelOmega);
 
-        float spinDamp = Exp(-P.FreeSpinDampRate * P.FixedDt);
+        float spinDamp = Exp(-P.FreeSpinDampRate * dt);
         st[BFw].AngVel *= spinDamp;
         st[BRw].AngVel *= spinDamp;
 
-        DampRelativeVelocities(st, P.FixedDt);
+        DampRelativeVelocities(st, dt);
     }
 
     void Integ(PtState[] cur, PtState[] k, float dt)
@@ -749,7 +716,7 @@ public sealed class BikeDynamics(BikePhysics p)
             return;
         }
 
-        if (p.Input.Throttle > InpC.ThrottleDeadZone)
+        if (p.Input.Throttle)
             p.EngineTorque = Min(
                 p.EngineTorque + p.Cfg.TorqueAccel,
                 p.Cfg.MaxEngineTorque);
@@ -783,10 +750,8 @@ public sealed class BikeDynamics(BikePhysics p)
     // Multiplier is needed because forces are weaker per tick than direct velocity changes
     // LeanHeadMul is gameplay tuning not a physical parameter so it lives in PhysConst
     //
-    // Head force is not compensated on the frame
-    // This adds a small net force along the bike axis matching J2ME behavior
-    // where the velocity kick also added net momentum to the system
-    // To remove lean self-acceleration subtract the same force from BFrame
+    // Head force is compensated on the frame to prevent lean self-acceleration
+    // Original J2ME left this uncompensated adding net momentum to the system
     void Lean(PtState[] st)
     {
         float tilt = p.TiltZ / P.TiltCenter - 1f;
@@ -808,6 +773,8 @@ public sealed class BikeDynamics(BikePhysics p)
         st[BUR].Force.Y += py;
         st[BHead].Force.X += hx;
         st[BHead].Force.Y += hy;
+        st[BFrame].Force.X -= hx;
+        st[BFrame].Force.Y -= hy;
     }
 
     // Exponential damping on relative velocities exceeding MaxRelVel
@@ -850,10 +817,10 @@ public sealed class BikeDynamics(BikePhysics p)
 // - outer zone: triggers velocity reflection (Resolve)
 // - inner zone: penetration too deep, requires timestep reduction
 //
-// _collIdx stores only one body index per CheckAllBodies pass
+// ChkColl returns CollResult containing body index and collision normal
 // The while(Resolve) loop handles multiple colliding bodies sequentially
 // Each Resolve flips velocity direction so same body wont trigger again
-// This guarantees convergence without explicit iteration limits
+// MaxResolveIter caps iterations as safety against degenerate geometry
 //
 // Collision normal is normalized for consistent push and reflection
 //
@@ -862,67 +829,83 @@ public sealed class BikeDynamics(BikePhysics p)
 // to prevent false positives during wheelies and stoppies
 public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
 {
-    enum CollCode { DeepPen, Resolve, None }
+    private enum CollCode { None, Resolve, DeepPen, HeadCrash }
 
-    const int
-        BFw = BikePhysics.BFw,
-        BRw = BikePhysics.BRw, BUF = BikePhysics.BUF,
-        BUR = BikePhysics.BUR, BHead = BikePhysics.BHead,
-        BodyCount = BikePhysics.BodyCount;
+    private readonly record struct CollResult(CollCode Code, int Idx, float Nx, float Ny, float Pen);
 
-    static readonly PhysConst P = PhysConst.Default;
-    static readonly WheelFriction WF = WheelFriction.Default;
-    static readonly BodyCfg BodC = BodyCfg.Default;
+    const int MaxResolveIter = 8;
 
-    int _collIdx;
-    float _collNx, _collNy;
+    private static readonly PhysConst P = PhysConst.Default;
+    private static readonly WheelFriction WF = WheelFriction.Default;
+    private static readonly BodyCfg BodC = BodyCfg.Default;
+    private static readonly CollResult NoHit = new(CollCode.None, -1, 0f, 0f, 0f);
 
-    internal int CollIdx => _collIdx;
-    internal float CollNx => _collNx;
-    internal float CollNy => _collNy;
+    private readonly PtState[] _curBackup = new PtState[BodyCount];
 
-    static float Scale => P.TerrainScale;
+    private CollResult _lastColl;
 
-    Vector2 ScaledPos(int i) => p.New[i].Pos * Scale;
-    Vector2 ScaledVel(int i) => p.New[i].Vel * Scale;
+    internal int CollIdx => _lastColl.Idx;
+    internal float CollNx => _lastColl.Nx;
+    internal float CollNy => _lastColl.Ny;
+
+    private static float Scale => P.TerrainScale;
+
+    private Vector2 ScaledPos(int i) => p.New[i].Pos * Scale;
+    private Vector2 ScaledVel(int i) => p.New[i].Vel * Scale;
+
+    private CollResult Ret(CollResult r) { _lastColl = r; return r; }
+
+    bool StepSlice(float sliceDt, out CollResult cr)
+    {
+        Array.Copy(p.Cur, _curBackup, BodyCount);
+        float torqueBk = p.EngineTorque;
+        bool fwBk = p.FwGnd;
+        bool rwBk = p.RwGnd;
+
+        Array.Copy(p.Cur, p.New, BodyCount);
+        dyn.Heun(sliceDt);
+
+        cr = ChkColl();
+
+        if (cr.Code is CollCode.HeadCrash or not CollCode.DeepPen)
+            return true;
+
+        Array.Copy(_curBackup, p.Cur, BodyCount);
+        p.EngineTorque = torqueBk;
+        p.FwGnd = fwBk;
+        p.RwGnd = rwBk;
+        return false;
+    }
 
     public int StepCollision(float dt)
     {
+#if DEBUG
         p.ResetContactStats();
+#endif
+        (p.FwGnd, p.RwGnd) = (false, false);
 
         float proc = 0f, targ = dt;
-        (p.FwGnd, p.RwGnd) = (false, false);
 
         while (proc < dt)
         {
-            Array.Copy(p.Cur, p.New, BodyCount);
-            dyn.Heun(targ - proc);
+            float sliceDt = targ - proc;
 
-            CollCode coll = ChkColl();
-            if (!p.Crashed && p.HeadHit)
-                return -1;
-
-            if (coll == CollCode.DeepPen)
+            if (!StepSlice(sliceDt, out CollResult cr))
             {
                 targ = (proc + targ) * 0.5f;
-                if (Abs(targ - proc) < P.MinSlice)
+                if (targ - proc < P.MinSlice)
                     return -1;
                 continue;
             }
 
-            if (coll == CollCode.Resolve)
+            for (int r = 0; cr.Code == CollCode.Resolve && r < MaxResolveIter; r++)
             {
-                while (coll == CollCode.Resolve)
-                {
-                    Resolve(_collIdx);
-                    coll = ChkColl();
-
-                    if (!p.Crashed && p.HeadHit)
-                        return -1;
-                    if (coll == CollCode.DeepPen)
-                        return -1;
-                }
+                Resolve(cr.Idx, cr.Nx, cr.Ny, cr.Pen);
+                cr = ChkColl();
             }
+
+            if (cr.Code != CollCode.None)
+                return -1;
 
             Array.Copy(p.New, p.Cur, BodyCount);
             proc = targ;
@@ -930,33 +913,25 @@ public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
                 targ = dt;
         }
 
-        float dx = p.Cur[BFw].Pos.X - p.Cur[BRw].Pos.X;
-        float dy = p.Cur[BFw].Pos.Y - p.Cur[BRw].Pos.Y;
-        float d2 = dx * dx + dy * dy;
+        float dx = p.Cur[BFw].Pos.X - p.Cur[BRw].Pos.X,
+              dy = p.Cur[BFw].Pos.Y - p.Cur[BRw].Pos.Y,
+              d2 = dx * dx + dy * dy;
 
         return d2 < P.MinAxleDist2 || d2 > P.MaxAxleDist2 ? -1 : 0;
     }
 
-    CollCode ChkColl()
+    CollResult ChkColl()
     {
-        p.HeadHit = false;
         if (p.Terrain == null)
-        {
-            _collIdx = -1;
-            return CollCode.None;
-        }
+            return Ret(NoHit);
 
-        Vector2 fwP = ScaledPos(BFw);
-        Vector2 rwP = ScaledPos(BRw);
-        Vector2 hdP = ScaledPos(BHead);
+        Vector2 fwP = ScaledPos(BFw), rwP = ScaledPos(BRw), hdP = ScaledPos(BHead);
 
-        float minX = Min(fwP.X, Min(rwP.X, hdP.X));
-        float maxX = Max(fwP.X, Max(rwP.X, hdP.X));
-
-        float baseR = p.Bods[BFw].R;
-        float outerR = P.OuterR(baseR) * Scale;
-        float innerR = P.InnerR(baseR) * Scale;
-        float touchR = outerR + outerR - innerR;
+        float baseR = p.Bods[BFw].R,
+              outerR = P.OuterR(baseR) * Scale,
+              touchR = outerR + outerR - P.InnerR(baseR) * Scale,
+              minX = Min(fwP.X, Min(rwP.X, hdP.X)),
+              maxX = Max(fwP.X, Max(rwP.X, hdP.X));
 
         p.Terrain.UpdateVisible(minX, maxX, touchR + P.CollPadding * Scale);
 
@@ -964,32 +939,29 @@ public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
             fwP.X - rwP.X, fwP.Y - rwP.Y,
             P.MinDist, out float axNx, out float axNy);
 
-        CollCode res = CollCode.None;
-        float headCrashVn = P.HeadCrashVel * Scale;
+        CollResult result = NoHit;
+        float headVnLimit = P.HeadCrashVel * Scale;
 
         for (int i = 0; i < BodyCount; i++)
         {
-            if (!p.Crashed && i is BUF or BUR)
-                continue;
-            if (p.Crashed && i == BHead)
+            if ((!p.Crashed && i is BUF or BUR) || (p.Crashed && i == BHead))
                 continue;
 
-            Vector2 pos = ScaledPos(i);
-            Vector2 vel = ScaledVel(i);
-
+            Vector2 pos = ScaledPos(i), vel = ScaledVel(i);
             float x = pos.X, y = pos.Y;
 
-            if (p.Bods[i].HasCollOffset)
+            if (i == BFrame)
             {
                 float off = BodC.FrameCollOffset * Scale;
                 x -= axNy * off;
                 y += axNx * off;
             }
 
-            float outR = P.OuterR(p.Bods[i].R) * Scale;
-            float inR = P.InnerR(p.Bods[i].R) * Scale;
+            float outR = P.OuterR(p.Bods[i].R) * Scale,
+                  inR = P.InnerR(p.Bods[i].R) * Scale;
 
-            CollCode code = ChkPtColl(x, y, vel.X, vel.Y, outR, inR, out bool touch);
+            CollCode code = ChkPtColl(x, y, vel.X, vel.Y, outR, inR,
+                out bool touch, out float nx, out float ny, out float segPen);
 
             if (i == BFw)
                 p.FwGnd |= touch;
@@ -998,67 +970,56 @@ public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
 
             if (i == BHead && !p.Crashed && code != CollCode.None)
             {
-                float vn = Abs(vel.X * _collNx + vel.Y * _collNy);
-
-                if (vn <= headCrashVn)
+                if (Abs(vel.X * nx + vel.Y * ny) <= headVnLimit)
                     continue;
-
-                p.HeadHit = true;
-                _collIdx = BHead;
-                return CollCode.DeepPen;
+                return Ret(new(CollCode.HeadCrash, BHead, nx, ny, 0f));
             }
 
-            if (code == CollCode.DeepPen)
+            switch (code)
             {
-                _collIdx = i;
-                return CollCode.DeepPen;
-            }
+                case CollCode.DeepPen:
+                    return Ret(new(CollCode.DeepPen, i, nx, ny, 0f));
 
-            if (code == CollCode.Resolve)
-            {
-                _collIdx = i;
-                res = CollCode.Resolve;
+                case CollCode.Resolve:
+                    result = new(CollCode.Resolve, i, nx, ny, segPen / Scale);
+                    break;
             }
         }
 
-        if (res == CollCode.None)
-            _collIdx = -1;
-        return res;
+        return Ret(result);
     }
 
     CollCode ChkPtColl(
         float x, float y, float vx, float vy,
-        float outR, float inR, out bool touch)
+        float outR, float inR, out bool touch,
+        out float nx, out float ny, out float pen)
     {
         touch = false;
+        (nx, ny, pen) = (0f, 0f, 0f);
         (int s, int e) = p.Terrain!.GetVisibleRange();
 
-        float touchR = outR + outR - inR;
-        float outSq = outR * outR;
-        float inSq = inR * inR;
-        float touchSq = touchR * touchR;
+        float touchR = outR + outR - inR,
+              touchSq = touchR * touchR,
+              outSq = outR * outR,
+              inSq = inR * inR;
 
         int hits = 0;
-        float nxSum = 0f, nySum = 0f;
+        float nxSum = 0f, nySum = 0f, maxPen = 0f;
 
         for (int i = s; i < e; i++)
         {
-            p.Terrain.GetSegmentPoints(
-                i, out float sx, out float sy, out float ex, out float ey);
-
+            p.Terrain.GetSegmentPoints(i, out float sx, out float sy, out float ex, out float ey);
             if (x - touchR > ex || x + touchR < sx)
                 continue;
 
-            float dx = ex - sx, dy = ey - sy;
-            float lenSq = dx * dx + dy * dy;
+            float dx = ex - sx, dy = ey - sy, lenSq = dx * dx + dy * dy;
             if (lenSq < P.Epsilon)
                 continue;
 
-            float t = Math.Clamp(
-                ((x - sx) * dx + (y - sy) * dy) / lenSq, 0f, 1f);
-
-            float rx = x - sx - t * dx, ry = y - sy - t * dy;
-            float distSq = rx * rx + ry * ry;
+            float t = Math.Clamp(((x - sx) * dx + (y - sy) * dy) / lenSq, 0f, 1f),
+                  rx = x - sx - t * dx,
+                  ry = y - sy - t * dy,
+                  distSq = rx * rx + ry * ry;
 
             if (distSq >= touchSq)
                 continue;
@@ -1068,15 +1029,18 @@ public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
                 continue;
 
             p.Terrain.GetSegmentNormal(i, out float snx, out float sny);
-
             if (vx * snx + vy * sny >= 0f)
                 continue;
 
             if (distSq < inSq)
             {
-                (_collNx, _collNy) = (snx, sny);
+                (nx, ny) = (snx, sny);
                 return CollCode.DeepPen;
             }
+
+            float segPen = outR - Sqrt(distSq);
+            if (segPen > maxPen)
+                maxPen = segPen;
 
             hits++;
             nxSum += snx;
@@ -1090,58 +1054,77 @@ public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
         if (len <= P.Epsilon)
             return CollCode.None;
 
-        (_collNx, _collNy) = (nxSum / len, nySum / len);
+        (nx, ny) = (nxSum / len, nySum / len);
+        pen = maxPen;
         return CollCode.Resolve;
     }
 
-    void Resolve(int idx)
+    void Resolve(int idx, float nx, float ny, float pen)
     {
+#if DEBUG
         p.RecordKeBefore(idx);
-
+#endif
         ref PtState pt = ref p.New[idx];
-        PushOut(ref pt);
 
-        float nx = _collNx, ny = _collNy;
+        float push = pen + P.Epsilon;
+        pt.Pos.X += nx * push;
+        pt.Pos.Y += ny * push;
+
         float vn = -(pt.Vel.X * nx + pt.Vel.Y * ny);
         float vt = pt.Vel.X * ny - pt.Vel.Y * nx;
 
-        float td = WF.TangentDamp;
         float bd, rt;
-
         if (p.Bods[idx].IsWheel)
-        {
-            float rd = WF.RotDamp;
-            float sf = WF.SlipFriction;
-            float rc = WF.RollCouple;
-            bd = idx == BFw ? WF.BounceFront : WF.BounceRear;
-
-            if (p.Braking && pt.AngVel < WF.StopThreshold)
-            {
-                float brk = WF.BrakeBase - WF.BrakeP;
-                (rd, td, bd) = (WF.RotDamp - WF.BrakeP, brk, brk);
-            }
-
-            float rad = Max(p.Bods[idx].R, WF.MinWheelR);
-            pt.AngVel = rd * pt.AngVel - sf * (vt / rad);
-            rt = td * vt - rc * (pt.AngVel * rad);
-        }
+            (bd, rt) = ResolveWheel(idx, ref pt, vt);
         else
-        {
-            bd = WF.BounceRear;
-            rt = td * vt;
-        }
+            (bd, rt) = (WF.BounceRear, WF.TangentDamp * vt);
 
         float rn = bd * vn;
         pt.Vel.X = rt * ny + rn * nx;
         pt.Vel.Y = -rt * nx + rn * ny;
 
+#if DEBUG
         p.RecordResolve(idx, vn, nx, ny, in pt);
+#endif
     }
 
-    void PushOut(ref PtState pt)
+    (float bounce, float tangent) ResolveWheel(int idx, ref PtState pt, float vt)
     {
-        pt.Pos.X += _collNx * P.PushOut;
-        pt.Pos.Y += _collNy * P.PushOut;
+        float rd = WF.RotDamp;
+        float td = WF.TangentDamp;
+        float bounce = idx == BFw ? WF.BounceFront : WF.BounceRear;
+
+        if (p.Braking && Abs(pt.AngVel) < WF.StopThreshold)
+        {
+            float brk = WF.BrakeBase - WF.BrakeP;
+            (rd, td, bounce) = (rd - WF.BrakeP, brk, brk);
+        }
+
+        float rad = Max(p.Bods[idx].R, WF.MinWheelR);
+        pt.AngVel = rd * pt.AngVel - WF.SlipFriction * vt / rad;
+
+        return (bounce, td * vt - WF.RollCouple * pt.AngVel * rad);
+    }
+}
+
+public readonly struct RagdollCfg
+{
+    public readonly float
+        K, D, Bounce, Friction,
+        CollRadius, SlopeStep,
+        CoreKMul, CoreDMul, CoreMinFrac, CoreStopMul,
+        HeadDampMul, StretchFrac, StretchMul,
+        MinLen, MinNy;
+
+    public RagdollCfg()
+    {
+        (K, D) = (150f, 8f);
+        (Bounce, Friction) = (0.3f, 0.8f);
+        (CollRadius, SlopeStep) = (0.5f, 0.5f);
+        (CoreKMul, CoreDMul, CoreMinFrac, CoreStopMul) = (2.2f, 1.4f, 0.75f, 6f);
+        HeadDampMul = 2.0f;
+        (StretchFrac, StretchMul) = (1.1f, 5f);
+        (MinLen, MinNy) = (0.01f, 0.2f);
     }
 }
 
@@ -1153,17 +1136,10 @@ public sealed class BikeCollider(BikePhysics p, BikeDynamics dyn)
 // Collision radius is tuned for line rendering so thick strokes do not clip into ground
 public sealed class RiderRagdoll
 {
-    const int N = 8, NS = 11;
-
-    const float
-        K = 150f, D = 8f,
-        Bounce = 0.3f, Friction = 0.8f,
-        CollRadius = 0.5f, SlopeStep = 0.5f,
-        CoreKMul = 2.2f, CoreDMul = 1.4f,
-        CoreMinFrac = 0.75f, CoreStopMul = 6f,
-        MinLen = 0.01f, MinNy = 0.2f;
+    const int N = 8, NS = 11, Hd = 7;
 
     static readonly PhysConst P = PhysConst.Default;
+    static readonly RagdollCfg C = new();
 
     static readonly (int A, int B)[] Skeleton =
     [
@@ -1203,7 +1179,7 @@ public sealed class RiderRagdoll
         for (int i = 0; i < NS; i++)
         {
             (int a, int b) = Skeleton[i];
-            _rest[i] = Vector2.Distance(_pos[a], _pos[b]);
+            _rest[i] = Max(Vector2.Distance(_pos[a], _pos[b]), C.MinLen);
         }
     }
 
@@ -1225,19 +1201,25 @@ public sealed class RiderRagdoll
 
             Vector2 d = _pos[a] - _pos[b];
             float len = d.Length();
-            if (len < MinLen)
+            if (len < C.MinLen)
                 continue;
 
-            float k = K, damp = D, rest = _rest[i];
+            float k = C.K, damp = C.D, rest = _rest[i];
 
             if (IsCoreBone(a) && IsCoreBone(b))
             {
-                k *= CoreKMul;
-                damp *= CoreDMul;
+                k *= C.CoreKMul;
+                damp *= C.CoreDMul;
 
-                if (len < rest * CoreMinFrac)
-                    k *= 1f + (1f - len / (rest * CoreMinFrac)) * (CoreStopMul - 1f);
+                if (a == Hd || b == Hd)
+                    damp *= C.HeadDampMul;
+
+                if (len < rest * C.CoreMinFrac)
+                    k *= 1f + (1f - len / (rest * C.CoreMinFrac)) * (C.CoreStopMul - 1f);
             }
+
+            if (len > rest * C.StretchFrac)
+                k *= 1f + (len / (rest * C.StretchFrac) - 1f) * (C.StretchMul - 1f);
 
             Vector2 n = d / len;
             float rel = Vector2.Dot(_vel[a] - _vel[b], n);
@@ -1264,31 +1246,30 @@ public sealed class RiderRagdoll
 
         Level level = _terrain;
         float sc = P.TerrainScale;
-        // normal = (dY, -dX) of terrain tangent, rotated 90° to point outward
         float Gy(float x) => level.GetGroundYAtX(x * sc) / sc;
 
         for (int i = 0; i < N; i++)
         {
             float x = _pos[i].X, gy = Gy(x);
-            float pen = _pos[i].Y + CollRadius - gy;
+            float pen = _pos[i].Y + C.CollRadius - gy;
             if (pen <= 0f)
                 continue;
 
             PhysConst.SafeNorm(
-                Gy(x + SlopeStep) - gy, -SlopeStep, MinLen,
+                Gy(x + C.SlopeStep) - gy, -C.SlopeStep, C.MinLen,
                 out float nx, out float ny);
 
-            float push = pen / Max(-ny, MinNy);
+            float push = pen / Max(-ny, C.MinNy);
             _pos[i].X += nx * push;
             _pos[i].Y += ny * push;
 
             float vx = _vel[i].X, vy = _vel[i].Y;
 
             float vn = vx * nx + vy * ny;
-            float vt = (vx * ny - vy * nx) * Friction;
+            float vt = (vx * ny - vy * nx) * C.Friction;
 
             if (vn < 0f)
-                vn = -vn * Bounce;
+                vn = -vn * C.Bounce;
 
             _vel[i].X = nx * vn + ny * vt;
             _vel[i].Y = ny * vn - nx * vt;

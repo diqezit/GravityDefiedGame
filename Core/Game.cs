@@ -54,9 +54,10 @@ public static class Input
             m.RightButton == ButtonState.Pressed,
             m.ScrollWheelValue - pm.ScrollWheelValue);
 
+        bool brk = k.IsKeyDown(Keys.S);
         var bike = new BikeInput(
-            Axis(k, Keys.W),
-            Axis(k, Keys.S),
+            k.IsKeyDown(Keys.W) && !brk,
+            brk,
             Axis(k, Keys.D) - Axis(k, Keys.A));
 
         return new InputState(mouse, k, pk, bike, ReadHotkeys(k, pk));
@@ -209,7 +210,7 @@ public sealed class GamePlay : IDisposable
     public void HandleInput(BikeInput inp)
     {
         if (!Bike.Crashed)
-            Bike.SetInput(inp.Throttle, inp.Brake, inp.Lean);
+            Bike.SetInput(inp);
     }
 
     public void Reset()
@@ -231,7 +232,7 @@ public sealed class GamePlay : IDisposable
 
     void ResetBike(float x)
     {
-        Bike.SetInput(0f, 0f, 0f);
+        Bike.SetInput(default);
         Bike.Reset(x);
     }
 

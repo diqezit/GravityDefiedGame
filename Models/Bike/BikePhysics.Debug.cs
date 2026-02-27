@@ -989,8 +989,8 @@ sealed class DebugHud
 
     void BuildInput()
     {
-        _sb.Lbl("T", 3).Val(_bp.Input.Throttle, 2, 5)
-           .Lbl("B", 3).Val(_bp.Input.Brake, 2, 5)
+        _sb.Lbl("T", 3).Pad(_bp.Input.Throttle ? "1" : "0", 5)
+           .Lbl("B", 3).Pad(_bp.Input.Brake ? "1" : "0", 5)
            .Lbl("L", 3).Val(_bp.Input.Lean, 2, 5).Ln()
            .Lbl("LEAN", H.Lbl).Pad(_bp.LeanL ? "L" : _bp.LeanR ? "R" : "-", 3)
            .Lbl("BRK", H.Lbl).Pad(_bp.Braking ? "ON" : "-", 3).Ln();
