@@ -67,7 +67,7 @@ public readonly struct PhysConst
         (Gravity, FixedDt, WheelBase) = (14.06f, 0.016f, 3.5f);
         CollMargin = 0.05f;
 
-        (WheelieAngle, StoppieAngle, TorqueDampRate) = (0.32f, 0.32f, 6.6f);
+        (WheelieAngle, StoppieAngle, TorqueDampRate) = (0.32f, 0.32f, 13.2f);
         (MinAxleDist2, MaxAxleDist2) = (15f, 70f);
 
         (UpperOffsetX, UpperOffsetY, HeadOffsetY) = (2.0f, 3.0f, 7.1f);
@@ -92,7 +92,6 @@ public readonly struct PhysConst
     public float RestUpperSpan => UpperOffsetX * 2f;
     public float RestWheelUpper => Hyp(WheelBase - UpperOffsetX, UpperOffsetY);
     public float RestHeadUpper => Hyp(UpperOffsetX, HeadOffsetY - UpperOffsetY);
-    public float RestHeadFrame => HeadOffsetY;
 
     public float OuterR(float baseR) => baseR + CollMargin;
     public float InnerR(float baseR) => Max(baseR - CollMargin, 0.01f);
@@ -270,14 +269,13 @@ public sealed partial class BikePhysics : IDisposable
 
     static readonly PhysConst P = PhysConst.Default;
     static readonly BodyCfg BodC = BodyCfg.Default;
-    static readonly MassCfg MasC = MassCfg.Default;
 
     internal readonly PtState[] Cur = new PtState[BodyCount];
     internal readonly PtState[] New = new PtState[BodyCount];
     internal readonly BodyDef[] Bods = new BodyDef[BodyCount];
     internal readonly SpringCfg[] Spr = new SpringCfg[SpringCount];
-    internal readonly float[] Mass = new float[BodyCount];
-    internal readonly float[] InvMass = new float[BodyCount];
+    internal readonly float[] Mass = MassCfg.Default.Mass;
+    internal readonly float[] InvMass = MassCfg.Default.InvMass;
 
     internal BikeInput Input;
     internal BikeCfg Cfg;
@@ -420,13 +418,11 @@ public sealed partial class BikePhysics : IDisposable
     {
         for (int i = 0; i < BodyCount; i++)
         {
-            Mass[i] = MasC.Mass[i];
-            InvMass[i] = MasC.InvMass[i];
             Bods[i] = new()
             {
                 R = BodC.Radii[i],
                 IsWheel = i is BFw or BRw,
-                InvInertia = i == BRw ? Cfg.InvWheelInertia : 0f
+                InvInertia = i is BFw or BRw ? Cfg.InvWheelInertia : 0f
             };
         }
 
@@ -578,7 +574,7 @@ public sealed class BikeDynamics(BikePhysics p)
         (p.Spr[7], p.Spr[8], p.Spr[9]) = (
             new(BHead, BUR, P.RestHeadUpper, hK, d),
             new(BHead, BUF, P.RestHeadUpper, hK, d),
-            new(BHead, BFrame, P.RestHeadFrame, hK, d));
+            new(BHead, BFrame, P.HeadOffsetY, hK, d));
     }
 
     public void UpdateMassAndLean()
@@ -600,26 +596,55 @@ public sealed class BikeDynamics(BikePhysics p)
     // Damping and engine torque decay use slice dt so total damping over a full tick stays time based
     // Using FixedDt would apply full tick damping per slice causing extra power loss and faster wheel spin drop on rough ground
     //
-    // Wheel Angle and AngVel updated after linear blend
-    // Wheel rotation drives slip and braking so moving it into the blend changes handling and tuning
-    // Keeping this order avoids retuning levels and bike types
+    // Wheel Angle and AngVel use Euler integration after linear Heun blend
+    // Wheel torques (spin damping, brake, engine) go through force system
+    // Clamp and snap-to-zero applied after integration to prevent runaway
     public void Heun(float dt)
     {
         Forces(p.Cur, dt);
         Integ(p.Cur, _k1, dt);
 
         Combine(_tmp, p.Cur, _k1, 1.0f);
-
         Forces(_tmp, dt);
         Integ(_tmp, _k2, dt);
 
         CombineTwo(p.New, p.Cur, _k1, _k2, 0.5f);
+        IntegWheels(dt);
+        p.EngineTorque *= Exp(-P.TorqueDampRate * dt);
+    }
+
+    // Wheel angular dynamics — Euler integration separate from Heun linear blend
+    //
+    // Why Euler not Heun for wheels:
+    // Heun computes k1 from Forces(Cur) and k2 from Forces(tmp), then blends
+    // But wheel torques depend on AngVel which drives slip and surface coupling
+    // Blending two torque samples would change effective friction coefficients
+    // Original J2ME used direct velocity mods here — Euler preserves that feel
+    //
+    // Torque sources (accumulated in WheelTorques)
+    // - Engine drive +EngineTorque on RW only
+    // - Spin damping -c*ω viscous friction on both wheels (c = rate/InvI)
+    // - Brake damping additional -c*ω when braking (additive to spin)
+    //
+    // Integration ω_new = ω + InvI × τ × dt
+    // This gives exponential decay: ω(t) = ω₀ × e^(-rate×t) for damping torques
+    // Euler approximation (1 - rate×dt) matches Exp within 0.02% at our timestep
+    //
+    // Clamp prevents ω exceeding motor limits even with collision impulses
+    // Snap kills sub-threshold velocities to avoid float drift at rest
+    void IntegWheels(float dt)
+    {
+        float invI = p.Cfg.InvWheelInertia, max = p.Cfg.MaxWheelOmega;
 
         for (int i = BFw; i <= BRw; i++)
         {
-            p.New[i].Angle = p.Cur[i].Angle + p.Cur[i].AngVel * dt;
-            p.New[i].AngVel = p.Cur[i].AngVel
-                + p.Bods[i].InvInertia * p.Cur[i].Torque * dt;
+            ref PtState cur = ref p.Cur[i], nxt = ref p.New[i];
+
+            nxt.Angle = cur.Angle + cur.AngVel * dt;
+            nxt.AngVel = Math.Clamp(cur.AngVel + invI * cur.Torque * dt, -max, max);
+
+            if (Abs(nxt.AngVel) < WF.StopThreshold)
+                nxt.AngVel = 0f;
         }
     }
 
@@ -656,19 +681,37 @@ public sealed class BikeDynamics(BikePhysics p)
         for (int i = 0; i < SpringCount; i++)
             Spring(ref st[p.Spr[i].A], ref st[p.Spr[i].B], i);
 
-        p.EngineTorque *= Exp(-P.TorqueDampRate * dt);
-
-        st[BRw].Torque = p.EngineTorque;
-        st[BRw].AngVel = Math.Clamp(
-            st[BRw].AngVel,
-            -p.Cfg.MaxWheelOmega,
-            p.Cfg.MaxWheelOmega);
-
-        float spinDamp = Exp(-P.FreeSpinDampRate * dt);
-        st[BFw].AngVel *= spinDamp;
-        st[BRw].AngVel *= spinDamp;
+        WheelTorques(st);
 
         DampRelativeVelocities(st, dt);
+    }
+
+    // Wheel torques applied through force system instead of direct velocity mods
+    //
+    // Three torque sources accumulated per wheel:
+    // 1. Spin damping — viscous friction always active (τ = -c × ω)
+    // 2. Brake damping — additive friction when braking (same form, stronger c)
+    // 3. Engine drive — positive torque on rear wheel only
+    //
+    // Coefficient derivation:
+    // Want exponential decay ω(t) = ω₀ × e^(-rate×t)
+    // Equation of motion: I × dω/dt = -c × ω → dω/dt = -c/I × ω
+    // Matching: c/I = rate → c = rate / InvI = rate × I
+    //
+    // Spin + brake are additive: c_total = (spinRate + brakeRate) / InvI
+    // In J2ME these were separate multiplicative passes (Exp × Exp)
+    // Additive rates in exponent give same result: e^(-a) × e^(-b) = e^(-(a+b))
+    // Euler approximation differs by <0.6% at BrakeDampRate × dt ≈ 0.1
+    //
+    // FW now receives damping torque — in J2ME it had InvInertia=0 so torque had no effect
+    // FW spin was controlled entirely by direct AngVel mods, now through proper physics
+    void WheelTorques(PtState[] st)
+    {
+        float damp = (P.FreeSpinDampRate + (p.Braking ? P.BrakeDampRate : 0f)) / p.Cfg.InvWheelInertia;
+
+        st[BFw].Torque -= damp * st[BFw].AngVel;
+        st[BRw].Torque -= damp * st[BRw].AngVel;
+        st[BRw].Torque += p.EngineTorque;
     }
 
     void Integ(PtState[] cur, PtState[] k, float dt)
@@ -709,9 +752,6 @@ public sealed class BikeDynamics(BikePhysics p)
         if (p.Braking)
         {
             p.EngineTorque = 0f;
-            float damp = Exp(-P.BrakeDampRate * P.FixedDt);
-            BrakeWheel(ref p.Cur[BFw].AngVel, damp);
-            BrakeWheel(ref p.Cur[BRw].AngVel, damp);
             return;
         }
 
@@ -719,13 +759,6 @@ public sealed class BikeDynamics(BikePhysics p)
             p.EngineTorque = Min(
                 p.EngineTorque + p.Cfg.TorqueAccel,
                 p.Cfg.MaxEngineTorque);
-    }
-
-    static void BrakeWheel(ref float w, float d)
-    {
-        w *= d;
-        if (Abs(w) < WF.StopThreshold)
-            w = 0f;
     }
 
     // Lean is rider tilt control
@@ -746,11 +779,8 @@ public sealed class BikeDynamics(BikePhysics p)
     // Wheels are not pushed so wheelie and stoppie stay driven by contacts and springs
     //
     // Head gets a force along the bike axis scaled by LeanHeadMul
-    // Multiplier is needed because forces are weaker per tick than direct velocity changes
-    // LeanHeadMul is gameplay tuning not a physical parameter so it lives in PhysConst
-    //
-    // Head force is compensated on the frame to prevent lean self-acceleration
-    // Original J2ME left this uncompensated adding net momentum to the system
+    // Compensated on frame to satisfy Newton's 3rd law — no net momentum added
+    // Without compensation lean causes self-acceleration over time
     void Lean(PtState[] st)
     {
         if (p.Crashed)
@@ -775,8 +805,8 @@ public sealed class BikeDynamics(BikePhysics p)
         st[BUR].Force.Y += py;
         st[BHead].Force.X += hx;
         st[BHead].Force.Y += hy;
-        //st[BFrame].Force.X -= hx;
-        //st[BFrame].Force.Y -= hy;
+        st[BFrame].Force.X -= hx;
+        st[BFrame].Force.Y -= hy;
     }
 
     // Exponential damping on relative velocities exceeding MaxRelVel
@@ -1253,6 +1283,7 @@ public sealed class RiderRagdoll
             if (pen <= 0f)
                 continue;
 
+            // Slope normal from finite difference: tangent=(step, Δy) → normal=(Δy, -step)
             PhysConst.SafeNorm(
                 Gy(x + C.SlopeStep) - gy, -C.SlopeStep, C.MinLen,
                 out float nx, out float ny);
