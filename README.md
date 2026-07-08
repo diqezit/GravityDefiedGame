@@ -1,8 +1,8 @@
 # Gravity Defied
 
-Physics-based motorcycle trial game inspired by the classic J2ME mobile game from 2004.
+Physics-based motorcycle trial game inspired by the classic J2ME mobile game from 2004
 
-Navigate challenging terrain, perform wheelies and stoppies, reach the finish without crashing.
+Navigate rough terrain, pull off wheelies and stoppies, reach the finish line without crashing
 
 ---
 
@@ -42,47 +42,39 @@ Navigate challenging terrain, perform wheelies and stoppies, reach the finish wi
 | A | Lean back (wheelie) |
 | D | Lean forward (stoppie) |
 | Scroll | Zoom in/out |
-| Escape | Pause / Menu |
-| F1 | Toggle render mode |
+| RMB drag | Rotate camera (voxel mode) |
+| G | Toggle ghost |
+| F1 | Toggle sprites |
+| F2 | Switch render mode |
+| Escape | Pause / menu |
 
 ---
 
 ## Features
 
 **Physics**
-- Soft-body simulation with 6 mass points connected by springs
-- Realistic wheel rotation with friction and slip
+- Soft body simulation, 6 mass points connected by springs
+- Wheel rotation with friction and slip
 - Ground collision with proper normal response
 - Crash detection based on bike angle and head impact
+- Rider ragdoll on crash
 
 **Terrain**
 - Procedural generation using layered noise
-- Macro skeleton for overall track flow
-- Medium bumps and micro surface roughness
-- Rest zones for balanced difficulty
-- Safety constraints to keep levels playable
+- Macro shape for overall track flow, plus medium and micro detail
+- Safe zones near start and finish for playability
 
 **Visuals**
-- Multiple color themes with custom sky palettes
-- Stars and sun effects
-- Pseudo-3D terrain perspective
-- Vector graphics and sprite rendering modes
+- Multiple color themes with custom sky palettes, stars and sun
+- Vector graphics and sprite rendering
+- Voxel style 3D render mode
 
 **Gameplay**
 - 10 procedurally generated levels
 - 3 bike types with unique handling
+- Ghost replay of your best run per level
 - Time tracking per level
 - Settings saved between sessions
-
----
-
-## Bikes
-
-| Type | Top Speed | Acceleration | Lean Force | Best For |
-|------|-----------|--------------|------------|----------|
-| Standard | Medium | Medium | 0.4 | Learning the game |
-| Sport | High | High | 0.6 | Speed runs |
-| OffRoad | Medium | High | 1.0 | Technical terrain |
 
 ---
 
@@ -95,7 +87,7 @@ The game includes multiple visual themes. Each theme defines:
 - Optional stars and sun
 - Bike color scheme
 
-Themes are configured in `Content/Data/World.json` and can be easily extended.
+Themes are configured in `Content/Data/World.json` and can be easily extended
 
 ---
 
@@ -103,7 +95,6 @@ Themes are configured in `Content/Data/World.json` and can be easily extended.
 
 **Requirements**
 - .NET 8.0 SDK
-- MonoGame 3.8.1
 
 **Steps**
 
@@ -122,7 +113,7 @@ dotnet run
 
 The bike uses a soft-body approach with 6 connected points
 
-Springs connect all points with configurable stiffness and damping. Wheels have angular velocity affected by ground contact, engine torque, and braking.
+Springs connect all points with configurable stiffness and damping. Wheels have angular velocity affected by ground contact, engine torque, and braking
 
 **Terrain Generation**
 
@@ -139,31 +130,21 @@ Levels are built in layers:
 
 **Planned Features**
 
-- [ ] **Level Editor** — Create and share custom tracks with drag-and-drop terrain tools, adjustable difficulty, and export/import functionality
-
-- [ ] **Leaderboards** — Local and online best times for each level, personal records tracking, daily/weekly challenges
-
-- [ ] **Sound & Music** — Engine sounds reactive to throttle, crash effects, ambient music, optional retro J2ME style beeps
-
-- [ ] **Mobile Support** — Touch controls with on-screen buttons, tilt-to-lean option, responsive UI for different screen sizes
-
-- [ ] **Ghost Replays** — Race against your best run, download ghosts from leaderboards, watch and learn from top players
-
-- [ ] **Achievements** — Unlock badges for completing levels, performing stunts, reaching speed milestones, no-crash runs
-
-- [ ] **More Bikes** — Additional bike types with unique physics (trials bike, chopper, BMX), visual customization options
-
-- [ ] **Track Packs** — Themed level collections (desert, snow, moon), community-created track sharing
-
-- [ ] **Multiplayer** — Split-screen local races, online time trials, weekly tournaments
-
-- [ ] **Replay System** — Save and watch full runs, export as video, share highlights
+- [ ] **Level Editor** Create and share custom tracks with drag-and-drop terrain tools, adjustable difficulty, and export/import functionality
+- [ ] **Leaderboards** Local and online best times for each level, personal records tracking, daily/weekly challenges
+- [ ] **Sound & Music** Engine sounds reactive to throttle, crash effects, ambient music
+- [ ] **Mobile Support** Touch controls with on-screen buttons, tilt-to-lean option
+- [ ] **Achievements** Unlock badges for completing levels, performing stunts, reaching speed milestones
+- [ ] **More Bikes** Additional bike types with unique physics, visual customization options
+- [ ] **Track Packs** Themed level collections, community-created track sharing
+- [ ] **Multiplayer** Split-screen local races, online time trials
+- [ ] **Replay System** Save and watch full runs, export as video
 
 ---
 
 ## Credits
 
-Inspired by **Gravity Defied** by Codeline Oy (2004)
+Inspired by the original **Gravity Defied**, released for J2ME phones in 2004
 
 ---
 
