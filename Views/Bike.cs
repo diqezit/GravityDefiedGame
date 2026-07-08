@@ -28,6 +28,19 @@ public readonly record struct BikeVisual(
         new(p.RwPos * sc, p.RwRot),
         p.UfPos * sc, p.UrPos * sc, p.HdPos * sc,
         p.CfgPub.WheelR * sc, p.RawTiltZ);
+
+    public static BikeVisual Create(GhostFrame gf, BikePhysics p, float sc)
+    {
+        Vector2 V(float x, float y) => new Vector2(x, y) * sc;
+
+        return new BikeVisual(
+            V(gf.Fx, gf.Fy),
+            new WheelData(V(gf.Fwx, gf.Fwy), gf.FwRot),
+            new WheelData(V(gf.Rwx, gf.Rwy), gf.RwRot),
+            V(gf.Ufx, gf.Ufy), V(gf.Urx, gf.Ury), V(gf.Hdx, gf.Hdy),
+            p.CfgPub.WheelR * sc,
+            gf.TiltZ);
+    }
 }
 
 public readonly record struct Pose(
@@ -38,6 +51,13 @@ public readonly record struct Pose(
         p.Hip * sc, p.Sh * sc, p.Elb * sc, p.Hnd * sc,
         p.Nk * sc, p.Ft * sc, p.Kn * sc, p.Hd * sc);
 
+    public static Pose From(GhostFrame gf, float sc) =>
+        From(Poses.Build(
+            new Vector2(gf.Fx, gf.Fy),
+            new Vector2(gf.Ufx, gf.Ufy),
+            new Vector2(gf.Urx, gf.Ury),
+            gf.TiltZ),
+            sc);
 }
 
 public readonly record struct BikeColors(
@@ -63,6 +83,10 @@ public readonly record struct BikeColors(
     static Color G(
         Dictionary<LineType, Color>? d, LineType t, Color def) =>
         d?.GetValueOrDefault(t, def) ?? def;
+
+    public BikeColors Fade(float a) => new(
+        Frame * a, Wheel * a, Fork * a, Shock * a,
+        Rider * a, Leg * a, Body * a, Fist * a, Thick);
 }
 
 public readonly record struct ThickCfg(
@@ -77,23 +101,16 @@ public readonly record struct ThickCfg(
     { }
 }
 
-public readonly struct DrawCtx
+public readonly struct DrawCtx(
+    Action<Vector2, Vector2, float, Color, float> line,
+    Action<Vector2, float, int, float, Color, float, float> ring,
+    float z = 0f)
 {
-    readonly Action<Vector2, Vector2, float, Color> _line;
-    readonly Action<Vector2, float, int, float, Color, float> _ring;
-
-    public DrawCtx(
-        Action<Vector2, Vector2, float, Color> line,
-        Action<Vector2, float, int, float, Color, float> ring) =>
-        (_line, _ring) = (line, ring);
-
     public void Line(Vector2 a, Vector2 b, float th, Color col) =>
-        _line(a, b, th, col);
+        line(a, b, th, col, z);
 
-    public void Ring(
-        Vector2 c, float r, int seg,
-        float rot, Color col, float th) =>
-        _ring(c, r, seg, rot, col, th);
+    public void Ring(Vector2 c, float r, int seg, float rot, Color col, float th) =>
+        ring(c, r, seg, rot, col, th, z);
 }
 
 public readonly struct BikeBaseCfg
@@ -144,6 +161,12 @@ public readonly struct VoxelBikeCfg
     }
 }
 
+public static class GhostVisCfg
+{
+    public const float
+        Alpha2D = 0.15f, AlphaVox = 0.4f, VoxOffsetZ = 3f;
+}
+
 public static class Gfx
 {
     public const float Eps = 0.01f;
@@ -158,9 +181,9 @@ public static class Gfx
     public static float Dist(Vector2 a, Vector2 b) =>
         Len(Vector2.Distance(a, b));
 
-    public static void Ring2D(
-        SpriteBatch sb, Vector2 c, float r,
-        int seg, float rot, Color col, float th)
+    public static void RingLines(
+        Action<Vector2, Vector2> line,
+        Vector2 c, float r, int seg, float rot)
     {
         if (seg < 3)
             return;
@@ -168,21 +191,20 @@ public static class Gfx
         for (int i = 0; i < seg; i++)
         {
             float a = rot + i * step;
-            sb.DrawLine(
-                c + Dir(a) * r,
-                c + Dir(a + step) * r, col, th);
+            line(c + Dir(a) * r, c + Dir(a + step) * r);
         }
     }
 
     public static DrawCtx Ctx(SpriteBatch sb) => new(
-        (a, b, th, col) => sb.DrawLine(a, b, col, th),
-        (c, r, seg, rot, col, th) =>
-            Ring2D(sb, c, r, seg, rot, col, th));
+        (a, b, th, col, _) => sb.DrawLine(a, b, col, th),
+        (c, r, seg, rot, col, th, _) =>
+            RingLines((a, b) => sb.DrawLine(a, b, col, th), c, r, seg, rot));
 
-    public static DrawCtx Ctx(Mesh m) => new(
-        (a, b, th, col) => m.Line(a, b, 0f, th, col),
-        (c, r, seg, rot, col, th) =>
-            m.Ring(c, r, seg, -rot, col, th));
+    public static DrawCtx Ctx(Mesh m, float z = 0f) => new(
+        (a, b, th, col, zz) => m.Line(a, b, zz, th, col),
+        (c, r, seg, rot, col, th, zz) =>
+            RingLines((a, b) => m.Line(a, b, zz, th, col), c, r, seg, rot),
+        z);
 }
 
 public static class BikeDraw
@@ -193,9 +215,6 @@ public static class BikeDraw
         Vector2 c, float r, float rot,
         Color col, float th, in DrawCtx d)
     {
-        if (r < Eps)
-            return;
-
         float rimTh = Max(th * B.RimK, 1f);
         float spkTh = Max(th * B.SpkK, 1f);
         float outR = Len(r - rimTh * 0.5f);
@@ -280,8 +299,6 @@ public sealed class BikeRenderer : IDisposable
 
     public void LoadSprites(GraphicsDevice gd, string dir)
     {
-        if (_disposed)
-            return;
         _tex?.Dispose();
         _tex = null;
 
@@ -296,24 +313,20 @@ public sealed class BikeRenderer : IDisposable
 
     public static void Render(
         SpriteBatch sb, in BikeVisual v,
-        in Pose p, in BikeColors c)
-    {
-        if (sb is null)
-            return;
+        in Pose p, in BikeColors c) =>
         All(in v, in p, in c, new ThickCfg(c.Thick), Ctx(sb));
-    }
 
     public static void Render(
         Mesh m, in BikeVisual v,
-        in Pose p, in BikeColors c) =>
+        in Pose p, in BikeColors c, float z = 0f) =>
         All(in v, in p, in c,
-            new ThickCfg(c.Thick, in Vox), Ctx(m));
+            new ThickCfg(c.Thick, in Vox), Ctx(m, z));
 
     public void RenderSprites(
         SpriteBatch sb, in BikeVisual v, in Pose p,
         in BikeColors c, Layer mask = Layer.All)
     {
-        if (_disposed || _tex is null || sb is null)
+        if (_tex is null)
             return;
 
         DrawCtx d = GetCtx(sb);

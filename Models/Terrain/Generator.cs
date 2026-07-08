@@ -1,3 +1,5 @@
+/// #define LEVEL_DEBUG
+
 using static System.MathF;
 using Vec2 = Microsoft.Xna.Framework.Vector2;
 using NL = FastNoiseLite;
@@ -14,6 +16,11 @@ public static class Generator
     {
         int d = Math.Max(diff ?? id, 1);
         Cfg c = new(d);
+
+#if LEVEL_DEBUG
+        return GenerateFlat(id, name, d, c);
+#endif
+
         Noise n = new(d, seed ?? Random.Shared.Next());
 
         float[] px = new float[c.Pts],
@@ -33,6 +40,33 @@ public static class Generator
             new Vec2(c.FinishX, Cfg.FinishY),
             c.StartIdx, c.EndIdx);
     }
+
+#if LEVEL_DEBUG
+    static Level GenerateFlat(int id, string name, int d, Cfg c)
+    {
+        const int pts = 10;
+        float dx = c.Len / (pts - 1);
+
+        float[] px = new float[pts];
+        for (int i = 0; i < pts; i++)
+            px[i] = i * dx;
+
+        float[] py = new float[pts];
+        Array.Fill(py, Cfg.H);
+
+        float[] nx = new float[pts - 1];
+        float[] ny = new float[pts - 1];
+        Array.Fill(ny, -1f);
+
+        return new Level(
+            id, name, d, c.Len,
+            px, py, nx, ny,
+            Cfg.StartX,
+            new Vec2(c.FinishX, Cfg.FinishY),
+            Math.Clamp((int)(Cfg.StartX / dx), 0, pts - 2),
+            Math.Clamp((int)(c.FinishX / dx), 0, pts - 2));
+    }
+#endif
 
     static void FillHeights(float[] px, float[] py, in Cfg c, Noise n)
     {

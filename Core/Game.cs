@@ -82,6 +82,9 @@ public static class Input
             gp.Bike.DebugNodesEnabled = !gp.Bike.DebugNodesEnabled;
 #endif
 
+        if (inp.Kb.IsKeyDown(Keys.G) && inp.Pk.IsKeyUp(Keys.G))
+            gp.Ghost.Enabled = !gp.Ghost.Enabled;
+
         if (gp.State == GameState.Playing)
             gp.HandleInput(inp.Bike);
 
@@ -99,11 +102,12 @@ public sealed class GamePlay : IDisposable
 
     static readonly BikeType[] BikeTypes = [BikeType.Standard, BikeType.Sport, BikeType.OffRoad];
 
-    bool _disposed, _timing;
+    bool _timing;
     int _bikeIdx;
     float _crashTimer;
 
     public Bike Bike { get; } = new(BikeType.Standard);
+    public Ghost Ghost { get; } = new();
     public Level? Level { get; private set; }
     public GameState State { get; private set; } = GameState.MainMenu;
     public TimeSpan Time { get; private set; }
@@ -135,6 +139,8 @@ public sealed class GamePlay : IDisposable
         Bike.SetTerrain(lvl);
         ResetBike(lvl.StartX / BikeScale);
 
+        Ghost.Start(levelIdx + 1, GhostStore.Get(levelIdx + 1));
+
         return true;
     }
 
@@ -165,7 +171,7 @@ public sealed class GamePlay : IDisposable
 
     public void Update(float dt)
     {
-        if (_disposed || Level == null) return;
+        if (Level == null) return;
 
         if (State == GameState.Playing) UpdatePlaying(dt);
         else if (State == GameState.GameOver) Bike.Update(dt);
@@ -194,9 +200,14 @@ public sealed class GamePlay : IDisposable
         _timing |= lvl.CrossedStartGate(px, cx);
         if (!_timing) return;
 
+        if (Ghost.Enabled) Ghost.Tick(Bike);
+
         Time += TimeSpan.FromSeconds(dt);
         if (lvl.CrossedFinishGate(px, cx))
+        {
             State = GameState.LevelComplete;
+            if (Ghost.Enabled) Ghost.Finish((float)Time.TotalSeconds);
+        }
     }
 
     void UpdateCrash(float dt)
@@ -236,12 +247,7 @@ public sealed class GamePlay : IDisposable
         Bike.Reset(x);
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        Bike.Dispose();
-    }
+    public void Dispose() => Bike.Dispose();
 }
 
 public sealed class Camera
@@ -337,7 +343,7 @@ public sealed class GameSettings
 
 sealed class Screens
 {
-    enum Scr : byte { Main, Bike, Level, Theme, Settings, Play, Pause, Over, Done }
+    enum Scr : byte { Main, Bike, Level, Theme, Settings, Play, Pause, Over, Done, ConfirmReset }
 
     readonly GamePlay _gp;
     readonly GameSettings _cfg;
@@ -392,7 +398,10 @@ sealed class Screens
 
             [(Scr.Done, Keys.R)]          = Restart,
             [(Scr.Done, Keys.Enter)]      = Next,
-            [(Scr.Done, Keys.Escape)]     = ToMenu
+            [(Scr.Done, Keys.Escape)]     = ToMenu,
+
+            [(Scr.ConfirmReset, Keys.Enter)]  = ConfirmResetYes,
+            [(Scr.ConfirmReset, Keys.Escape)] = ConfirmResetNo
         };
 
         foreach (Scr s in (Scr[])[Scr.Bike, Scr.Level, Scr.Theme])
@@ -446,6 +455,10 @@ sealed class Screens
             ("RESTART", Restart),
             ("MENU", ToMenu)),
 
+        Scr.ConfirmReset => Overlay("RESET GHOSTS?", "ALL BEST TIMES WILL BE LOST",
+            ("YES", ConfirmResetYes),
+            ("NO", ConfirmResetNo)),
+
         _ => null
     };
 
@@ -459,6 +472,8 @@ sealed class Screens
             .Add($"RES: {_cfg.ResStr}".Btn().On(CycleRes))
             .Add($"THEME: {ThemeName(_theme).ToUpper()}".Btn().On(() => Go(Scr.Theme)))
             .Add($"RENDER: {_cfg.RenderName}".Btn().On(CycleRender))
+            .Add(Gap(15))
+            .Add("RESET GHOSTS".Btn().On(() => Go(Scr.ConfirmReset)))
             .Add(Gap(15))
             .Add("BACK".Btn().On(SaveAndBack))
             .Frame();
@@ -558,6 +573,14 @@ sealed class Screens
         Go(Scr.Main);
     }
 
+    void ConfirmResetYes()
+    {
+        GhostStore.Reset();
+        Go(Scr.Settings);
+    }
+
+    void ConfirmResetNo() => Go(Scr.Settings);
+
     void GoAfter(Action act, Scr next)
     {
         act();
@@ -599,6 +622,7 @@ public sealed class Game : Microsoft.Xna.Framework.Game
     public Game()
     {
         _cfg = GameSettings.Load();
+        GhostStore.Load();
         _gfx = new(this)
         {
             PreferredBackBufferWidth = _cfg.W,
@@ -656,7 +680,7 @@ public sealed class Game : Microsoft.Xna.Framework.Game
         _rnd.Background();
 
         if (_gp.Level != null)
-            _rnd.Draw();
+            _rnd.Draw(_gp.Bike, _gp.Ghost);
 
         UI.Desktop.Render();
 

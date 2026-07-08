@@ -1,3 +1,6 @@
+using static GravityDefiedGame.Views.GhostVisCfg;
+using static GravityDefiedGame.Core.GamePlay;
+
 namespace GravityDefiedGame.Views;
 
 public enum RenderMode : byte { Flat, Voxel }
@@ -53,64 +56,68 @@ public sealed class Renderer : IDisposable
     public void Update(float dt) => _time += dt;
     public void ToggleSprites() => _spr = !_spr;
 
-    public void LoadSprites(GraphicsDevice gd)
-    {
-        if (_disposed)
-            return;
+    public void LoadSprites(GraphicsDevice gd) =>
         _bikeRnd.LoadSprites(gd, AssetDir);
-    }
 
-    public void Draw()
+    public void Draw(BikePhysics bike, Ghost ghost)
     {
-        if (_disposed)
-            return;
         if (IsVox)
-            DrawVoxel();
+            DrawVoxel(bike, ghost);
         else
-            DrawFlat();
+            DrawFlat(bike, ghost);
     }
 
     public void Input(in InputState inp)
     {
-        if (!IsVox)
-            return;
+        if (!IsVox) return;
 
         MouseInput m = inp.Mouse;
-        if (m.Right)
-            _voxCam.Rotate(m.Delta.X, m.Delta.Y);
-        if (m.Scroll != 0)
-            _voxCam.Zoom(m.Scroll * 0.01f);
+        if (m.Right) _voxCam.Rotate(m.Delta.X, m.Delta.Y);
+        if (m.Scroll != 0) _voxCam.Zoom(m.Scroll * 0.01f);
     }
 
     public void Background()
     {
-        if (_disposed)
-            return;
-
         Viewport vp = _sb.GraphicsDevice.Viewport;
 
         _sb.Begin();
-        if (IsVox)
-            _voxWorld.Sky(_sb, vp.Width, vp.Height);
-        else
-            _flatWorld.Sky(_sb, vp.Width, vp.Height);
+        if (IsVox) _voxWorld.Sky(_sb, vp.Width, vp.Height);
+        else _flatWorld.Sky(_sb, vp.Width, vp.Height);
         _sb.End();
     }
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
         _disposed = true;
         ThemeManager.Changed -= OnTheme;
         _bikeRnd.Dispose();
         _mesh.Dispose();
     }
 
-    void DrawFlat()
+    static (BikeVisual Vis, Pose Pose) GetPose(BikePhysics bike) =>
+        (BikeVisual.Create(bike, BikeScale),
+         Pose.From(bike.RiderPose, BikeScale));
+
+    void DrawGhost(BikePhysics bike, GhostFrame frame, bool isVox)
     {
-        bool hasPose = TryGetPose(out BikeVisual vis, out Pose pose);
+        float alpha = isVox ? AlphaVox : Alpha2D;
+
+        BikeVisual vis = BikeVisual.Create(frame, bike, BikeScale);
+        Pose pose = Pose.From(frame, BikeScale);
+        BikeColors col = _bike.Fade(alpha);
+
+        if (isVox)
+            BikeRenderer.Render(_mesh, vis, pose, col, VoxOffsetZ);
+        else
+            BikeRenderer.Render(_sb, vis, pose, col);
+    }
+
+    void DrawFlat(BikePhysics bike, Ghost ghost)
+    {
         bool spr = UseSpr;
+        var (vis, pose) = GetPose(bike);
+        var gf = ghost.CurrentFrame;
 
         _sb.Begin(SpriteSortMode.Deferred, null, null, null, null, null, _refs.Tr);
 
@@ -119,12 +126,15 @@ public sealed class Renderer : IDisposable
                 _sb, _refs.Level!, _refs.Cam.Pos,
                 _refs.Cam.Zoom, _terrain, _time);
 
-        if (!spr && hasPose)
+        if (!spr)
             BikeRenderer.Render(_sb, vis, pose, _bike);
+
+        if (ghost.Enabled && gf is GhostFrame frame)
+            DrawGhost(bike, frame, false);
 
         _sb.End();
 
-        if (spr && hasPose)
+        if (spr)
         {
             _sb.Begin(
                 SpriteSortMode.Deferred,
@@ -145,13 +155,12 @@ public sealed class Renderer : IDisposable
         }
     }
 
-    void DrawVoxel()
+    void DrawVoxel(BikePhysics bike, Ghost ghost)
     {
         GraphicsDevice gd = _sb.GraphicsDevice;
         _mesh.Init(gd);
 
-        if (_refs.Bike is { } b)
-            _voxCam.Target(b.Pos * GamePlay.BikeScale);
+        _voxCam.Target(bike.Pos * BikeScale);
 
         _voxCam.Update();
         _mesh.Begin();
@@ -159,24 +168,16 @@ public sealed class Renderer : IDisposable
         if (_refs.HasLevel)
             VoxWorld.Terrain(_mesh, _refs.Level!, _terrain, _bike.Thick, _time);
 
-        if (TryGetPose(out BikeVisual vis, out Pose pose))
-            BikeRenderer.Render(_mesh, vis, pose, _bike);
+        var (vis, pose) = GetPose(bike);
+
+        BikeRenderer.Render(_mesh, vis, pose, _bike);
+
+        var gf = ghost.CurrentFrame;
+        if (ghost.Enabled && gf is GhostFrame frame)
+            DrawGhost(bike, frame, true);
 
         gd.Clear(ClearOptions.DepthBuffer, Color.Transparent, 1f, 0);
         _mesh.Flush(gd, _voxCam);
-    }
-
-    bool TryGetPose(out BikeVisual vis, out Pose pose)
-    {
-        if (_refs.Bike is { } b)
-        {
-            vis = BikeVisual.Create(b, GamePlay.BikeScale);
-            pose = Pose.From(b.RiderPose, GamePlay.BikeScale);
-            return true;
-        }
-        vis = default;
-        pose = default;
-        return false;
     }
 
     void UpdateTheme()
